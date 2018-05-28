@@ -3,4 +3,5 @@
 *.gpu
 *.ptx
 *.cubin
+a.out
 *.fatbin
