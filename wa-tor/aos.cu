@@ -1,3 +1,5 @@
+#define NDEBUG
+
 #include <stdio.h>
 #include <assert.h>
 
@@ -7,8 +9,8 @@
 #define SPAWN_THRESHOLD 5
 #define ENERGY_BOOST 3
 #define ENERGY_START 5
-#define GRID_SIZE_X 400
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 200
+#define GRID_SIZE_Y 150
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -470,8 +472,8 @@ void update_gui_map() {
   fill_gui_map<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   cudaDeviceSynchronize();
 
-  cudaMemcpy(gui_map, d_gui_map, sizeof(uint32_t)*GRID_SIZE_X*GRID_SIZE_Y,
-             cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*GRID_SIZE_X*GRID_SIZE_Y,
+                       0, cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
 }
 
@@ -489,6 +491,7 @@ void render() {
     int x = i % GRID_SIZE_X;
     int y = i / GRID_SIZE_X;
 
+    //printf("V: %i\n", gui_map[i]);
     if (gui_map[i] == Fish::kTypeId) {
       pixelRGBA(renderer_, x, y, 0, 255, 0, 255);
       num_fish++;
