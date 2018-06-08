@@ -9,8 +9,8 @@
 #define SPAWN_THRESHOLD 5
 #define ENERGY_BOOST 3
 #define ENERGY_START 5
-#define GRID_SIZE_X 200
-#define GRID_SIZE_Y 150
+#define GRID_SIZE_X 640
+#define GRID_SIZE_Y 480
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -87,11 +87,8 @@ class Cell {
     uint8_t num_candidates = 0;
 
     for (int i = 0; i < 4; ++i) {
-      if (neighbors_[i] != nullptr) {
-        // Handling of border cells.
-        if ((neighbors_[i]->*predicate)()) {
-          candidates[num_candidates++] = i;
-        }
+      if ((neighbors_[i]->*predicate)()) {
+        candidates[num_candidates++] = i;
       }
     }
 
@@ -198,7 +195,7 @@ class Fish : public Agent {
       new_position_->enter(this);
 
       if (egg_timer_ > SPAWN_THRESHOLD) {
-        old_position->enter(new Fish(random_state_ + 1));
+        old_position->enter(new Fish(random_state_*6121));
         egg_timer_ = 0;
       }
     }
@@ -245,7 +242,7 @@ class Shark : public Agent {
       new_position_->enter(this);
 
       if (egg_timer_ > SPAWN_THRESHOLD) {
-        old_position->enter(new Shark(random_state_ + 1));
+        old_position->enter(new Shark(random_state_*5519));
         egg_timer_ = 0;
       }
     }
@@ -294,7 +291,10 @@ __global__ void create_cells() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
   if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
-    Cell* new_cell = new Cell(tid + 1);
+    int x = tid % GRID_SIZE_X;
+    int y = tid / GRID_SIZE_X;
+
+    Cell* new_cell = new Cell(9973*tid + x*x*y + 1);
     assert(new_cell != nullptr);
 
     cells[tid] = new_cell;
@@ -308,21 +308,24 @@ __global__ void setup_cells() {
     int x = tid % GRID_SIZE_X;
     int y = tid / GRID_SIZE_X;
 
-    Cell* left = x > 0 ? cells[y*GRID_SIZE_X + x - 1] : nullptr;
-    Cell* right = x < GRID_SIZE_X - 1 ? cells[y*GRID_SIZE_X + x + 1] : nullptr;
-    Cell* top = y > 0 ? cells[(y - 1)*GRID_SIZE_X + x] : nullptr;
+    Cell* left = x > 0 ? cells[y*GRID_SIZE_X + x - 1]
+                       : cells[y*GRID_SIZE_X + GRID_SIZE_X - 1];
+    Cell* right = x < GRID_SIZE_X - 1 ? cells[y*GRID_SIZE_X + x + 1]
+                                      : cells[y*GRID_SIZE_X];
+    Cell* top = y > 0 ? cells[(y - 1)*GRID_SIZE_X + x]
+                      : cells[(GRID_SIZE_Y - 1)*GRID_SIZE_X + x];
     Cell* bottom = y < GRID_SIZE_Y - 1 ? cells[(y + 1)*GRID_SIZE_X + x]
-                                       : nullptr;
+                                       : cells[x];
 
     // left, top, right, bottom
     cells[tid]->set_neighbors(left, top, right, bottom);
 
     // Initialize with random agent.
-    uint32_t agent_type = random_number(cells[tid]->random_state(), 3);
-    if (agent_type == 0) {
-      cells[tid]->enter(new Fish(tid + 10001));
-    } else if (agent_type == 1) {
-      cells[tid]->enter(new Shark(tid + 20001));
+    uint32_t agent_type = random_number(cells[tid]->random_state(), 1009);
+    if (agent_type < 100) {
+      cells[tid]->enter(new Fish(9967*cells[tid]->random_state()));
+    } else if (agent_type < 150) {
+      cells[tid]->enter(new Shark(9949*cells[tid]->random_state()));
     } else {
       // Free cell.
     }
@@ -491,7 +494,6 @@ void render() {
     int x = i % GRID_SIZE_X;
     int y = i / GRID_SIZE_X;
 
-    //printf("V: %i\n", gui_map[i]);
     if (gui_map[i] == Fish::kTypeId) {
       pixelRGBA(renderer_, x, y, 0, 255, 0, 255);
       num_fish++;
