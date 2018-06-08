@@ -1,12 +1,24 @@
 #include <stdio.h>
+#include <assert.h>
 
 #include <SDL2/SDL2_gfxPrimitives.h>
 
 
 #define SPAWN_THRESHOLD 5
 #define ENERGY_BOOST 3
+#define ENERGY_START 5
 #define GRID_SIZE_X 400
 #define GRID_SIZE_Y 300
+
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
 
 __device__ uint32_t random_number(uint32_t& state, uint32_t max) {
   // Advance and return random state.
@@ -34,6 +46,10 @@ class Cell {
 
  public:
   __device__ Cell(uint32_t random_state) : random_state_(random_state) {
+    prepare();
+  }
+
+  __device__ void prepare() {
     for (int i = 0; i < 5; ++i) {
       neighbor_request_[i] = false;
     }
@@ -41,10 +57,6 @@ class Cell {
 
   __device__ Agent* agent() const {
     return agent_;
-  }
-
-  __device__ void set_agent(Agent* agent) {
-    agent_ = agent;
   }
 
   __device__ bool is_free() const {
@@ -73,8 +85,11 @@ class Cell {
     uint8_t num_candidates = 0;
 
     for (int i = 0; i < 4; ++i) {
-      if ((neighbors_[i]->*predicate)()) {
-        candidates[num_candidates++] = i;
+      if (neighbors_[i] != nullptr) {
+        // Handling of border cells.
+        if ((neighbors_[i]->*predicate)()) {
+          candidates[num_candidates++] = i;
+        }
       }
     }
 
@@ -168,6 +183,8 @@ class Fish : public Agent {
     egg_timer_++;
     // Fallback: Stay on current cell.
     new_position_ = position_;
+
+    assert(position_ != nullptr);
     position_->request_random_free_neighbor(random_state_);
   }
 
@@ -196,12 +213,14 @@ class Shark : public Agent {
  public:
   static const uint8_t kTypeId = 2;
 
-  __device__ Shark(uint32_t random_state) : Agent(random_state, kTypeId) {}
+  __device__ Shark(uint32_t random_state) : Agent(random_state, kTypeId),
+                                            energy_(ENERGY_START) {}
 
   __device__ void prepare() {
     egg_timer_++;
     energy_--;
 
+    assert(position_ != nullptr);
     if (energy_ == 0) {
       position_->kill();
     } else {
@@ -241,7 +260,7 @@ __device__ bool Cell::has_shark() const {
 
 __device__ void Cell::kill() {
   delete agent_;
-  leave();
+  agent_ = nullptr;
 }
 
 __device__ void Cell::decide() {
@@ -267,13 +286,16 @@ __device__ void Cell::decide() {
 
 
 
-__device__ Cell*  cells[GRID_SIZE_X * GRID_SIZE_Y];
+__device__ Cell* cells[GRID_SIZE_X * GRID_SIZE_Y];
 
 __global__ void create_cells() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
   if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
-    cells[tid] = new Cell(tid + 1);
+    Cell* new_cell = new Cell(tid + 1);
+    assert(new_cell != nullptr);
+
+    cells[tid] = new_cell;
   }
 }
 
@@ -294,12 +316,11 @@ __global__ void setup_cells() {
     cells[tid]->set_neighbors(left, top, right, bottom);
 
     // Initialize with random agent.
-
     uint32_t agent_type = random_number(cells[tid]->random_state(), 3);
     if (agent_type == 0) {
-      cells[tid]->set_agent(new Fish(tid + 10001));
+      cells[tid]->enter(new Fish(tid + 10001));
     } else if (agent_type == 1) {
-      cells[tid]->set_agent(new Shark(tid + 20001));
+      cells[tid]->enter(new Shark(tid + 20001));
     } else {
       // Free cell.
     }
@@ -308,9 +329,9 @@ __global__ void setup_cells() {
 
 void initialize() {
   create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  cudaDeviceSynchronize();
+  gpuErrchk(cudaDeviceSynchronize());
   setup_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  cudaDeviceSynchronize();
+  gpuErrchk(cudaDeviceSynchronize());
 }
 
 // Problem: It is not easy to keep track of all objects of a class if they are
@@ -347,9 +368,87 @@ __global__ void find_agents() {
 
 void generate_agent_arrays() {
   reset_agent_arrays<<<1, 1>>>();
-  cudaDeviceSynchronize();
+  gpuErrchk(cudaDeviceSynchronize());
   find_agents<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  cudaDeviceSynchronize();
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+__global__ void cell_prepare() {
+  int tid = threadIdx.x + blockDim.x*blockIdx.x;
+
+  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
+    cells[tid]->prepare();
+  }
+}
+
+__global__ void cell_decide() {
+  int tid = threadIdx.x + blockDim.x*blockIdx.x;
+
+  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
+    cells[tid]->decide();
+  }
+}
+
+__global__ void fish_prepare() {
+  int tid = threadIdx.x + blockDim.x*blockIdx.x;
+
+  if (tid < num_fish) {
+    assert(fish[tid] != nullptr);
+    fish[tid]->prepare();
+  }
+}
+
+__global__ void fish_update() {
+  int tid = threadIdx.x + blockDim.x*blockIdx.x;
+
+  if (tid < num_fish) {
+    fish[tid]->update();
+  }
+}
+
+__global__ void shark_prepare() {
+  int tid = threadIdx.x + blockDim.x*blockIdx.x;
+
+  if (tid < num_sharks) {
+    assert(sharks[tid] != nullptr);
+    sharks[tid]->prepare();
+  }
+}
+
+__global__ void shark_update() {
+  int tid = threadIdx.x + blockDim.x*blockIdx.x;
+
+  if (tid < num_sharks) {
+    sharks[tid]->update();
+  }
+}
+
+void step() {
+  generate_agent_arrays();
+
+  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 }
 
 __device__ uint32_t d_gui_map[GRID_SIZE_Y * GRID_SIZE_X];
@@ -361,6 +460,8 @@ __global__ void fill_gui_map() {
   if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
     if (cells[tid]->agent() != nullptr) {
       d_gui_map[tid] = cells[tid]->agent()->type_identifier();
+    } else {
+      d_gui_map[tid] = 0;
     }
   }
 }
@@ -378,8 +479,39 @@ void update_gui_map() {
 SDL_Window* window_;
 SDL_Renderer* renderer_;
 
+void render() {
+  update_gui_map();
+
+  int num_fish = 0;
+  int num_sharks = 0;
+
+  for (int i = 0; i < GRID_SIZE_X*GRID_SIZE_Y; ++i) {
+    int x = i % GRID_SIZE_X;
+    int y = i / GRID_SIZE_X;
+
+    if (gui_map[i] == Fish::kTypeId) {
+      pixelRGBA(renderer_, x, y, 0, 255, 0, 255);
+      num_fish++;
+    } else if (gui_map[i] == Shark::kTypeId) {
+      pixelRGBA(renderer_, x, y, 255, 0, 0, 255);
+      num_sharks++;
+    } else {
+      pixelRGBA(renderer_, x, y, 0, 0, 0, 255);
+    }
+  }
+
+  SDL_RenderPresent(renderer_);
+
+  printf("Fish: %i, Sharks: %i\n", num_fish, num_sharks);
+}
 
 int main(int argc, char* arvg[]) {
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1024*1024*1024);
+
+  size_t heap_size;
+  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
+  printf("CUDA heap size: %lu\n", heap_size);
+
   // Initialize renderer.
   if (SDL_Init(SDL_INIT_VIDEO)) {
     printf("SDL_Init Error: %s", SDL_GetError());
@@ -407,4 +539,21 @@ int main(int argc, char* arvg[]) {
   SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
   SDL_RenderClear(renderer_);
   SDL_RenderPresent(renderer_);
+
+  initialize();
+  render();
+
+  while (true) {
+    SDL_Event e;
+    if (SDL_PollEvent(&e)) {
+      switch (e.type) {
+        case SDL_QUIT:
+          exit(0);
+          break;
+      }
+    }
+
+    step();
+    render();
+  }
 }
