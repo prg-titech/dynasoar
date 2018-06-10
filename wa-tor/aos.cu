@@ -8,9 +8,9 @@
 
 #define SPAWN_THRESHOLD 5
 #define ENERGY_BOOST 3
-#define ENERGY_START 5
-#define GRID_SIZE_X 640
-#define GRID_SIZE_Y 480
+#define ENERGY_START 2
+#define GRID_SIZE_X 200
+#define GRID_SIZE_Y 500
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -25,9 +25,19 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 __device__ uint32_t random_number(uint32_t& state, uint32_t max) {
   // Advance and return random state.
   // Source: https://en.wikipedia.org/wiki/Lehmer_random_number_generator
+  assert(state != 0);
   state = static_cast<uint32_t>(
       static_cast<uint64_t>(state) * 279470273u) % 0xfffffffb;
   return state % max;
+}
+
+__device__ uint32_t random_number(uint32_t& state) {
+  // Advance and return random state.
+  // Source: https://en.wikipedia.org/wiki/Lehmer_random_number_generator
+  assert(state != 0);
+  state = static_cast<uint32_t>(
+      static_cast<uint64_t>(state) * 279470273u) % 0xfffffffb;
+  return state;
 }
 
 class Agent;
@@ -48,6 +58,7 @@ class Cell {
 
  public:
   __device__ Cell(uint32_t random_state) : random_state_(random_state) {
+    assert(random_state != 0);
     prepare();
   }
 
@@ -96,6 +107,7 @@ class Cell {
       return false;
     } else {
       uint32_t selected_index = random_number(random_state, num_candidates);
+      //printf("SELECTED_INDEX = %i / %i   (R=%i MOD 4 = %i)\n", (int) selected_index, (int) num_candidates, (int) (random_state % 100000) ,(int) (random_state % 4));
       uint8_t selected = candidates[selected_index];
       uint8_t neighbor_index = (selected + 2) % 4;
       neighbors_[selected]->neighbor_request_[neighbor_index] = true;
@@ -139,7 +151,9 @@ class Agent {
 
  public:
   __device__ Agent(uint32_t random_state, uint8_t type_identifier)
-      : random_state_(random_state), type_identifier_(type_identifier) {}
+      : random_state_(random_state), type_identifier_(type_identifier) {
+    assert(random_state_ == random_state);
+  }
 
   __device__ uint32_t& random_state() {
     return random_state_;
@@ -176,7 +190,9 @@ class Fish : public Agent {
  public:
   static const uint8_t kTypeId = 1;
 
-  __device__ Fish(uint32_t random_state) : Agent(random_state, kTypeId) {}
+  __device__ Fish(uint32_t random_state) : Agent(random_state, kTypeId) {
+    assert(random_state != 0);
+  }
 
   __device__ void prepare() {
     egg_timer_++;
@@ -195,7 +211,10 @@ class Fish : public Agent {
       new_position_->enter(this);
 
       if (egg_timer_ > SPAWN_THRESHOLD) {
-        old_position->enter(new Fish(random_state_*6121));
+        uint32_t new_random_state = random_number(random_state_) + 401;
+        new_random_state = new_random_state != 0 ? new_random_state
+                                                 : random_state_;
+        old_position->enter(new Fish(new_random_state));
         egg_timer_ = 0;
       }
     }
@@ -207,13 +226,14 @@ class Shark : public Agent {
  private:
   uint32_t energy_;
   uint32_t egg_timer_;
-  uint32_t random_state_;
 
  public:
   static const uint8_t kTypeId = 2;
 
   __device__ Shark(uint32_t random_state) : Agent(random_state, kTypeId),
-                                            energy_(ENERGY_START) {}
+                                            energy_(ENERGY_START) {
+    assert(random_state_ != 0);
+  }
 
   __device__ void prepare() {
     egg_timer_++;
@@ -242,7 +262,11 @@ class Shark : public Agent {
       new_position_->enter(this);
 
       if (egg_timer_ > SPAWN_THRESHOLD) {
-        old_position->enter(new Shark(random_state_*5519));
+        assert(random_state_ != 0);
+        uint32_t new_random_state = random_number(random_state_) + 601;
+        new_random_state = new_random_state != 0 ? new_random_state
+                                                 : random_state_;
+        old_position->enter(new Shark(new_random_state));
         egg_timer_ = 0;
       }
     }
@@ -294,7 +318,10 @@ __global__ void create_cells() {
     int x = tid % GRID_SIZE_X;
     int y = tid / GRID_SIZE_X;
 
-    Cell* new_cell = new Cell(9973*tid + x*x*y + 1);
+    float init_state = __logf(tid + 401);
+    uint32_t init_state_int = *reinterpret_cast<uint32_t*>(&init_state);
+
+    Cell* new_cell = new Cell(init_state_int);
     assert(new_cell != nullptr);
 
     cells[tid] = new_cell;
@@ -321,11 +348,11 @@ __global__ void setup_cells() {
     cells[tid]->set_neighbors(left, top, right, bottom);
 
     // Initialize with random agent.
-    uint32_t agent_type = random_number(cells[tid]->random_state(), 1009);
-    if (agent_type < 100) {
-      cells[tid]->enter(new Fish(9967*cells[tid]->random_state()));
-    } else if (agent_type < 150) {
-      cells[tid]->enter(new Shark(9949*cells[tid]->random_state()));
+    uint32_t agent_type = random_number(cells[tid]->random_state(), 4);
+    if (agent_type == 0) {
+      cells[tid]->enter(new Fish(cells[tid]->random_state()));
+    } else if (agent_type == 1) {
+      cells[tid]->enter(new Shark(cells[tid]->random_state()));
     } else {
       // Free cell.
     }
@@ -432,27 +459,15 @@ void step() {
   generate_agent_arrays();
 
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
   fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
   fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
 
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
   shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
   shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+
   gpuErrchk(cudaDeviceSynchronize());
 }
 
@@ -559,6 +574,7 @@ int main(int argc, char* arvg[]) {
     }
 
     step();
+    SDL_Delay(25);
     render();
   }
 }
