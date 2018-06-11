@@ -9,8 +9,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 300
-#define GRID_SIZE_Y 200
+#define GRID_SIZE_X 600
+#define GRID_SIZE_Y 400
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
