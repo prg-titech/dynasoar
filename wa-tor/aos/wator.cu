@@ -2,29 +2,20 @@
 
 #include <stdio.h>
 #include <assert.h>
-
 #include <SDL2/SDL2_gfxPrimitives.h>
 
+#include "wator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 600
-#define GRID_SIZE_Y 400
+#define GRID_SIZE_X 300
+#define GRID_SIZE_Y 200
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
 
 __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
   // Advance and return random state.
@@ -44,250 +35,14 @@ __device__ uint32_t random_number(uint32_t* state) {
   return ((*state) >> 7);
 }
 
-class Agent;
-class Fish;
-class Shark;
-
-class Cell {
- private:
-  // left, top, right, bottom
-  Cell* neighbors_[4];
-
-  Agent* agent_ = nullptr;
-
-  uint32_t random_state_;
-
-  // left, top, right, bottom, self
-  bool neighbor_request_[5];
-
- public:
-  __device__ Cell(uint32_t random_state) : random_state_(random_state) {
-    assert(random_state != 0);
-    prepare();
-  }
-
-  __device__ void prepare() {
-    for (int i = 0; i < 5; ++i) {
-      neighbor_request_[i] = false;
-    }
-  }
-
-  __device__ Agent* agent() const {
-    return agent_;
-  }
-
-  __device__ bool is_free() const {
-    return agent_ == nullptr;
-  }
-
-  __device__ bool has_fish() const;
-
-  __device__ bool has_shark() const;
-
-  __device__ uint32_t* random_state() {
-    return &random_state_;
-  }
-
-  __device__ void set_neighbors(Cell* left, Cell* top,
-                                Cell* right, Cell* bottom) {
-    neighbors_[0] = left;
-    neighbors_[1] = top;
-    neighbors_[2] = right;
-    neighbors_[3] = bottom;
-  }
-
-  template<bool(Cell::*predicate)() const>
-  __device__ bool request_random_neighbor(uint32_t* random_state);
-
-  __device__ void request_random_free_neighbor();
-
-  __device__ void request_random_fish_neighbor();
-
-  __device__ void kill();
-
-  __device__ void leave() {
-    assert(agent_ != nullptr);
-    agent_ = nullptr;
-  }
-
-  __device__ void enter(Agent* agent);
-
-  __device__ void decide();
-};
-
-
-class Agent {
- protected:
-  Cell* position_;
-  Cell* new_position_;
-  uint32_t random_state_;
-  uint8_t type_identifier_;
-
- public:
-  __device__ Agent(uint32_t random_state, uint8_t type_identifier)
-      : random_state_(random_state), type_identifier_(type_identifier) {
-    assert(random_state != 0);
-  }
-
-  __device__ uint32_t* random_state() {
-    return &random_state_;
-  }
-
-  __device__ void set_new_position(Cell* new_pos) {
-    // Check for race condition. (This is not bullet proof.)
-    assert(new_position_ == position_);
-
-    new_position_ = new_pos;
-  }
-
-  __device__ Cell* position() const {
-    return position_;
-  }
-
-  __device__ void set_position(Cell* cell) {
-    position_ = cell;
-  }
-
-  // TODO: Verify that RTTI (dynamic_cast) does not work in device code.
-  __device__ uint8_t type_identifier() const {
-    return type_identifier_;
-  }
-};
-
-__device__ void Cell::enter(Agent* agent) {
-  assert(agent_ == nullptr);
-
-#ifndef NDEBUG
-  // Ensure that no two agents are trying to enter this cell at the same time.
-  uint64_t old_val = atomicExch(reinterpret_cast<unsigned long long int*>(&agent_),
-                                reinterpret_cast<unsigned long long int>(agent));
-  assert(old_val == 0);
-#else
-  agent_ = agent;
-#endif
-
-  agent->set_position(this);
+__device__ Cell::Cell(uint32_t random_state) : random_state_(random_state),
+                                               agent_(nullptr) {
+  assert(random_state != 0);
+  prepare();
 }
 
-
-class Fish : public Agent {
- private:
-  uint32_t egg_timer_;
-
- public:
-  static const uint8_t kTypeId = 1;
-
-  __device__ Fish(uint32_t random_state) : Agent(random_state, kTypeId),
-                                           egg_timer_(0) {
-    assert(random_state != 0);
-  }
-
-  __device__ void prepare() {
-    assert(type_identifier() == kTypeId);
-    egg_timer_++;
-    // Fallback: Stay on current cell.
-    new_position_ = position_;
-
-    assert(position_ != nullptr);
-    position_->request_random_free_neighbor();
-  }
-
-  __device__ void update() {
-    assert(type_identifier() == kTypeId);
-    Cell* old_position = position_;
-
-    if (old_position != new_position_) {
-      old_position->leave();
-      new_position_->enter(this);
-
-      if (OPTION_FISH_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
-        uint32_t new_random_state = random_number(&random_state_) + 401;
-        new_random_state = new_random_state != 0 ? new_random_state
-                                                 : random_state_;
-        auto* new_fish = new Fish(new_random_state);
-        assert(new_fish != nullptr);
-        old_position->enter(new_fish);
-        egg_timer_ = 0;
-      }
-    }
-  }
-};
-
-
-class Shark : public Agent {
- private:
-  uint32_t energy_;
-  uint32_t egg_timer_;
-
- public:
-  static const uint8_t kTypeId = 2;
-
-  __device__ Shark(uint32_t random_state) : Agent(random_state, kTypeId),
-                                            energy_(ENERGY_START),
-                                            egg_timer_(0) {
-    assert(random_state_ != 0);
-  }
-
-  __device__ void prepare() {
-    assert(type_identifier() == kTypeId);
-    egg_timer_++;
-    energy_--;
-
-    assert(position_ != nullptr);
-    if (OPTION_SHARK_DIE && energy_ == 0) {
-      // Do nothing. Shark will die.
-    } else {
-      // Fallback: Stay on current cell.
-      new_position_ = position_;
-      position_->request_random_fish_neighbor();
-    }
-  }
-
-  __device__ void update() {
-    assert(type_identifier() == kTypeId);
-
-    if (OPTION_SHARK_DIE && energy_ == 0) {
-      position_->kill();
-    } else {
-      Cell* old_position = position_;
-
-      if (old_position != new_position_) {
-        if (new_position_->has_fish()) {
-          energy_ += ENERGY_BOOST;
-          new_position_->kill();
-        }
-
-        old_position->leave();
-        new_position_->enter(this);
-
-        if (OPTION_SHARK_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
-          assert(random_state_ != 0);
-          uint32_t new_random_state = random_number(&random_state_) + 601;
-          new_random_state = new_random_state != 0 ? new_random_state
-                                                   : random_state_;
-          auto* new_shark = new Shark(new_random_state);
-          assert(new_shark != nullptr);
-          old_position->enter(new_shark);
-          egg_timer_ = 0;
-        }
-      }
-    }
-  }
-};
-
-
-__device__ bool Cell::has_fish() const {
-  return agent_ != nullptr && agent_->type_identifier() == Fish::kTypeId;
-}
-
-__device__ bool Cell::has_shark() const {
-  return agent_ != nullptr && agent_->type_identifier() == Shark::kTypeId;
-}
-
-__device__ void Cell::kill() {
-  assert(agent_ != nullptr);
-  delete agent_;
-  agent_ = nullptr;
+__device__ Agent* Cell::agent() const {
+  return agent_;
 }
 
 __device__ void Cell::decide() {
@@ -308,6 +63,70 @@ __device__ void Cell::decide() {
       uint32_t selected_index = random_number(&random_state_, num_candidates);
       neighbors_[candidates[selected_index]]->agent()->set_new_position(this);
     }
+  }
+}
+
+__device__ void Cell::enter(Agent* agent) {
+  assert(agent_ == nullptr);
+
+#ifndef NDEBUG
+  // Ensure that no two agents are trying to enter this cell at the same time.
+  uint64_t old_val = atomicExch(reinterpret_cast<unsigned long long int*>(&agent_),
+                                reinterpret_cast<unsigned long long int>(agent));
+  assert(old_val == 0);
+#else
+  agent_ = agent;
+#endif
+
+  agent->set_position(this);
+}
+
+__device__ bool Cell::has_fish() const {
+  return agent_ != nullptr && agent_->type_identifier() == Fish::kTypeId;
+}
+
+__device__ bool Cell::has_shark() const {
+  return agent_ != nullptr && agent_->type_identifier() == Shark::kTypeId;
+}
+
+__device__ bool Cell::is_free() const {
+  return agent_ == nullptr;
+}
+
+__device__ void Cell::kill() {
+  assert(agent_ != nullptr);
+  delete agent_;
+  agent_ = nullptr;
+}
+
+
+__device__ void Cell::leave() {
+  assert(agent_ != nullptr);
+  agent_ = nullptr;
+}
+
+__device__ void Cell::prepare() {
+  for (int i = 0; i < 5; ++i) {
+    neighbor_request_[i] = false;
+  }
+}
+
+__device__ uint32_t* Cell::random_state() {
+  return &random_state_;
+}
+
+__device__ void Cell::request_random_fish_neighbor() {
+  if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
+    // No fish found. Look for free cell.
+    if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
+      neighbor_request_[4] = true;
+    }
+  }
+}
+
+__device__ void Cell::request_random_free_neighbor() {
+  if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
+    neighbor_request_[4] = true;
   }
 }
 
@@ -337,21 +156,135 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
   }
 }
 
-__device__ void Cell::request_random_free_neighbor() {
-  if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-    neighbor_request_[4] = true;
-  }
+__device__ void Cell::set_neighbors(Cell* left, Cell* top,
+                                    Cell* right, Cell* bottom) {
+  neighbors_[0] = left;
+  neighbors_[1] = top;
+  neighbors_[2] = right;
+  neighbors_[3] = bottom;
 }
 
-__device__ void Cell::request_random_fish_neighbor() {
-  if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
-    // No fish found. Look for free cell.
-    if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-      neighbor_request_[4] = true;
+__device__ Agent::Agent(uint32_t random_state, uint8_t type_identifier)
+    : random_state_(random_state), type_identifier_(type_identifier) {
+  assert(random_state != 0);
+}
+
+__device__ uint32_t* Agent::random_state() {
+  return &random_state_;
+}
+
+__device__ void Agent::set_new_position(Cell* new_pos) {
+  // Check for race condition. (This is not bullet proof.)
+  assert(new_position_ == position_);
+
+  new_position_ = new_pos;
+}
+
+__device__ Cell* Agent::position() const {
+  return position_;
+}
+
+__device__ void Agent::set_position(Cell* cell) {
+  position_ = cell;
+}
+
+// TODO: Verify that RTTI (dynamic_cast) does not work in device code.
+__device__ uint8_t Agent::type_identifier() const {
+  return type_identifier_;
+}
+
+__device__ Fish::Fish(uint32_t random_state)
+    : Agent(random_state, kTypeId), 
+      egg_timer_(random_state % SPAWN_THRESHOLD) {
+  assert(random_state != 0);
+}
+
+__device__ void Fish::prepare() {
+  assert(type_identifier() == kTypeId);
+  egg_timer_++;
+  // Fallback: Stay on current cell.
+  new_position_ = position_;
+
+  assert(position_ != nullptr);
+  position_->request_random_free_neighbor();
+}
+
+__device__ void Fish::update() {
+  assert(type_identifier() == kTypeId);
+  Cell* old_position = position_;
+
+  if (old_position != new_position_) {
+    old_position->leave();
+    new_position_->enter(this);
+
+    if (OPTION_FISH_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
+      uint32_t new_random_state = random_number(&random_state_) + 401;
+      new_random_state = new_random_state != 0 ? new_random_state
+                                               : random_state_;
+      auto* new_fish = new Fish(new_random_state);
+      assert(new_fish != nullptr);
+      old_position->enter(new_fish);
+      egg_timer_ = 0;
     }
   }
 }
 
+
+__device__ Shark::Shark(uint32_t random_state)
+    : Agent(random_state, kTypeId), energy_(ENERGY_START),
+      egg_timer_(random_state % SPAWN_THRESHOLD) {
+  assert(random_state_ != 0);
+}
+
+__device__ void Shark::prepare() {
+  assert(type_identifier() == kTypeId);
+  egg_timer_++;
+  energy_--;
+
+  assert(position_ != nullptr);
+  if (OPTION_SHARK_DIE && energy_ == 0) {
+    // Do nothing. Shark will die.
+  } else {
+    // Fallback: Stay on current cell.
+    new_position_ = position_;
+    position_->request_random_fish_neighbor();
+  }
+}
+
+__device__ void Shark::update() {
+  assert(type_identifier() == kTypeId);
+
+  if (OPTION_SHARK_DIE && energy_ == 0) {
+    position_->kill();
+  } else {
+    Cell* old_position = position_;
+
+    if (old_position != new_position_) {
+      if (new_position_->has_fish()) {
+        energy_ += ENERGY_BOOST;
+        new_position_->kill();
+      }
+
+      old_position->leave();
+      new_position_->enter(this);
+
+      if (OPTION_SHARK_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
+        assert(random_state_ != 0);
+        uint32_t new_random_state = random_number(&random_state_) + 601;
+        new_random_state = new_random_state != 0 ? new_random_state
+                                                 : random_state_;
+        auto* new_shark = new Shark(new_random_state);
+        assert(new_shark != nullptr);
+        old_position->enter(new_shark);
+        egg_timer_ = 0;
+      }
+    }
+  }
+}
+
+
+
+// ----- KERNELS -----
 
 __device__ Cell* cells[GRID_SIZE_X * GRID_SIZE_Y];
 
@@ -368,7 +301,6 @@ __global__ void create_cells() {
     // Cell* new_cell = new Cell(init_state_int);
     Cell* new_cell = new Cell(601*x*x*y + init_state_int);
     assert(new_cell != nullptr);
-
     cells[tid] = new_cell;
   }
 }
@@ -395,9 +327,13 @@ __global__ void setup_cells() {
     // Initialize with random agent.
     uint32_t agent_type = random_number(cells[tid]->random_state(), 4);
     if (agent_type == 0) {
-      cells[tid]->enter(new Fish(*(cells[tid]->random_state())));
+      auto* agent = new Fish(*(cells[tid]->random_state()));
+      assert(agent != nullptr);
+      cells[tid]->enter(agent);
     } else if (agent_type == 1) {
-      cells[tid]->enter(new Shark(*(cells[tid]->random_state())));
+      auto* agent = new Shark(*(cells[tid]->random_state()));
+      assert(agent != nullptr);
+      cells[tid]->enter(agent);
     } else {
       // Free cell.
     }
