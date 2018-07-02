@@ -12,8 +12,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-#define NUM 10000000
-#define SOA_SIZE 64
+#define NUM 20000000
+#define SOA_SIZE 32
 
 struct soa_container {
   float pos_x[SOA_SIZE];
@@ -24,10 +24,10 @@ struct soa_container {
 
 struct reference {
   __device__ reference() {}
-  __device__ reference(uint32_t a, uint8_t b) : container_id(a), soa_id(b) {}
+  __device__ reference(uint32_t a, uint32_t b) : container_id(a), soa_id(b) {}
 
   uint32_t container_id;
-  uint8_t soa_id;
+  uint32_t soa_id;
 };
 
 __device__ soa_container aosoa[NUM/SOA_SIZE + 1];

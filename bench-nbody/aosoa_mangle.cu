@@ -13,8 +13,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-#define NUM 10000000
-#define SOA_SIZE 64
+#define NUM 20000000
+#define SOA_SIZE 32
 
 struct soa_container {
   float pos_x[SOA_SIZE];

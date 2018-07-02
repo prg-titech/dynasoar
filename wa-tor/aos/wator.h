@@ -1,3 +1,6 @@
+#ifndef WA_TOR_AOS_WATOR_H
+#define WA_TOR_AOS_WATOR_H
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -7,6 +10,8 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
       if (abort) exit(code);
    }
 }
+
+namespace wa_tor {
 
 class Agent;
 
@@ -106,3 +111,7 @@ class Shark : public Agent {
 
   __device__ void update();
 };
+
+}  // namespace wa_tor
+
+#endif  // WA_TOR_AOS_WATOR_H

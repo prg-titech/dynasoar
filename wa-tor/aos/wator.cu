@@ -4,18 +4,21 @@
 #include <assert.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
 
-#include "wator.h"
+#include "wa-tor/aos/wator.h"
+#include "wa-tor/aos/aos_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 300
-#define GRID_SIZE_Y 200
+#define GRID_SIZE_X 200
+#define GRID_SIZE_Y 100
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
 
+
+namespace wa_tor {
 
 __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
   // Advance and return random state.
@@ -92,13 +95,6 @@ __device__ bool Cell::has_shark() const {
 __device__ bool Cell::is_free() const {
   return agent_ == nullptr;
 }
-
-__device__ void Cell::kill() {
-  assert(agent_ != nullptr);
-  delete agent_;
-  agent_ = nullptr;
-}
-
 
 __device__ void Cell::leave() {
   assert(agent_ != nullptr);
@@ -221,7 +217,7 @@ __device__ void Fish::update() {
       uint32_t new_random_state = random_number(&random_state_) + 401;
       new_random_state = new_random_state != 0 ? new_random_state
                                                : random_state_;
-      auto* new_fish = new Fish(new_random_state);
+      auto* new_fish = allocate<Fish>(new_random_state);
       assert(new_fish != nullptr);
       old_position->enter(new_fish);
       egg_timer_ = 0;
@@ -273,7 +269,7 @@ __device__ void Shark::update() {
         uint32_t new_random_state = random_number(&random_state_) + 601;
         new_random_state = new_random_state != 0 ? new_random_state
                                                  : random_state_;
-        auto* new_shark = new Shark(new_random_state);
+        auto* new_shark = allocate<Shark>(new_random_state);
         assert(new_shark != nullptr);
         old_position->enter(new_shark);
         egg_timer_ = 0;
@@ -282,6 +278,18 @@ __device__ void Shark::update() {
   }
 }
 
+__device__ void Cell::kill() {
+  assert(agent_ != nullptr);
+  if (agent_->type_identifier() == 1) {
+    deallocate_untyped<1>(agent_);
+  } else if (agent_->type_identifier() == 2) {
+    deallocate_untyped<2>(agent_);
+  } else {
+    // Unknown type.
+    assert(false);
+  }
+  agent_ = nullptr;
+}
 
 
 // ----- KERNELS -----
@@ -327,11 +335,11 @@ __global__ void setup_cells() {
     // Initialize with random agent.
     uint32_t agent_type = random_number(cells[tid]->random_state(), 4);
     if (agent_type == 0) {
-      auto* agent = new Fish(*(cells[tid]->random_state()));
+      auto* agent = allocate<Fish>(*(cells[tid]->random_state()));
       assert(agent != nullptr);
       cells[tid]->enter(agent);
     } else if (agent_type == 1) {
-      auto* agent = new Shark(*(cells[tid]->random_state()));
+      auto* agent = allocate<Shark>(*(cells[tid]->random_state()));
       assert(agent != nullptr);
       cells[tid]->enter(agent);
     } else {
@@ -487,7 +495,14 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
+__global__ void init_memory_system() {
+  initialize_allocator();
+}
+
 void initialize() {
+  init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
   setup_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
@@ -554,7 +569,7 @@ void print_stats() {
   generate_fish_array();
   generate_shark_array();
 
-  printf("\r Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
+  printf("\n Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
   printf("                   ");
@@ -601,7 +616,7 @@ int main(int argc, char* arvg[]) {
   printf("Computing...");
 
   for (int i = 0; ; ++i) {
-    if (i%10==0)
+    if (i%1==0)
       print_stats();
 
     SDL_Event e;
@@ -618,4 +633,10 @@ int main(int argc, char* arvg[]) {
     SDL_Delay(25);
     render();
   }
+}
+
+}  // namespace wa_tor
+
+int main(int argc, char* arvg[]) {
+  return wa_tor::main(0, nullptr);
 }

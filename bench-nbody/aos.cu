@@ -14,10 +14,14 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 
 #define NUM 20000000
 
-__device__ float pos_x[NUM];
-__device__ float pos_y[NUM];
-__device__ float vel_x[NUM];
-__device__ float vel_y[NUM];
+struct Body {
+  float pos_x;
+  float pos_y;
+  float vel_x;
+  float vel_y;
+};
+
+__device__ Body objs[NUM];
 
 __device__ uint64_t ptrs[NUM];
 
@@ -27,10 +31,10 @@ __global__ void init() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
   if (tid < NUM) {
-    pos_x[tid] = (tid % 1231241) % 2000;
-    pos_y[tid] = (tid % 1231247) % 2000;
-    vel_x[tid] = (tid % 1231243) % 20 - 10;
-    vel_y[tid] = (tid % 123124789) % 20 - 10;
+    objs[tid].pos_x = (tid % 1231241) % 2000;
+    objs[tid].pos_y = (tid % 1231247) % 2000;
+    objs[tid].vel_x = (tid % 1231243) % 20 - 10;
+    objs[tid].vel_y = (tid % 123124789) % 20 - 10;
 
     ptrs[tid] = tid;
   }
@@ -42,14 +46,14 @@ __global__ void kernel() {
   if (tid < NUM) {
     uint32_t obj_id = ptrs[tid];
 
-    pos_x[obj_id] += DELTA * vel_x[obj_id];
-    pos_y[obj_id] += DELTA * vel_y[obj_id];
+    objs[obj_id].pos_x += DELTA * objs[obj_id].vel_x;
+    objs[obj_id].pos_y += DELTA * objs[obj_id].vel_y;
 
-    if (pos_x[obj_id] < 0 || pos_x[obj_id] >= 2000) {
-      vel_x[obj_id] = -vel_x[obj_id];
+    if (objs[obj_id].pos_x < 0 || objs[obj_id].pos_x >= 2000) {
+      objs[obj_id].vel_x = -objs[obj_id].vel_x;
     }
-    if (pos_y[obj_id] < 0 || pos_y[obj_id] >= 2000) {
-      vel_y[obj_id] = -vel_y[obj_id];
+    if (objs[obj_id].pos_y < 0 || objs[obj_id].pos_y >= 2000) {
+      objs[obj_id].vel_y = -objs[obj_id].vel_y;
     }
   }
 }
