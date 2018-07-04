@@ -55,9 +55,11 @@ class AosAllocator {
 
   template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
+    // We assume that there is enough free memory.
     uint32_t index = global_free_.deallocate();
     assert(index < N);
 
+    // TODO: Guaranteed to be free. Allocate until success.
     bool success = allocated_[TupleIndex<T, TupleType>::value].allocate(index);
     assert(success);
 
@@ -67,12 +69,15 @@ class AosAllocator {
   template<class T>
   __DEV__ void free(T* obj) {
     uint32_t index = bitmap_location(obj);
-    // TODO: First crash is here!
-    delete obj;
+    obj->~T();
 
-    bool success = allocated_[TupleIndex<T, TupleType>::value].deallocate<false>(index);
+    // TODO: Following line crashses my system. Why??
+    //::operator delete(obj);
+
+    // Memory is guranteed to be allocated. Deallocate until success!
+    bool success = allocated_[TupleIndex<T, TupleType>::value].deallocate<true>(index);
     assert(success);
-    success = global_free_.allocate<false>(index);
+    success = global_free_.allocate<true>(index);
     assert(success);
   }
 

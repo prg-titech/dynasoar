@@ -7,6 +7,11 @@
 
 #define __DEV__ __device__
 
+// TODO: Remove this once code work properly.
+static const int kMaxRetry = 100;
+#define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
+#define INIT_RETRY int _retry_counter = 0;
+
 // Bitmap mode: Set nested (parent) bitmap bit to 1 if there is at least one
 // bit set to 1 in the current bitmap. Allows for efficient deallocate(), but
 // not allocate().
@@ -34,10 +39,12 @@ class Bitmap {
     ContainerT previous;
     bool success;
 
+    INIT_RETRY;
+
     do {
       previous = atomicOr(data_.containers + container, pos_mask);
       success = (previous & pos_mask) == 0;
-    } while (Retry && !success);    // Retry until success
+    } while (Retry && !success && CONTINUE_RETRY);    // Retry until success
 
     if (kHasNested && success && previous == 0) {
       // Allocated first bit, propagate to nested.
@@ -86,10 +93,12 @@ class Bitmap {
     ContainerT previous;
     bool success;
 
+    INIT_RETRY;
+
     do {
       previous = atomicAnd(data_.containers + container, ~pos_mask);
       success = (previous & pos_mask) != 0;
-    } while (Retry && !success);    // Retry until success
+    } while (Retry && !success && CONTINUE_RETRY);    // Retry until success
 
     if (kHasNested && success && count_bits(previous) == 1) {
       // Deallocated only bit, propagate to nested.
