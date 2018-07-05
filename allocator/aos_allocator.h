@@ -53,6 +53,7 @@ class AosAllocator {
     }
   }
 
+  // TODO: Make this work with a single bitmap first, then extend to per-type bitmaps.
   template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
     // We assume that there is enough free memory.
@@ -66,9 +67,11 @@ class AosAllocator {
     return new(data_location(index)) T(args...);
   }
 
+  // TODO: Make this work with a single bitmap first, then extend to per-type bitmaps.
   template<class T>
   __DEV__ void free(T* obj) {
-    uint32_t index = bitmap_location(obj);
+    const uint32_t index = bitmap_location(obj);
+    assert(index < N);
     obj->~T();
 
     // TODO: Following line crashses my system. Why??
@@ -108,7 +111,9 @@ class AosAllocator {
 
   __DEV__ uint32_t bitmap_location(void* ptr) {
     assert(ptr >= data_ && ptr < data_ + N*kTypeMaxSize);
-    return (data_ - static_cast<char*>(ptr)) / kTypeMaxSize;
+    const uint32_t return_value = (static_cast<char*>(ptr) - data_) / kTypeMaxSize;
+    assert(return_value < N);
+    return return_value;
   }
 };
 

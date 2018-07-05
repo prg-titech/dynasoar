@@ -8,9 +8,15 @@
 #define __DEV__ __device__
 
 // TODO: Remove this once code work properly.
-static const int kMaxRetry = 100;
+static const int kMaxRetry = 100000;
 #define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
 #define INIT_RETRY int _retry_counter = 0;
+
+// Problem: Deadlock if two threads in the same warp want to update the same
+// value. E.g., t0 wants to write "1" and waits for "0" to appear. But t1 cannot
+// write "0" because of thread divergence.
+
+// Sol. 1: Only one thread per warp is allowed to update values.
 
 // Bitmap mode: Set nested (parent) bitmap bit to 1 if there is at least one
 // bit set to 1 in the current bitmap. Allows for efficient deallocate(), but
@@ -31,6 +37,8 @@ class Bitmap {
   // success. If Retry, then continue retrying until successful update.
   template<bool Retry = false>
   __DEV__ bool allocate(SizeT pos) {
+    assert(pos != kIndexError);
+    assert(pos < N);
     SizeT container = pos / kBitsize;
     SizeT offset = pos % kBitsize;
 
@@ -48,7 +56,8 @@ class Bitmap {
 
     if (kHasNested && success && previous == 0) {
       // Allocated first bit, propagate to nested.
-      data_.nested_allocate<true>(container);
+      bool success2 = data_.nested_allocate<true>(container);
+      assert(success2);
     }
 
     return success;
@@ -60,10 +69,14 @@ class Bitmap {
   __DEV__ SizeT find_allocated() const {
     SizeT index;
 
+    INIT_RETRY;
+
     do {
       index = find_allocated_private();
-    } while (Retry && index == kIndexError);
+    } while (Retry && index == kIndexError && CONTINUE_RETRY);
 
+    assert(!Retry || index != kIndexError);
+    assert(index == kIndexError || index < N);
     return index;
   }
 
@@ -73,10 +86,14 @@ class Bitmap {
     SizeT index;
     bool success;
 
+    INIT_RETRY;
+
     do {
       index = find_allocated<true>();
       success = deallocate<false>(index); // if false: other thread was faster
-    } while (!success);
+    } while (!success && CONTINUE_RETRY);
+
+    assert(success);
 
     return index;
   }
@@ -85,6 +102,7 @@ class Bitmap {
   // success. If Retry, then continue retrying until successful update.
   template<bool Retry = false>
   __DEV__ bool deallocate(SizeT pos) {
+    assert(pos < N);
     SizeT container = pos / kBitsize;
     SizeT offset = pos % kBitsize;
 
@@ -102,7 +120,8 @@ class Bitmap {
 
     if (kHasNested && success && count_bits(previous) == 1) {
       // Deallocated only bit, propagate to nested.
-      data_.nested_deallocate<true>(container);
+      bool success2 = data_.nested_deallocate<true>(container);
+      assert(success2);
     }
 
     return success;
@@ -202,7 +221,7 @@ class Bitmap {
   // kIndexError if not allocated bit was found.
   __DEV__ SizeT find_allocated_in_container(SizeT container) const {
     // TODO: For better performance, choose random one.
-    int selected = find_first_bit(data_.containers[container]);
+    int selected = find_allocated_bit(data_.containers[container]);
     if (selected == 0) {
       // No space in here.
       return kIndexError;
@@ -214,6 +233,22 @@ class Bitmap {
   __DEV__ int find_first_bit(ContainerT val) const {
     // TODO: Adapt for other data types.
     return __ffsll(val);
+  }
+
+  // Find index of *some* bit that is set to 1.
+  // TODO: Make this more efficient!
+  __DEV__ int find_allocated_bit(ContainerT val) const {
+    const int num_bits = sizeof(ContainerT)*8;
+    int bit_pos = threadIdx.x % num_bits;
+
+    for (int i = 0; i < num_bits; ++i) {
+      bit_pos = (bit_pos + 1) % num_bits;
+      if (val & (static_cast<ContainerT>(1) << bit_pos)) {
+        return bit_pos + 1;
+      }
+    }
+
+    return 0;
   }
 
   __DEV__ int count_bits(ContainerT val) const {
