@@ -1,5 +1,5 @@
-#ifndef MEMORY_AOS_ALLOCATOR_H
-#define MEMORY_AOS_ALLOCATOR_H
+#ifndef ALLOCATOR_AOS_ALLOCATOR_H
+#define ALLOCATOR_AOS_ALLOCATOR_H
 
 #include <assert.h>
 #include <tuple>
@@ -53,15 +53,14 @@ class AosAllocator {
     }
   }
 
-  // TODO: Make this work with a single bitmap first, then extend to per-type bitmaps.
   template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
     // We assume that there is enough free memory.
     uint32_t index = global_free_.deallocate();
     assert(index < N);
 
-    // TODO: Guaranteed to be free. Allocate until success.
-    bool success = allocated_[TupleIndex<T, TupleType>::value].allocate(index);
+    // Guaranteed to be free. Allocate until success.
+    bool success = allocated_[TupleIndex<T, TupleType>::value].allocate<true>(index);
     assert(success);
 
     return new(data_location(index)) T(args...);
@@ -117,4 +116,4 @@ class AosAllocator {
   }
 };
 
-#endif  // MEMORY_AOS_ALLOCATOR_H
+#endif  // ALLOCATOR_AOS_ALLOCATOR_H
