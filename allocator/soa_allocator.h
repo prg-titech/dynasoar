@@ -3,10 +3,99 @@
 
 #include <assert.h>
 #include <tuple>
+#include <type_traits>
 
 #include "bitmap/bitmap.h"
 
 #define __DEV__ __device__
+
+__forceinline__ __device__ unsigned int __lanemask_lt() {
+  unsigned int mask;
+  asm volatile("mov.u32 %0, %%lanemask_lt;" : "=r"(mask));
+  return mask;
+}
+
+template<typename T, int N, int Field, int Offset>
+class SoaField {
+ private:
+  // TODO: Avoid duplication from SoaAllocator.
+  static const uint8_t kObjectAddrBits = 6;
+  static const uint32_t kNumBlockElements = 1ULL << kObjectAddrBits;
+  static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
+  static const uint64_t kBlockAddrBitmask = ~kObjectAddrBitmask;
+
+  // Offset of data section within SOA buffer.
+  // TODO: Do not hard-code.
+  static const int kSoaBufferOffset = 128;
+
+  __DEV__ T* data_ptr() {
+    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
+    uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
+    uintptr_t block_base = ptr_base & kBlockAddrBitmask;
+    T* soa_array = reinterpret_cast<T*>(
+        block_base + kSoaBufferOffset + N*Offset);
+    return soa_array + obj_id;
+  }
+
+  __DEV__ T* data_ptr() const {
+    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
+    uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
+    uintptr_t block_base = ptr_base & kBlockAddrBitmask;
+    T* soa_array = reinterpret_cast<T*>(
+        block_base + kSoaBufferOffset + N*Offset);
+    return soa_array + obj_id;
+  }
+
+ public:
+  __DEV__ SoaField() {}
+
+  __DEV__ explicit SoaField(const T& value) {
+    *data_ptr() = value;
+  }
+
+  __DEV__ operator T&() {
+    return *data_ptr();
+  }
+
+  __DEV__ operator const T&() const {
+    return *data_ptr();
+  }
+
+  __DEV__ const T* operator&() const {
+    return data_ptr();
+  }
+
+  __DEV__ T* operator&() {
+    return data_ptr();
+  }
+
+  __DEV__ T operator->() {
+    return *data_ptr();
+  }
+
+  // TODO: This may not be the correct implementation. Need a const reference?
+  __DEV__ T& operator=(T value) {
+    *data_ptr() = value;
+    return *data_ptr();
+  }
+};
+
+// Get index of type within tuple.
+// Taken from:
+// https://stackoverflow.com/questions/18063451/get-index-of-a-tuple-elements-type
+template<class T, class Tuple>
+struct TupleIndex;
+
+template<class T, class... Types>
+struct TupleIndex<T, std::tuple<T, Types...>> {
+  static const std::size_t value = 0;
+};
+
+template<class T, class U, class... Types>
+struct TupleIndex<T, std::tuple<U, Types...>> {
+  static const std::size_t value =
+      1 + TupleIndex<T, std::tuple<Types...>>::value;
+};
 
 struct BlockAllocationResult {
   __device__ BlockAllocationResult(uint64_t allocation_mask_p,
@@ -47,7 +136,7 @@ class SoaBlock {
     // Allocation bits.
     unsigned long long int selected_bits = 0;
     // Set to true if this allocation filled up the block.
-    bool filled_block = false;
+    bool filled_block = false, block_full;
     // Helper variables used inside the loop and in the loop condition.
     unsigned long long int before_update, successful_alloc;
 
@@ -82,7 +171,7 @@ class SoaBlock {
 
       // Block full if at least one slot was allocated and "before update"
       // bit-and "now allocated" indicates that block is full.
-      bool block_full = (before_update & ~successful_alloc) == 0;
+      block_full = (before_update & ~successful_alloc) == 0;
       filled_block = successful_alloc > 0 && block_full;
 
       // Stop loop if no more free bits available in this block or all
@@ -94,14 +183,63 @@ class SoaBlock {
   }
 
  private:
+  // Dummy area that may be overridden by zero initialization.
+  // Data section begins after 128 bytes.
+  // TODO: Do we need this on GPU?
+  // TODO: Can this be replaced when using ROSE?
+  char initialization_header_[128 - sizeof(unsigned long long int)];
+
   // Bitmap of free slots.
   unsigned long long int free_bitmap;
+
+  static const int kRawStorageBytes = N*T::kObjectSize;
+
+  // Object size must be multiple of 64 bytes.
+  static const int kStorageBytes = ((kRawStorageBytes + N - 1) / N) * N;
+
+  static_assert(N == 64, "Not implemented: N != 64.");
+
+  // Data storage.
+  char data_[kStorageBytes];
+};
+
+// Get largest SOA block size among all tuple elements.
+// TODO: Assuming block size of 64.
+template<class Tuple>
+struct TupleMaxBlockSize;
+
+template<class T, class... Types>
+struct TupleMaxBlockSize<std::tuple<T, Types...>> {
+  static const size_t value =
+      sizeof(T) > TupleMaxBlockSize<std::tuple<Types...>>::value
+          ? sizeof(SoaBlock<T, 64>)
+          : TupleMaxBlockSize<std::tuple<Types...>>::value;
+};
+
+template<class T>
+struct TupleMaxBlockSize<std::tuple<T>> {
+  static const size_t value = sizeof(SoaBlock<T, 64>);
 };
 
 template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
+ private:
+  static const uint8_t kObjectAddrBits = 6;
+  static const uint32_t kNumBlockElements = 1ULL << kObjectAddrBits;
+  static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
+  static const uint64_t kBlockAddrBitmask = ~kObjectAddrBitmask;
+  static_assert(kNumBlockElements == 64,
+                "Not implemented: Block size != 64.");
+  static const int N = N_Objects / kNumBlockElements;
+
+  static_assert(N_Objects % kNumBlockElements == 0,
+                "N_Objects Must be divisible by BlockSize.");
+
  public:
   __DEV__ void initialize() {
+    // Check alignment of data storage buffer.
+    assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
+
     global_free_.initialize(true);
     for (int i = 0; i < kNumTypes; ++i) {
       allocated_[i].initialize(false);
@@ -127,8 +265,8 @@ class SoaAllocator {
       uint64_t allocation_bitmap;
       if (rank == leader) {
         block_idx = find_active_block<T>();
-        const auto allocation = allocate_in_block(block_idx,
-                                                  /*num=*/ __popc(active));
+        const auto allocation = allocate_in_block<T>(block_idx,
+                                                     /*num=*/ __popc(active));
         allocation_bitmap = allocation.allocation_mask;
 
         if (allocation.block_full) {
@@ -140,6 +278,7 @@ class SoaAllocator {
 
       // Get pointer from allocation (nullptr if no allocation).
       allocation_bitmap = __shfl_sync(active, allocation_bitmap, leader);
+      block_idx = __shfl_sync(active, block_idx, leader);
       result = get_ptr_from_allocation<T>(block_idx, rank, allocation_bitmap);
     } while (result == nullptr);
 
@@ -151,7 +290,7 @@ class SoaAllocator {
     obj->~T();
     const uint32_t block_idx = get_block_idx<T>(obj);
     const uint32_t obj_id = get_object_id<T>(obj);
-    const bool last_dealloc = deallocate_in_block(block_idx, obj_id);
+    const bool last_dealloc = deallocate_in_block<T>(block_idx, obj_id);
 
     if (last_dealloc) {
       // Block is now empty.
@@ -162,7 +301,7 @@ class SoaAllocator {
         assert(success);
         success = allocated_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
         assert(success);
-        success = global_free_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
+        success = global_free_.allocate<true>(block_idx);
         assert(success);
       } else {
         uninvalidate_block<T>(block_idx, before_invalidate);
@@ -170,7 +309,15 @@ class SoaAllocator {
     }
   }
 
- private:
+  template<int TypeIndex>
+  __DEV__ void free_untyped(void* obj) {
+    auto* typed = static_cast<
+        typename std::tuple_element<TypeIndex, TupleType>::type*>(obj);
+    free(typed);
+  }
+
+  // TODO: Should be private.
+ public:
   template<class T>
   __DEV__ uint32_t find_active_block() {
     uint32_t block_idx;
@@ -181,7 +328,7 @@ class SoaAllocator {
 
       if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
         block_idx = global_free_.deallocate();
-        assert(block_idx != Bitmap<uint32_t, N>::kIndexError);
+        assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));
         initialize_block<T>(block_idx);
         bool success = allocated_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
         assert(success);
@@ -194,7 +341,10 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ void initialize_block(uint32_t block_idx) {
-    new(get_block(block_idx)) Block<T, kNumBlockElements>();
+    static_assert(sizeof(SoaBlock<T, kNumBlockElements>)
+          % kNumBlockElements == 0,
+        "Internal error: SOA block not aligned to 64 bytes.");
+    new(get_block<T>(block_idx)) SoaBlock<T, kNumBlockElements>();
   }
 
   template<class T>
@@ -210,7 +360,7 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ SoaBlock<T, kNumBlockElements> get_block(uint32_t block_idx) {
+  __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
     return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
         data_ + block_idx*kBlockMaxSize);
   }
@@ -260,22 +410,11 @@ class SoaAllocator {
     get_block<T>(block_idx)->uninvalidate(previous_val);
   }
 
-  static const uint8_t kObjectAddrBits = 6;
-  static const uint32_t kNumBlockElements = 1ULL << kObjectAddrBits;
-  static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
-  static const uint64_t kBlockAddrBitmask = ~kObjectAddrBitmask;
-  static_assert(kNumBlockElements == 64,
-                "Not implemented: Block size != 64.");
-  static const int N = N_Objects / kNumBlockElements;
-
-  static_assert(N_Objects % BlockSize == 0,
-                "N_Objects Must be divisible by BlockSize.");
-
   using TupleType = std::tuple<Types...>;
 
-  static const int kNumTypes = ...;
+  static const int kNumTypes = std::tuple_size<TupleType>::value;
 
-  static const int kBlockMaxSize = ...;
+  static const int kBlockMaxSize = TupleMaxBlockSize<TupleType>::value;
 
   char data_[N*kBlockMaxSize];
 
