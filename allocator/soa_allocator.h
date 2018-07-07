@@ -9,10 +9,11 @@
 
 #define __DEV__ __device__
 
-__forceinline__ __device__ unsigned int __lanemask_lt() {
-  unsigned int mask;
-  asm volatile("mov.u32 %0, %%lanemask_lt;" : "=r"(mask));
-  return mask;
+__forceinline__ __device__ unsigned lane_id()
+{
+    unsigned ret; 
+    asm volatile ("mov.u32 %0, %laneid;" : "=r"(ret));
+    return ret;
 }
 
 template<typename T, int N, int Field, int Offset>
@@ -31,6 +32,7 @@ class SoaField {
   __DEV__ T* data_ptr() {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
     uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
+    assert(obj_id < N);
     uintptr_t block_base = ptr_base & kBlockAddrBitmask;
     T* soa_array = reinterpret_cast<T*>(
         block_base + kSoaBufferOffset + N*Offset);
@@ -40,6 +42,7 @@ class SoaField {
   __DEV__ T* data_ptr() const {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
     uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
+    assert(obj_id < N);
     uintptr_t block_base = ptr_base & kBlockAddrBitmask;
     T* soa_array = reinterpret_cast<T*>(
         block_base + kSoaBufferOffset + N*Offset);
@@ -59,10 +62,6 @@ class SoaField {
 
   __DEV__ operator const T&() const {
     return *data_ptr();
-  }
-
-  __DEV__ const T* operator&() const {
-    return data_ptr();
   }
 
   __DEV__ T* operator&() {
@@ -112,7 +111,9 @@ template<class T, int N>
 class SoaBlock {
  public:
   __DEV__ SoaBlock() {
+    assert(reinterpret_cast<uintptr_t>(this) % N == 0);   // Alignment.
     free_bitmap = ~0ULL;
+    assert(__popcll(free_bitmap) == 64);
   }
 
   __DEV__ uint64_t invalidate() {
@@ -253,17 +254,21 @@ class SoaAllocator {
     T* result = nullptr;
 
     do {
-      const unsigned int active = __activemask();
+      const unsigned active = __activemask();
       // Leader thread is the first thread whose mask bit is set to 1.
       const int leader = __ffs(active) - 1;
+      assert(leader >= 0 && leader < 32);
       // Use lane mask to empty all bits higher than the current thread.
       // The rank of this thread is the number of bits set to 1 in the result.
-      const unsigned int rank = __popc(active & __lanemask_lt());
+      const unsigned int rank = lane_id();
+      assert(rank < 32);
 
       // Values to be calculated by the leader.
       uint32_t block_idx;
       uint64_t allocation_bitmap;
       if (rank == leader) {
+        assert(__popc(__activemask()) == 1);    // Only one thread executing.
+
         block_idx = find_active_block<T>();
         const auto allocation = allocate_in_block<T>(block_idx,
                                                      /*num=*/ __popc(active));
@@ -276,17 +281,24 @@ class SoaAllocator {
         }
       }
 
+      assert(__activemask() == active);
       // Get pointer from allocation (nullptr if no allocation).
       allocation_bitmap = __shfl_sync(active, allocation_bitmap, leader);
       block_idx = __shfl_sync(active, block_idx, leader);
+      assert(block_idx < N);
       result = get_ptr_from_allocation<T>(block_idx, rank, allocation_bitmap);
     } while (result == nullptr);
 
+    assert(reinterpret_cast<char*>(result) > data_);
+    assert(reinterpret_cast<char*>(result) < data_ + N*kBlockMaxSize);
     return new(result) T(args...);
   }
 
   template<class T>
   __DEV__ void free(T* obj) {
+    assert(reinterpret_cast<char*>(obj) > data_);
+    assert(reinterpret_cast<char*>(obj) < data_ + N*kBlockMaxSize);
+
     obj->~T();
     const uint32_t block_idx = get_block_idx<T>(obj);
     const uint32_t obj_id = get_object_id<T>(obj);
@@ -327,8 +339,9 @@ class SoaAllocator {
       block_idx = active_[TupleIndex<T, TupleType>::value].find_allocated();
 
       if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
+        // TODO: May be out of memory here.
         block_idx = global_free_.deallocate();
-        assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));
+        assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
         bool success = allocated_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
         assert(success);
@@ -336,6 +349,7 @@ class SoaAllocator {
       }
     } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
 
+    assert(block_idx < N);
     return block_idx;
   }
 
@@ -349,18 +363,25 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ uint32_t get_block_idx(T* ptr) {
+    assert(reinterpret_cast<char*>(ptr) > data_);
+    assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
+
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     return ptr_as_int & kBlockAddrBitmask;
   }
 
   template<class T>
   __DEV__ uint32_t get_object_id(T* ptr) {
+    assert(reinterpret_cast<char*>(ptr) > data_);
+    assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
+
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     return ptr_as_int & kObjectAddrBitmask; 
   }
 
   template<class T>
   __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
+    assert(block_idx < N);
     return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
         data_ + block_idx*kBlockMaxSize);
   }
@@ -368,6 +389,7 @@ class SoaAllocator {
   template<class T>
   __DEV__ BlockAllocationResult allocate_in_block(uint32_t block_idx,
                                                   int num_objects) {
+    assert(block_idx < N);
     auto* block = get_block<T>(block_idx);
     // Only executed by one thread per warp.
     return block->allocate(num_objects);
@@ -376,6 +398,7 @@ class SoaAllocator {
   // Return value indicates if block was emptied by this this request.
   template<class T>
   __DEV__ bool deallocate_in_block(uint32_t block_idx, uint32_t obj_id) {
+    assert(block_idx < N);
     auto* block = get_block<T>(block_idx);
     return block->deallocate(obj_id);
   }
@@ -383,6 +406,9 @@ class SoaAllocator {
   template<class T>
   __DEV__ T* get_ptr_from_allocation(uint32_t block_idx, int rank,
                                      uint64_t allocation) {
+    assert(block_idx < N);
+    assert(rank < 32);
+
     // Get index of rank-th first bit set to 1.
     for (int i = 0; i < rank; ++i) {
       // Clear last bit.

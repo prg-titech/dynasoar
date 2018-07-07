@@ -1,4 +1,4 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include <stdio.h>
 #include <assert.h>
@@ -19,7 +19,7 @@
 
 namespace wa_tor {
 
-__device__ SoaAllocator<64*64*64, Agent, Fish, Shark> memory_allocator;
+__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark> memory_allocator;
 
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
@@ -501,8 +501,8 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  //fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  //gpuErrchk(cudaDeviceSynchronize());
 
   generate_shark_array();
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
@@ -511,8 +511,8 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  //shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  //gpuErrchk(cudaDeviceSynchronize());
 }
 
 __global__ void init_memory_system() {

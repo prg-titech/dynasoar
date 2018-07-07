@@ -102,6 +102,7 @@ class Bitmap {
   // success. If Retry, then continue retrying until successful update.
   template<bool Retry = false>
   __DEV__ bool deallocate(SizeT pos) {
+    assert(pos != kIndexError);
     assert(pos < N);
     SizeT container = pos / kBitsize;
     SizeT offset = pos % kBitsize;

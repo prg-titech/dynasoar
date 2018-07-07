@@ -21,6 +21,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+// TODO: Use lane_id() instead!!!
 __forceinline__ __device__ unsigned int __lanemask_lt() {
   unsigned int mask;
   asm volatile("mov.u32 %0, %%lanemask_lt;" : "=r"(mask));
