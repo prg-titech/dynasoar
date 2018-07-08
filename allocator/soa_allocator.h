@@ -9,11 +9,21 @@
 
 #define __DEV__ __device__
 
+// Only for debug purposes.
+__device__ char* DBG_data_storage;
+__device__ char* DBG_data_storage_end;
+
 __forceinline__ __device__ unsigned lane_id()
 {
     unsigned ret; 
     asm volatile ("mov.u32 %0, %laneid;" : "=r"(ret));
     return ret;
+}
+
+__forceinline__ __device__ unsigned int __lanemask_lt() {
+  unsigned int mask;
+  asm volatile("mov.u32 %0, %%lanemask_lt;" : "=r"(mask));
+  return mask;
 }
 
 template<typename T, int N, int Field, int Offset>
@@ -36,6 +46,9 @@ class SoaField {
     uintptr_t block_base = ptr_base & kBlockAddrBitmask;
     T* soa_array = reinterpret_cast<T*>(
         block_base + kSoaBufferOffset + N*Offset);
+
+    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
+    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
     return soa_array + obj_id;
   }
 
@@ -46,6 +59,9 @@ class SoaField {
     uintptr_t block_base = ptr_base & kBlockAddrBitmask;
     T* soa_array = reinterpret_cast<T*>(
         block_base + kSoaBufferOffset + N*Offset);
+
+    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
+    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
     return soa_array + obj_id;
   }
 
@@ -246,6 +262,11 @@ class SoaAllocator {
       allocated_[i].initialize(false);
       active_[i].initialize(false);
     }
+
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+      DBG_data_storage = data_;
+      DBG_data_storage_end = data_ + N*kBlockMaxSize;
+    }
   }
 
   // Try to allocate everything in the same block.
@@ -286,7 +307,11 @@ class SoaAllocator {
       allocation_bitmap = __shfl_sync(active, allocation_bitmap, leader);
       block_idx = __shfl_sync(active, block_idx, leader);
       assert(block_idx < N);
-      result = get_ptr_from_allocation<T>(block_idx, rank, allocation_bitmap);
+      result = get_ptr_from_allocation<T>(
+          block_idx, __popc(__lanemask_lt() & active), allocation_bitmap);
+
+      //printf("ALLOCTED: %i / %i, rank=%i, lt=%i, result=%p,\n",(int) __popc(allocation_bitmap), (int)__popc(active), (int)rank, (int)__popc(__lanemask_lt()&active), result);
+
     } while (result == nullptr);
 
     assert(reinterpret_cast<char*>(result) > data_);
@@ -335,8 +360,13 @@ class SoaAllocator {
     uint32_t block_idx;
 
     do {
-      // TODO: Retry a couple of times. May reduce fragmentation.
-      block_idx = active_[TupleIndex<T, TupleType>::value].find_allocated();
+      // Retry a couple of times. May reduce fragmentation.
+      // TODO: Tune number of retries.
+      int retries = 10;
+      do {
+        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>();
+      } while (block_idx == Bitmap<uint32_t, N>::kIndexError
+               && --retries > 0);
 
       if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
         // TODO: May be out of memory here.
@@ -367,7 +397,10 @@ class SoaAllocator {
     assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
 
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
-    return ptr_as_int & kBlockAddrBitmask;
+    uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
+
+    assert(((ptr_as_int & kBlockAddrBitmask) - data_as_int) % kBlockMaxSize == 0);
+    return ((ptr_as_int & kBlockAddrBitmask) - data_as_int) / kBlockMaxSize;
   }
 
   template<class T>
@@ -381,7 +414,18 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
+    assert(block_idx >= 0 && block_idx < 10000);
     assert(block_idx < N);
+    assert(data_ == DBG_data_storage);
+    assert(kBlockMaxSize > 0);
+    //printf("ABC: %i\n", (int) block_idx*kBlockMaxSize);
+
+    uint64_t b1 = reinterpret_cast<uintptr_t>(data_);
+    uint64_t b2 = block_idx;
+    uint64_t b3 = kBlockMaxSize;
+
+    // TODO: Assertion failing here. How is this possible?
+    assert(b1 + b2*b3 > b1);
     return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
         data_ + block_idx*kBlockMaxSize);
   }
@@ -420,6 +464,7 @@ class SoaAllocator {
     if (position > 0) {
       // Allocation successful.
       uintptr_t block_base = reinterpret_cast<uintptr_t>(get_block<T>(block_idx));
+      assert(block_base > reinterpret_cast<uintptr_t>(DBG_data_storage));
       return reinterpret_cast<T*>(block_base + position - 1);
     } else {
       return nullptr;

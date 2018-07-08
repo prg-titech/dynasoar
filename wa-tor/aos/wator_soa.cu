@@ -19,7 +19,7 @@
 
 namespace wa_tor {
 
-__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark> memory_allocator;
+__device__ SoaAllocator<64*64*64, Agent, Fish, Shark> memory_allocator;
 
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
@@ -92,14 +92,14 @@ __device__ void Cell::decide() {
 __device__ void Cell::enter(Agent* agent) {
   assert(agent_ == nullptr);
 
-#ifndef NDEBUG
-  // Ensure that no two agents are trying to enter this cell at the same time.
-  uint64_t old_val = atomicExch(reinterpret_cast<unsigned long long int*>(&agent_),
-                                reinterpret_cast<unsigned long long int>(agent));
-  assert(old_val == 0);
-#else
+//#ifndef NDEBUG
+//  // Ensure that no two agents are trying to enter this cell at the same time.
+//  uint64_t old_val = atomicExch(reinterpret_cast<unsigned long long int*>(&agent_),
+//                                reinterpret_cast<unsigned long long int>(agent));
+//  assert(old_val == 0);
+//#else
   agent_ = agent;
-#endif
+//#endif
 
   agent->set_position(this);
 }
@@ -501,8 +501,8 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  //fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  //gpuErrchk(cudaDeviceSynchronize());
+  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 
   generate_shark_array();
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
@@ -511,8 +511,8 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  //shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  //gpuErrchk(cudaDeviceSynchronize());
+  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 }
 
 __global__ void init_memory_system() {
@@ -596,7 +596,7 @@ void print_stats() {
 }
 
 int main(int argc, char* arvg[]) {
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1024*1024*1024);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
 
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
