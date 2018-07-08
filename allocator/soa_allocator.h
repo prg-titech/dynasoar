@@ -314,14 +314,14 @@ class SoaAllocator {
 
     } while (result == nullptr);
 
-    assert(reinterpret_cast<char*>(result) > data_);
+    assert(reinterpret_cast<char*>(result) >= data_);
     assert(reinterpret_cast<char*>(result) < data_ + N*kBlockMaxSize);
     return new(result) T(args...);
   }
 
   template<class T>
   __DEV__ void free(T* obj) {
-    assert(reinterpret_cast<char*>(obj) > data_);
+    assert(reinterpret_cast<char*>(obj) >= data_);
     assert(reinterpret_cast<char*>(obj) < data_ + N*kBlockMaxSize);
 
     obj->~T();
@@ -362,7 +362,7 @@ class SoaAllocator {
     do {
       // Retry a couple of times. May reduce fragmentation.
       // TODO: Tune number of retries.
-      int retries = 10;
+      int retries = 2;
       do {
         block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>();
       } while (block_idx == Bitmap<uint32_t, N>::kIndexError
@@ -393,7 +393,7 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ uint32_t get_block_idx(T* ptr) {
-    assert(reinterpret_cast<char*>(ptr) > data_);
+    assert(reinterpret_cast<char*>(ptr) >= data_);
     assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
 
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
@@ -405,7 +405,7 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ uint32_t get_object_id(T* ptr) {
-    assert(reinterpret_cast<char*>(ptr) > data_);
+    assert(reinterpret_cast<char*>(ptr) >= data_);
     assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
 
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
@@ -414,18 +414,7 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
-    assert(block_idx >= 0 && block_idx < 10000);
     assert(block_idx < N);
-    assert(data_ == DBG_data_storage);
-    assert(kBlockMaxSize > 0);
-    //printf("ABC: %i\n", (int) block_idx*kBlockMaxSize);
-
-    uint64_t b1 = reinterpret_cast<uintptr_t>(data_);
-    uint64_t b2 = block_idx;
-    uint64_t b3 = kBlockMaxSize;
-
-    // TODO: Assertion failing here. How is this possible?
-    assert(b1 + b2*b3 > b1);
     return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
         data_ + block_idx*kBlockMaxSize);
   }
@@ -464,7 +453,7 @@ class SoaAllocator {
     if (position > 0) {
       // Allocation successful.
       uintptr_t block_base = reinterpret_cast<uintptr_t>(get_block<T>(block_idx));
-      assert(block_base > reinterpret_cast<uintptr_t>(DBG_data_storage));
+      assert(block_base >= reinterpret_cast<uintptr_t>(DBG_data_storage));
       return reinterpret_cast<T*>(block_base + position - 1);
     } else {
       return nullptr;

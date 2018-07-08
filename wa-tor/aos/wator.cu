@@ -1,5 +1,6 @@
 #define NDEBUG
 
+#include <chrono>
 #include <stdio.h>
 #include <assert.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
@@ -10,8 +11,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 100
-#define GRID_SIZE_Y 100
+#define GRID_SIZE_X 600
+#define GRID_SIZE_Y 300
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -614,10 +615,17 @@ int main(int argc, char* arvg[]) {
   render();
 
   printf("Computing...");
+  auto timestamp = std::chrono::system_clock::now();
 
   for (int i = 0; ; ++i) {
-    if (i%1==0)
+    if (i%20==0) {
       print_stats();
+      auto time_now = std::chrono::system_clock::now();
+      int time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          time_now - timestamp).count();
+      timestamp = time_now;
+      printf("    Time: %i ms", time_ms);
+    }
 
     SDL_Event e;
     if (SDL_PollEvent(&e)) {
