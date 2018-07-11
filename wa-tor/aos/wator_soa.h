@@ -91,7 +91,7 @@ class Agent {
 
 class Fish : public Agent {
  private:
-  SoaField<uint32_t, kBlockSize, 3, 21> egg_timer_;
+  SoaField<uint32_t, kBlockSize, 4, 21> egg_timer_;
 
  public:
   static const int kObjectSize = 25;
@@ -107,8 +107,8 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  private:
-  SoaField<uint32_t, kBlockSize, 3, 21> energy_;
-  SoaField<uint32_t, kBlockSize, 3, 25> egg_timer_;
+  SoaField<uint32_t, kBlockSize, 4, 21> energy_;
+  SoaField<uint32_t, kBlockSize, 5, 25> egg_timer_;
 
  public:
   static const int kObjectSize = 29;
