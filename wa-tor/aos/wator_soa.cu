@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -460,14 +460,6 @@ __global__ void cell_decide() {
 
 __global__ void fish_prepare() {
   memory_allocator.parallel_do<16, Fish, &Fish::prepare>();
-  /*
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < num_fish) {
-    assert(fish[tid] != nullptr);
-    fish[tid]->prepare();
-  }
-  */
 }
 
 __global__ void fish_update() {
@@ -480,12 +472,7 @@ __global__ void fish_update() {
 }
 
 __global__ void shark_prepare() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < num_sharks) {
-    assert(sharks[tid] != nullptr);
-    sharks[tid]->prepare();
-  }
+  memory_allocator.parallel_do<16, Shark, &Shark::prepare>();
 }
 
 __global__ void shark_update() {

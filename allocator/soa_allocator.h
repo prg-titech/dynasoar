@@ -207,12 +207,14 @@ class SoaBlock {
     assert(__popcll(~free_bitmap) > index);
     unsigned long long int allocation = ~free_bitmap;
     // Get index of index-th first bit set to 1.
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < index; ++i) {
       // Clear last bit.
       allocation &= allocation - 1;
     }
 
-    return __ffsll(allocation) - 1;
+    int position = __ffsll(allocation);
+    assert(position > 0);
+    return position - 1;
   }
 
  private:
@@ -382,13 +384,13 @@ class SoaAllocator {
       for (int j = 0; j < W_SZ; ++j) {
         uint32_t block_idx = warp_id*W_SZ + j;
 
-        if (block_idx < N - 20
+        if (block_idx < N
             && allocated_[TupleIndex<T, TupleType>::value][block_idx]) {
           auto* block = get_block<T>(block_idx);
 
           assert(reinterpret_cast<uintptr_t>(block)
               >= reinterpret_cast<uintptr_t>(DBG_data_storage));
-          assert(reinterpret_cast<uintptr_t>(block)
+          assert(reinterpret_cast<uintptr_t>(block)+64
               < reinterpret_cast<uintptr_t>(DBG_data_storage_end));
 
           int block_size = block->allocated_size();
@@ -396,7 +398,7 @@ class SoaAllocator {
             int object_idx = k + warp_offset;
 
             if (object_idx < block_size) {
-              int obj_id = block->object_id(object_idx);
+              uint32_t obj_id = block->object_id(object_idx);
               assert(obj_id < 64);
               T* obj = get_object<T>(block, obj_id);
 
@@ -471,7 +473,8 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ T* get_object(SoaBlock<T, kNumBlockElements>* block, uint32_t obj_id) {
-    return reinterpret_cast<T*>(reinterpret_cast<char*>(block) + obj_id);
+    assert(obj_id < 64);
+    return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(block) + obj_id);
   }
 
   template<class T>
