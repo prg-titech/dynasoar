@@ -6,7 +6,7 @@
 #include <SDL2/SDL2_gfxPrimitives.h>
 
 #include "wa-tor/aos/wator.h"
-#include "wa-tor/aos/aos_allocator.h"
+#include "wa-tor/aos/cuda_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
@@ -618,7 +618,7 @@ int main(int argc, char* arvg[]) {
   auto timestamp = std::chrono::system_clock::now();
 
   for (int i = 0; ; ++i) {
-    if (i%20==0) {
+    if (i%40==0) {
       print_stats();
       auto time_now = std::chrono::system_clock::now();
       int time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
