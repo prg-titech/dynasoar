@@ -401,8 +401,6 @@ class SoaAllocator {
               uint32_t obj_id = block->object_id(object_idx);
               assert(obj_id < 64);
               T* obj = get_object<T>(block, obj_id);
-
-              // TODO: obj pointer seems to be broken.
               // Call function.
               (obj->*func)();
             }
