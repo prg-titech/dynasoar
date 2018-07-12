@@ -171,6 +171,12 @@ class Bitmap {
     }
   }
 
+  // Return true if index is allocated.
+  __DEV__ bool operator[](SizeT index) const {
+    return data_.containers[index/kBitsize]
+        & (static_cast<ContainerT>(1) << (index % kBitsize));
+  }
+
  private:
   template<SizeT NumContainers, bool HasNested>
   struct BitmapData;

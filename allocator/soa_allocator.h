@@ -199,6 +199,22 @@ class SoaBlock {
     return BlockAllocationResult(selected_bits, filled_block);
   }
 
+  __DEV__ int allocated_size() const {
+    return __popcll(~free_bitmap);
+  }
+
+  __DEV__ int object_id(int index) const {
+    assert(__popcll(~free_bitmap) > index);
+    unsigned long long int allocation = ~free_bitmap;
+    // Get index of index-th first bit set to 1.
+    for (int i = 0; i < N; ++i) {
+      // Clear last bit.
+      allocation &= allocation - 1;
+    }
+
+    return __ffsll(allocation) - 1;
+  }
+
  private:
   // Dummy area that may be overridden by zero initialization.
   // Data section begins after 128 bytes.
@@ -353,6 +369,47 @@ class SoaAllocator {
     free(typed);
   }
 
+  // W_SZ: Allocated threads per block.
+  // Problem: Small W_SZ means less memory coalescing.
+  template<int W_SZ, class T, void(T::*func)()>
+  __DEV__ void parallel_do() {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
+         i += blockDim.x * gridDim.x) {
+      // Process element (block) i with W_SZ many threads.
+      int warp_id = i / W_SZ;
+      int warp_offset = i % W_SZ;
+
+      for (int j = 0; j < W_SZ; ++j) {
+        uint32_t block_idx = warp_id*W_SZ + j;
+
+        if (block_idx < N - 20
+            && allocated_[TupleIndex<T, TupleType>::value][block_idx]) {
+          auto* block = get_block<T>(block_idx);
+
+          assert(reinterpret_cast<uintptr_t>(block)
+              >= reinterpret_cast<uintptr_t>(DBG_data_storage));
+          assert(reinterpret_cast<uintptr_t>(block)
+              < reinterpret_cast<uintptr_t>(DBG_data_storage_end));
+
+          int block_size = block->allocated_size();
+          for (int k = 0; k < block_size; k += W_SZ) {
+            int object_idx = k + warp_offset;
+
+            if (object_idx < block_size) {
+              int obj_id = block->object_id(object_idx);
+              assert(obj_id < 64);
+              T* obj = get_object<T>(block, obj_id);
+
+              // TODO: obj pointer seems to be broken.
+              // Call function.
+              (obj->*func)();
+            }
+          }
+        }
+      }
+    }
+  }
+
   // TODO: Should be private.
  public:
   template<class T>
@@ -413,6 +470,11 @@ class SoaAllocator {
   }
 
   template<class T>
+  __DEV__ T* get_object(SoaBlock<T, kNumBlockElements>* block, uint32_t obj_id) {
+    return reinterpret_cast<T*>(reinterpret_cast<char*>(block) + obj_id);
+  }
+
+  template<class T>
   __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
     assert(block_idx < N);
     return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
@@ -445,7 +507,7 @@ class SoaAllocator {
     // Get index of rank-th first bit set to 1.
     for (int i = 0; i < rank; ++i) {
       // Clear last bit.
-      allocation &= allocation - 1; 
+      allocation &= allocation - 1;
     }
 
     int position = __ffsll(allocation);
