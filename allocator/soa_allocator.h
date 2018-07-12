@@ -26,6 +26,31 @@ __forceinline__ __device__ unsigned int __lanemask_lt() {
   return mask;
 }
 
+// Seems like this is a scheduler warp ID and may change.
+__forceinline__ __device__ unsigned warp_id()
+{
+    unsigned ret; 
+    asm volatile ("mov.u32 %0, %warpid;" : "=r"(ret));
+    return ret;
+}
+
+// Copied from: https://gist.github.com/pabigot/7550454
+template <typename T>
+__DEV__ T rotl (T v, unsigned int b)
+{
+  static_assert(std::is_integral<T>::value, "rotate of non-integral type");
+  static_assert(! std::is_signed<T>::value, "rotate of signed type");
+  constexpr unsigned int num_bits {std::numeric_limits<T>::digits};
+  static_assert(0 == (num_bits & (num_bits - 1)), "rotate value bit length not power of two");
+  constexpr unsigned int count_mask {num_bits - 1};
+  const unsigned int mb {b & count_mask};
+  using promoted_type = typename std::common_type<int, T>::type;
+  using unsigned_promoted_type = typename std::make_unsigned<promoted_type>::type;
+  return ((unsigned_promoted_type{v} << mb)
+          | (unsigned_promoted_type{v} >> (-mb & count_mask)));
+}
+
+
 template<typename T, int N, int Field, int Offset>
 class SoaField {
  private:
@@ -130,6 +155,7 @@ class SoaBlock {
     assert(reinterpret_cast<uintptr_t>(this) % N == 0);   // Alignment.
     free_bitmap = ~0ULL;
     assert(__popcll(free_bitmap) == 64);
+    free_count = N;
   }
 
   __DEV__ uint64_t invalidate() {
@@ -142,58 +168,97 @@ class SoaBlock {
   }
 
   __DEV__ bool deallocate(int position) {
+    // Actually no race condition here.
     unsigned long long int before = atomicOr(&free_bitmap, 1ULL << position);
+    atomicAdd(&free_count, 1);
     // TODO: Choose more efficient operation (possible?).
     return __popcll(before) == 63;
+    // return ~(before | (1ULL << position)) == 0;
   }
 
   // Only executed by one thread per warp. Request are already aggregated when
   // reaching this function.
   __DEV__ BlockAllocationResult allocate(int bits_to_allocate) {
+    assert(bits_to_allocate > 0);
+
+    // TODO: Better performance without this check?
+    if (free_count <= 0) {
+      // Block is already full.
+      return BlockAllocationResult(0, false);
+    }
+
+    // ---- STEP 1: Reserve bits. ----
+    int bits_to_reserve = min(bits_to_allocate, free_count);
+    assert(bits_to_reserve <= bits_to_allocate);
+    int before_reserve = atomicSub(&free_count, bits_to_reserve);
+    int reserved_bits;
+    // Set to true if this allocation filled up the block.
+    bool filled_block = false;
+
+    if (before_reserve <= 0) {
+      // Block filled up before making a reservation. Undo count update.
+      atomicAdd(&free_count, bits_to_reserve);
+      return BlockAllocationResult(0, false);
+    }
+
+    assert(before_reserve > 0);
+    if (before_reserve == bits_to_reserve) {
+      // Successfully reserved all the bits.
+      filled_block = true;
+      reserved_bits = bits_to_reserve;
+    } else if (before_reserve < bits_to_reserve) {
+      // Successfully reserved some bits, but made the counter negative.
+      filled_block = true;
+      reserved_bits = before_reserve;
+      atomicAdd(&free_count, bits_to_reserve - reserved_bits);
+    } else if (before_reserve > bits_to_reserve) {
+      // Reserved some bits, but did not fill up the block.
+      reserved_bits = bits_to_reserve;
+    }
+    assert(reserved_bits <= bits_to_allocate);
+
+    // ---- STEP 2: Allocate bits in bitmask. ----
+    assert(reserved_bits > 0);
+    bits_to_allocate = reserved_bits; // Update bits_to_allocate in loop.
     // Allocation bits.
     unsigned long long int selected_bits = 0;
-    // Set to true if this allocation filled up the block.
-    bool filled_block = false, block_full;
     // Helper variables used inside the loop and in the loop condition.
     unsigned long long int before_update, successful_alloc;
 
+    INIT_RETRY;
     do {
+      // Rotate free bitmask to reduce change of collisions.
+      unsigned int rotation_len = warp_id() % 64;
+
       // Bit set to 1 if slot is free.
-      unsigned long long int updated_mask = free_bitmap;
+      unsigned long long int updated_mask = rotl(free_bitmap, rotation_len);
+      assert(__popcll(updated_mask) >= bits_to_allocate);
+
       // If there are not enough free slots, allocate as many as possible.
       int free_slots = __popcll(updated_mask);
-      int allocation_size = min(free_slots, bits_to_allocate);
       unsigned long long int newly_selected_bits = 0;
 
       // Generate bitmask for allocation
-      for (int i = 0; i < allocation_size; ++i) {
-        // TODO: To reduce collisions attempt to start allocation at
-        // different positions (rotating shift).
+      for (int i = 0; i < bits_to_allocate; ++i) {
         int next_bit_pos = __ffsll(updated_mask) - 1;
         assert(next_bit_pos >= 0);
         assert(((1ULL << next_bit_pos) & updated_mask) > 0);
         // Clear bit at position `next_bit_pos` in updated mask.
         updated_mask &= updated_mask - 1;
         // Save location of selected bit.
-        newly_selected_bits |= 1ULL << next_bit_pos;
+        int next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
+        newly_selected_bits |= 1ULL << next_bit_pos_unrot;
       }
 
-      assert(__popcll(newly_selected_bits) == allocation_size);
+      assert(__popcll(newly_selected_bits) == bits_to_allocate);
       // Count the number of bits that were selected but already set to false
       // by another thread.
       before_update = atomicAnd(&free_bitmap, ~newly_selected_bits);
       successful_alloc = newly_selected_bits & before_update;
       bits_to_allocate -= __popcll(successful_alloc);
       selected_bits |= successful_alloc;
-
-      // Block full if at least one slot was allocated and "before update"
-      // bit-and "now allocated" indicates that block is full.
-      block_full = (before_update & ~successful_alloc) == 0;
-      filled_block = successful_alloc > 0 && block_full;
-
-      // Stop loop if no more free bits available in this block or all
-      // requested allocations completed successfully.
-    } while (bits_to_allocate > 0 && !block_full);
+    } while (bits_to_allocate > 0 && CONTINUE_RETRY);
+    assert(bits_to_allocate == 0);
 
     // At most one thread should indicate that the block filled up.
     return BlockAllocationResult(selected_bits, filled_block);
@@ -204,10 +269,13 @@ class SoaBlock {
   // Data section begins after 128 bytes.
   // TODO: Do we need this on GPU?
   // TODO: Can this be replaced when using ROSE?
-  char initialization_header_[128 - sizeof(unsigned long long int)];
+  char initialization_header_[128 - 16];
 
   // Bitmap of free slots.
-  unsigned long long int free_bitmap;
+  unsigned long long int free_bitmap;     // 8 bytes
+
+  // Number of free bits.
+  int free_count;                         // 4 bytes, but padded to 8 bytes
 
   static const int kRawStorageBytes = N*T::kObjectSize;
 
