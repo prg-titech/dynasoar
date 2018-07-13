@@ -1,4 +1,4 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -427,6 +427,11 @@ __global__ void find_sharks() {
   }
 }
 
+template<typename T>
+__global__ void initialize_iteration() {
+  memory_allocator.initialize_iteration<T>();
+}
+
 void generate_fish_array() {
   reset_fish_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -486,6 +491,8 @@ __global__ void shark_update() {
 
 void step() {
   generate_fish_array();
+  initialize_iteration<Fish><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
   fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
@@ -496,6 +503,8 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
 
   generate_shark_array();
+  initialize_iteration<Shark><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
   shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
