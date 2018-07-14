@@ -404,7 +404,6 @@ class SoaAllocator {
 
           for (int object_idx = warp_offset; object_idx < block_size;
                object_idx += W_SZ) {
-            // TODO: Do we need a check object_idx < block_size here?
             int obj_bit = __ffsll(iteration_bitmap);
             assert(obj_bit > 0);
             T* obj = get_object<T>(block, obj_bit - 1);
@@ -413,7 +412,7 @@ class SoaAllocator {
 
             if (object_idx + W_SZ < block_size) {
               // There will be another iteration. Advance bitmap.
-              for (int i = 0; i < warp_offset; ++i) {
+              for (int i = 0; i < W_SZ; ++i) {
                 // Clear last bit.
                 iteration_bitmap &= iteration_bitmap - 1;
               }
@@ -428,6 +427,7 @@ class SoaAllocator {
   __DEV__ void initialize_iteration() {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
          i += blockDim.x * gridDim.x) {
+      // TODO: Check dirty bitmap instead?
       if (allocated_[TupleIndex<T, TupleType>::value][i]) {
         // Initialize block.
         get_block<T>(i)->initialize_iteration();
