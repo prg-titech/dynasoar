@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -17,6 +17,7 @@
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
 
+#define THREADS_PER_BLOCK 128
 
 namespace wa_tor {
 
@@ -468,12 +469,15 @@ __global__ void fish_prepare() {
 }
 
 __global__ void fish_update() {
+/*
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
   if (tid < num_fish) {
     assert(fish[tid] != nullptr);
     fish[tid]->update();
   }
+*/
+  memory_allocator.parallel_do<16, Fish, &Fish::update>();
 }
 
 __global__ void shark_prepare() {
@@ -481,37 +485,36 @@ __global__ void shark_prepare() {
 }
 
 __global__ void shark_update() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < num_sharks) {
-    assert(sharks[tid] != nullptr);
-    sharks[tid]->update();
-  }
+  memory_allocator.parallel_do<16, Shark, &Shark::update>();
 }
 
 void step() {
-  generate_fish_array();
+  //generate_fish_array();
   initialize_iteration<Fish><<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  initialize_iteration<Fish><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  generate_shark_array();
+  //generate_shark_array();
   initialize_iteration<Shark><<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  initialize_iteration<Shark><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
@@ -642,6 +645,7 @@ int main(int argc, char* arvg[]) {
       auto time_now = std::chrono::system_clock::now();
       int time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
           time_now - timestamp).count();
+      render();
       timestamp = time_now;
       printf("    Time: %i ms", time_ms);
     }
@@ -658,7 +662,6 @@ int main(int argc, char* arvg[]) {
 
     step();
     SDL_Delay(25);
-    render();
   }
 }
 
