@@ -8,7 +8,7 @@
 #define __DEV__ __device__
 
 // TODO: Remove this once code work properly.
-static const int kMaxRetry = 100000;
+static const int kMaxRetry = 10000000;
 #define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
 #define INIT_RETRY int _retry_counter = 0;
 
