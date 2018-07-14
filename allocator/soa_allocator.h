@@ -123,6 +123,12 @@ struct BlockAllocationResult {
   bool block_full;
 };
 
+enum DeallocationState : int8_t {
+  kBlockNowEmpty,
+  kBlockNowActive,
+  kRegularDealloc
+};
+
 template<class T, int N>
 class SoaBlock {
  public:
@@ -141,10 +147,17 @@ class SoaBlock {
     // TODO: Thread fence?
   }
 
-  __DEV__ bool deallocate(int position) {
+  __DEV__ DeallocationState deallocate(int position) {
     unsigned long long int before = atomicOr(&free_bitmap, 1ULL << position);
-    // TODO: Choose more efficient operation (possible?).
-    return __popcll(before) == 63;
+
+    int slots_free_before = __popcll(before);
+    if (slots_free_before == 0) {
+      return kBlockNowActive;
+    } else if (slots_free_before == N - 1) {
+      return kBlockNowEmpty;
+    } else {
+      return kRegularDealloc;
+    }
   }
 
   // Only executed by one thread per warp. Request are already aggregated when
@@ -327,9 +340,13 @@ class SoaAllocator {
     obj->~T();
     const uint32_t block_idx = get_block_idx<T>(obj);
     const uint32_t obj_id = get_object_id<T>(obj);
-    const bool last_dealloc = deallocate_in_block<T>(block_idx, obj_id);
+    const DeallocationState dealloc_state = deallocate_in_block<T>(block_idx,
+                                                                   obj_id);
 
-    if (last_dealloc) {
+    if (dealloc_state == kBlockNowActive) {
+      bool success = active_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
+      assert(success);
+    } else if (dealloc_state == kBlockNowEmpty) {
       // Block is now empty.
       uint64_t before_invalidate = invalidate_block<T>(block_idx);
       if (before_invalidate == 0) {
@@ -428,9 +445,10 @@ class SoaAllocator {
     return block->allocate(num_objects);
   }
 
-  // Return value indicates if block was emptied by this this request.
+  // Return value indicates if block was emptied or activated.
   template<class T>
-  __DEV__ bool deallocate_in_block(uint32_t block_idx, uint32_t obj_id) {
+  __DEV__ DeallocationState deallocate_in_block(uint32_t block_idx,
+                                                uint32_t obj_id) {
     assert(block_idx < N);
     auto* block = get_block<T>(block_idx);
     return block->deallocate(obj_id);
