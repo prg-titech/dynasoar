@@ -388,6 +388,7 @@ class SoaAllocator {
 
   // W_SZ: Allocated threads per block.
   // Problem: Small W_SZ means less memory coalescing.
+  /*
   template<int W_SZ, class T, void(T::*func)()>
   __DEV__ void parallel_do() {
     // TODO: This may not be doing the right thing. What if we have more
@@ -434,6 +435,59 @@ class SoaAllocator {
                 iteration_bitmap &= iteration_bitmap - 1;
               }
             }
+          }
+        }
+      }
+    }
+  }
+  */
+
+  template<int W_SZ, class T, void(T::*func)()>
+  __DEV__ void parallel_do() {
+    int num_threads = blockDim.x * gridDim.x;
+    assert(num_threads > N);
+    int threads_per_block = (num_threads + N - 1)/N;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int block_idx = tid/threads_per_block;
+
+    // TODO: Consider doing a fast scan over "active" bitmap.
+    if (allocated_[TupleIndex<T, TupleType>::value][block_idx]) {
+      auto* block = get_block<T>(block_idx);
+      auto iteration_bitmap = block->iteration_bitmap;
+      int block_size = __popcll(iteration_bitmap);
+
+      int threads_this_block;
+      if (block_idx == N - 1) {
+        // Last blocks might have fewer threads assigned.
+        threads_this_block = min((block_idx+1)*threads_per_block, num_threads)
+                            - block_idx*threads_per_block;
+      } else {
+        threads_this_block = threads_per_block;
+      }
+      int objs_per_thread = (block_size + threads_this_block - 1)
+                            / threads_this_block;
+
+      // Offset of this thread when processing this block.
+      int thread_offset = tid - block_idx*threads_per_block;
+      // Advance bitmap to return thread_offset-th bit index.
+      for (int i = 0; i < thread_offset; ++i) {
+        // Clear last bit.
+        iteration_bitmap &= iteration_bitmap - 1;
+      }
+
+      // Now process objects within block.
+      for (int pos = thread_offset; pos < block_size; pos += objs_per_thread) {
+        int obj_bit = __ffsll(iteration_bitmap);
+        assert(obj_bit > 0);
+        T* obj = get_object<T>(block, obj_bit - 1);
+        // Call function.
+        (obj->*func)();
+
+        if (pos + objs_per_thread < block_size) {
+          // There will be another iteration. Advance bitmap.
+          for (int i = 0; i < objs_per_thread; ++i) {
+            // Clear last bit.
+            iteration_bitmap &= iteration_bitmap - 1;
           }
         }
       }
