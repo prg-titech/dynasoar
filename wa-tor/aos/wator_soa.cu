@@ -17,7 +17,7 @@
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
 
-#define THREADS_PER_BLOCK 128
+#define THREADS_PER_BLOCK 256
 
 namespace wa_tor {
 
@@ -498,8 +498,8 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  initialize_iteration<Fish><<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  //initialize_iteration<Fish><<<128, 128>>>();
+  //gpuErrchk(cudaDeviceSynchronize());
   fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
@@ -512,8 +512,8 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  initialize_iteration<Shark><<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  //initialize_iteration<Shark><<<128, 128>>>();
+  //gpuErrchk(cudaDeviceSynchronize());
   shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
