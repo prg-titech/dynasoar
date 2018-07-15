@@ -5,7 +5,7 @@
 #define uint32 uint32_t
 typedef unsigned int uint;
 
-#define HEAPARGS 4096, 8, 16, 2, true, true
+#define HEAPARGS 1024, 8, 16, 2, true, true
 
 #include "scatteralloc/heap_impl.cuh"
 
