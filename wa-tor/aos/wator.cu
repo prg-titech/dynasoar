@@ -475,8 +475,12 @@ __global__ void shark_update() {
   }
 }
 
-void step() {
+void generate_shark_fish_arrays() {
   generate_fish_array();
+  generate_shark_array();
+}
+
+void step() {
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
   fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
@@ -486,7 +490,6 @@ void step() {
   fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  generate_shark_array();
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
   shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
@@ -577,7 +580,7 @@ void print_stats() {
   printf("\n Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  printf("                   ");
+  printf("           ");
 }
 
 int main(int argc, char* arvg[]) {
@@ -619,17 +622,14 @@ int main(int argc, char* arvg[]) {
   render();
 
   printf("Computing...");
-  auto timestamp = std::chrono::system_clock::now();
+  int time_running = 0;
 
   for (int i = 0; ; ++i) {
     if (i%60==0) {
-      auto time_now = std::chrono::system_clock::now();
-      int time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-          time_now - timestamp).count();
       print_stats();
       render();
-      timestamp = std::chrono::system_clock::now();
-      printf("    Time: %i ms", time_ms);
+      printf("    Time: %i usec", time_running);
+      time_running = 0;
     }
 
     SDL_Event e;
@@ -642,7 +642,13 @@ int main(int argc, char* arvg[]) {
       }
     }
 
+    auto time_before = std::chrono::system_clock::now();
+    generate_shark_fish_arrays();
     step();
+    auto time_after = std::chrono::system_clock::now();
+    time_running += std::chrono::duration_cast<std::chrono::microseconds>(
+        time_after - time_before).count();
+  
     SDL_Delay(25);
   }
 }
