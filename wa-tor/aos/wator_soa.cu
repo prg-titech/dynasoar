@@ -481,10 +481,15 @@ __global__ void shark_update() {
   memory_allocator.parallel_do<16, Shark, &Shark::update>();
 }
 
-void step() {
-  //generate_fish_array();
+void generate_shark_fish_arrays() {
   initialize_iteration<Fish><<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
+  initialize_iteration<Shark><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+void step() {
+  //generate_fish_array();
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
   fish_prepare<<<TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
@@ -497,8 +502,6 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
 
   //generate_shark_array();
-  initialize_iteration<Shark><<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
   shark_prepare<<<TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
@@ -588,7 +591,7 @@ void print_stats() {
   printf("\n Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  printf("                   ");
+  printf("           ");
 }
 
 int main(int argc, char* arvg[]) {
@@ -630,17 +633,14 @@ int main(int argc, char* arvg[]) {
   render();
 
   printf("Computing...");
-  auto timestamp = std::chrono::system_clock::now();
+  int time_running = 0;
 
   for (int i = 0; ; ++i) {
     if (i%60==0) {
-      auto time_now = std::chrono::system_clock::now();
-      int time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-          time_now - timestamp).count();
       print_stats();
       render();
-      timestamp = std::chrono::system_clock::now();
-      printf("    Time: %i ms", time_ms);
+      printf("    Time: %i usec", time_running);
+      time_running = 0;
     }
 
     SDL_Event e;
@@ -653,7 +653,13 @@ int main(int argc, char* arvg[]) {
       }
     }
 
+    auto time_before = std::chrono::system_clock::now();
+    generate_shark_fish_arrays();
     step();
+    auto time_after = std::chrono::system_clock::now();
+    time_running += std::chrono::duration_cast<std::chrono::microseconds>(
+        time_after - time_before).count();
+
     SDL_Delay(25);
   }
 }
