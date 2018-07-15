@@ -442,7 +442,7 @@ class SoaAllocator {
   }
   */
 
-  template<int W_SZ, class T, void(T::*func)()>
+  template<int W_MULT, class T, void(T::*func)()>
   __DEV__ void parallel_do() {
     int num_threads = blockDim.x * gridDim.x;
     assert(num_threads > N);
