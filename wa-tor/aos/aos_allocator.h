@@ -26,6 +26,8 @@ namespace wa_tor {
   __device__ void initialize_allocator() {
     memory_allocator.initialize();
   }
+
+  void initHeap() {}
 }  // namespace wa_tor
 
 #endif  // WA_TOR_AOS_AOS_ALLOCATOR_H

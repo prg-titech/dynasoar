@@ -6,12 +6,13 @@
 #include <SDL2/SDL2_gfxPrimitives.h>
 
 #include "wa-tor/aos/wator.h"
-#include "wa-tor/aos/cuda_allocator.h"
+#include "wa-tor/aos/scatteralloc_allocator.h"
+//#include "wa-tor/aos/aos_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 600
+#define GRID_SIZE_X 400
 #define GRID_SIZE_Y 300
 
 #define OPTION_SHARK_DIE true
@@ -501,6 +502,9 @@ __global__ void init_memory_system() {
 }
 
 void initialize() {
+  //init the heap
+  initHeap();
+
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
@@ -618,12 +622,13 @@ int main(int argc, char* arvg[]) {
   auto timestamp = std::chrono::system_clock::now();
 
   for (int i = 0; ; ++i) {
-    if (i%40==0) {
-      print_stats();
+    if (i%60==0) {
       auto time_now = std::chrono::system_clock::now();
       int time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
           time_now - timestamp).count();
-      timestamp = time_now;
+      print_stats();
+      render();
+      timestamp = std::chrono::system_clock::now();
       printf("    Time: %i ms", time_ms);
     }
 
@@ -639,7 +644,6 @@ int main(int argc, char* arvg[]) {
 
     step();
     SDL_Delay(25);
-    render();
   }
 }
 
