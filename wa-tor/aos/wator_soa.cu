@@ -10,8 +10,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 600
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 300
+#define GRID_SIZE_Y 200
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -640,13 +640,13 @@ int main(int argc, char* arvg[]) {
   auto timestamp = std::chrono::system_clock::now();
 
   for (int i = 0; ; ++i) {
-    if (i%40==0) {
-      print_stats();
+    if (i%60==0) {
       auto time_now = std::chrono::system_clock::now();
       int time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
           time_now - timestamp).count();
+      print_stats();
       render();
-      timestamp = time_now;
+      timestamp = std::chrono::system_clock::now();
       printf("    Time: %i ms", time_ms);
     }
 
