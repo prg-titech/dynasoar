@@ -1,0 +1,3 @@
+[submodule "mallocmc"]
+	path = mallocmc
+	url = https://github.com/ComputationalRadiationPhysics/mallocMC.git

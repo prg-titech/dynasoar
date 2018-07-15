@@ -23,11 +23,14 @@ namespace wa_tor {
     memory_allocator.free_untyped<TypeIndex>(ptr);
   }
 
-  __device__ void initialize_allocator() {
+  __global__ void init_alloc() {
     memory_allocator.initialize();
   }
 
-  void initHeap() {}
+  void initialize_allocator() {
+    init_alloc<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+  }
 }  // namespace wa_tor
 
 #endif  // WA_TOR_AOS_AOS_ALLOCATOR_H

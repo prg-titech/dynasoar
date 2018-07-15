@@ -26,7 +26,9 @@ namespace wa_tor {
     theHeap.dealloc(ptr);
   }
 
-  __device__ void initialize_allocator() {}
+  void initialize_allocator() {
+    initHeap();
+  }
 }  // namespace wa_tor
 
 

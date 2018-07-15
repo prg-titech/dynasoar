@@ -1,24 +1,24 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
 #include <assert.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
 
-#include "wa-tor/aos/wator.h"
-#include "wa-tor/aos/scatteralloc_allocator.h"
-//#include "wa-tor/aos/aos_allocator.h"
-
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 400
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 5
+#define GRID_SIZE_Y 5
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
 
+#include "wa-tor/aos/wator.h"
+//#include "wa-tor/aos/scatteralloc_allocator.h"
+//#include "wa-tor/aos/aos_allocator.h"
+#include "wa-tor/aos/mallocmc.h"
 
 namespace wa_tor {
 
@@ -500,16 +500,9 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-__global__ void init_memory_system() {
-  initialize_allocator();
-}
-
 void initialize() {
   //init the heap
-  initHeap();
-
-  init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  initialize_allocator();
 
   create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
