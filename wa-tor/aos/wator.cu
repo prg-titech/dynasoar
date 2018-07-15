@@ -642,8 +642,9 @@ int main(int argc, char* arvg[]) {
       }
     }
 
-    auto time_before = std::chrono::system_clock::now();
     generate_shark_fish_arrays();
+  
+    auto time_before = std::chrono::system_clock::now();
     step();
     auto time_after = std::chrono::system_clock::now();
     time_running += std::chrono::duration_cast<std::chrono::microseconds>(
