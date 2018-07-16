@@ -388,6 +388,9 @@ class Bitmap {
       gpuErrchk(cudaDeviceSynchronize());
       kernel_atomic_add_scan<<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
+
+      //int res_size = read_from_device<SizeT>(&enumeration_result_size);
+      //printf("Occupied bits: %i / %i\n", (int) res_size, (int) NumContainers*kBitsize);
     }
 
     void run_cub_scan() {  
