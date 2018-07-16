@@ -56,6 +56,17 @@ __global__ void kernel_set_result_size(T* ptr) {
 }
 
 template<typename T>
+__global__ void kernel_atomic_add_scan_init(T* ptr) {
+  assert(blockDim.x*gridDim.x == 1);
+  ptr->atomic_add_scan_init();
+}
+
+template<typename T>
+__global__ void kernel_atomic_add_scan(T* ptr) {
+  ptr->atomic_add_scan();
+}
+
+template<typename T>
 T read_from_device(T* ptr) {
   T host_storage;
   cudaMemcpy(&host_storage, ptr, sizeof(T), cudaMemcpyDeviceToHost);
@@ -285,6 +296,34 @@ class Bitmap {
       nested.initialize(allocated);
     }
 
+    __DEV__ void atomic_add_scan_init() {
+      enumeration_result_size = 0;
+    }
+
+    __DEV__ void atomic_add_scan() {
+      SizeT* selected = nested.data_.enumeration_result_buffer;
+      SizeT num_selected = nested.data_.enumeration_result_size;
+      //printf("num_selected=%i\n", (int) num_selected);
+
+      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
+           sid < num_selected; sid += blockDim.x * gridDim.x) {
+        SizeT container_id = selected[sid];
+        auto value = containers[container_id];
+        int num_bits = __popcll(value);
+
+        auto before = atomicAdd(reinterpret_cast<unsigned int*>(&enumeration_result_size),
+                                num_bits);
+
+        for (int i = 0; i < num_bits; ++i) {
+          int next_bit = __ffsll(value) - 1;
+          assert(next_bit >= 0);
+          enumeration_result_buffer[before+i] = container_id*kBitsize + next_bit;
+          //Advance to next bit.
+          value &= value - 1;
+        }
+      }      
+    }
+
     // TODO: Run with num_selected threads, then we can remove the loop.
     __DEV__ void pre_scan() {
       SizeT* selected = nested.data_.enumeration_result_buffer;
@@ -335,7 +374,23 @@ class Bitmap {
       enumeration_result_size = result_size;
     }
 
-    void scan() {  
+    void scan() {
+      run_atomic_add_scan();
+      // Performance evaluation...
+      //run_cub_scan();
+    }
+
+    void run_atomic_add_scan() {
+      nested.scan();
+
+      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
+      kernel_atomic_add_scan_init<<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+      kernel_atomic_add_scan<<<num_selected/256+1, 256>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
+
+    void run_cub_scan() {  
       nested.scan();
 
       SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
