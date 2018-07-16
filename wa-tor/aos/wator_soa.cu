@@ -1,4 +1,4 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -22,7 +22,7 @@
 
 namespace wa_tor {
 
-__device__ SoaAllocator<64*64*64*8, Agent, Fish, Shark> memory_allocator;
+__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark> memory_allocator;
 // Host side pointer.
 decltype(memory_allocator)* allocator_handle;
 

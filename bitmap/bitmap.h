@@ -5,7 +5,8 @@
 #include <limits>
 #include <stdint.h>
 
-#include <thrust/scan.h>
+//#include <thrust/scan.h>
+#include <cub/cub.cuh>
 
 #define __DEV__ __device__
 
@@ -260,6 +261,8 @@ class Bitmap {
     SizeT enumeration_base_buffer[NumContainers*kBitsize];
     SizeT enumeration_id_buffer[NumContainers*kBitsize];
     SizeT enumeration_result_buffer[NumContainers*kBitsize];
+    SizeT enumeration_cub_temp[3*NumContainers*kBitsize];
+    SizeT enumeration_cub_output[NumContainers*kBitsize];
     SizeT enumeration_result_size;
 
     Bitmap<SizeT, NumContainers, ContainerT> nested;
@@ -318,7 +321,7 @@ class Bitmap {
           bool bit_selected = value & (static_cast<ContainerT>(1) << i);
           if (bit_selected) {
             // Minus one because scan operation is inclusive.
-            enumeration_result_buffer[enumeration_base_buffer[sid*kBitsize + i] - 1] =
+            enumeration_result_buffer[enumeration_cub_output[sid*kBitsize + i] - 1] =
                 enumeration_id_buffer[sid*kBitsize + i];
           }
         }
@@ -328,7 +331,7 @@ class Bitmap {
     __DEV__ void set_result_size() {
       SizeT num_selected = nested.data_.enumeration_result_size;
       // Base buffer contains prefix sum.
-      SizeT result_size = enumeration_base_buffer[num_selected*kBitsize - 1];
+      SizeT result_size = enumeration_cub_output[num_selected*kBitsize - 1];
       enumeration_result_size = result_size;
     }
 
@@ -339,9 +342,15 @@ class Bitmap {
       kernel_pre_scan<<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
       // TODO: Replace with cub for better performance.
-      thrust::inclusive_scan(thrust::device, enumeration_base_buffer,
-                             enumeration_base_buffer + num_selected*kBitsize,
-                             enumeration_base_buffer);
+      //thrust::inclusive_scan(thrust::device, enumeration_base_buffer,
+      //                       enumeration_base_buffer + num_selected*kBitsize,
+      //                       enumeration_base_buffer);
+      size_t temp_size = 3*NumContainers*kBitsize;
+      cub::DeviceScan::InclusiveSum(enumeration_cub_temp,
+                                    temp_size,
+                                    enumeration_base_buffer,
+                                    enumeration_cub_output,
+                                    num_selected*kBitsize);
       kernel_post_scan<<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
       kernel_set_result_size<<<1, 1>>>(this);
