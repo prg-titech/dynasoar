@@ -5,12 +5,63 @@
 #include <limits>
 #include <stdint.h>
 
+#include <thrust/scan.h>
+
 #define __DEV__ __device__
 
 // TODO: Remove this once code work properly.
 static const int kMaxRetry = 10000000;
 #define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
 #define INIT_RETRY int _retry_counter = 0;
+
+// Shift left, rotating.
+// Copied from: https://gist.github.com/pabigot/7550454
+template <typename T>
+__DEV__ T rotl (T v, unsigned int b)
+{
+  static_assert(std::is_integral<T>::value, "rotate of non-integral type");
+  static_assert(! std::is_signed<T>::value, "rotate of signed type");
+  constexpr unsigned int num_bits {std::numeric_limits<T>::digits};
+  static_assert(0 == (num_bits & (num_bits - 1)), "rotate value bit length not power of two");
+  constexpr unsigned int count_mask {num_bits - 1};
+  const unsigned int mb {b & count_mask};
+  using promoted_type = typename std::common_type<int, T>::type;
+  using unsigned_promoted_type = typename std::make_unsigned<promoted_type>::type;
+  return ((unsigned_promoted_type{v} << mb)
+          | (unsigned_promoted_type{v} >> (-mb & count_mask)));
+}
+
+// Compute scan result for a L0 bitmap with a single container.
+template<typename T>
+__global__ void kernel_trivial_scan(T* ptr) {
+  assert(blockDim.x*gridDim.x == 1);
+  ptr->trivial_scan();
+}
+
+template<typename T>
+__global__ void kernel_pre_scan(T* ptr) {
+  ptr->pre_scan();
+}
+
+template<typename T>
+__global__ void kernel_post_scan(T* ptr) {
+  ptr->post_scan();
+}
+
+template<typename T>
+__global__ void kernel_set_result_size(T* ptr) {
+  assert(blockDim.x*gridDim.x == 1);
+  ptr->set_result_size();
+}
+
+template<typename T>
+T read_from_device(T* ptr) {
+  T host_storage;
+  cudaMemcpy(&host_storage, ptr, sizeof(T), cudaMemcpyDeviceToHost);
+  gpuErrchk(cudaDeviceSynchronize());
+  return host_storage;
+}
+
 
 // Problem: Deadlock if two threads in the same warp want to update the same
 // value. E.g., t0 wants to write "1" and waits for "0" to appear. But t1 cannot
@@ -177,13 +228,39 @@ class Bitmap {
         & (static_cast<ContainerT>(1) << (index % kBitsize));
   }
 
- private:
+  // Initiate scan operation (from the host side). This request is forwarded
+  // to the next-level bitmap. Afterwards, scan continues here.
+  void scan() {
+    data_.scan();
+  }
+
+  // May only be called after scan.
+  __DEV__ SizeT scan_num_bits() const {
+    return data_.enumeration_result_size;
+  }
+
+  __DEV__ SizeT scan_get_index(SizeT pos) const {
+    return data_.enumeration_result_buffer[pos];
+  }
+
+  // TODO: Should be private.
+ public:
   template<SizeT NumContainers, bool HasNested>
   struct BitmapData;
 
   template<SizeT NumContainers>
   struct BitmapData<NumContainers, true> {
+    static const uint8_t kBitsize = 8*sizeof(ContainerT);
+
     ContainerT containers[NumContainers];
+
+    // Buffer for parallel enumeration (prefix sum).
+    // TODO: These buffers can be shared among all types.
+    // TODO: We probably do not need all these buffers.
+    SizeT enumeration_base_buffer[NumContainers*kBitsize];
+    SizeT enumeration_id_buffer[NumContainers*kBitsize];
+    SizeT enumeration_result_buffer[NumContainers*kBitsize];
+    SizeT enumeration_result_size;
 
     Bitmap<SizeT, NumContainers, ContainerT> nested;
 
@@ -204,11 +281,85 @@ class Bitmap {
     __DEV__ void nested_initialize(bool allocated) {
       nested.initialize(allocated);
     }
+
+    // TODO: Run with num_selected threads, then we can remove the loop.
+    __DEV__ void pre_scan() {
+      SizeT* selected = nested.data_.enumeration_result_buffer;
+      SizeT num_selected = nested.data_.enumeration_result_size;
+
+      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
+           sid < num_selected; sid += blockDim.x * gridDim.x) {
+        SizeT container_id = selected[sid];
+        auto value = containers[container_id];
+        for (int i = 0; i < kBitsize; ++i) {
+          // Write "1" if allocated, "0" otherwise.
+          bool bit_selected = value & (static_cast<ContainerT>(1) << i);
+          enumeration_base_buffer[sid*kBitsize + i] = bit_selected;
+          if (bit_selected) {
+            enumeration_id_buffer[sid*kBitsize + i] =
+                kBitsize*container_id + i;
+          }
+        }
+      }
+    }
+
+    // Run with num_selected threads.
+    // Assumption: enumeration_base_buffer contains exclusive prefix sum.
+    __DEV__ void post_scan() {
+      SizeT* selected = nested.data_.enumeration_result_buffer;
+      SizeT num_selected = nested.data_.enumeration_result_size;
+
+      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
+           sid < num_selected; sid += blockDim.x * gridDim.x) {
+        SizeT container_id = selected[sid];
+        auto value = containers[container_id];
+        for (int i = 0; i < kBitsize; ++i) {
+          // Write "1" if allocated, "0" otherwise.
+          bool bit_selected = value & (static_cast<ContainerT>(1) << i);
+          if (bit_selected) {
+            // Minus one because scan operation is inclusive.
+            enumeration_result_buffer[enumeration_base_buffer[sid*kBitsize + i] - 1] =
+                enumeration_id_buffer[sid*kBitsize + i];
+          }
+        }
+      }
+    }
+
+    __DEV__ void set_result_size() {
+      SizeT num_selected = nested.data_.enumeration_result_size;
+      // Base buffer contains prefix sum.
+      SizeT result_size = enumeration_base_buffer[num_selected*kBitsize - 1];
+      enumeration_result_size = result_size;
+    }
+
+    void scan() {  
+      nested.scan();
+
+      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
+      kernel_pre_scan<<<num_selected/256+1, 256>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+      // TODO: Replace with cub for better performance.
+      thrust::inclusive_scan(thrust::device, enumeration_base_buffer,
+                             enumeration_base_buffer + num_selected*kBitsize,
+                             enumeration_base_buffer);
+      kernel_post_scan<<<num_selected/256+1, 256>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+      kernel_set_result_size<<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
   };
 
   template<SizeT NumContainers>
   struct BitmapData<NumContainers, false> {
+    static_assert(NumContainers == 1,
+                  "L0 bitmap should have only one container.");
+
+    static const uint8_t kBitsize = 8*sizeof(ContainerT);
+
     ContainerT containers[NumContainers];
+
+    SizeT enumeration_result_buffer[NumContainers*kBitsize];
+    SizeT enumeration_result_size;
 
     template<bool Retry>
     __DEV__ bool nested_allocate(SizeT pos) { assert(false); return false; }
@@ -222,6 +373,24 @@ class Bitmap {
     }
 
     __DEV__ void nested_initialize(bool allocated) { assert(false); }
+
+    __DEV__ void trivial_scan() {
+      SizeT current_size = 0;
+      for (int i = 0; i < kBitsize; ++i) {
+        if (containers[0] & (static_cast<ContainerT>(1) << i)) {
+          enumeration_result_buffer[current_size++] = i;
+        }
+      }
+
+      enumeration_result_size = current_size;
+      assert(__popcll(containers[0]) == current_size);
+    }
+
+    void scan() {
+      // Does not perform a prefix scan but computes the result directly.
+      kernel_trivial_scan<<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
   };
 
   // Returns the index of an allocated bit inside a container. Returns
@@ -229,11 +398,11 @@ class Bitmap {
   __DEV__ SizeT find_allocated_in_container(SizeT container) const {
     // TODO: For better performance, choose random one.
     int selected = find_allocated_bit(data_.containers[container]);
-    if (selected == 0) {
+    if (selected == -1) {
       // No space in here.
       return kIndexError;
     } else {
-      return selected - 1 + container*kBitsize;
+      return selected + container*kBitsize;
     }
   }
 
@@ -242,20 +411,16 @@ class Bitmap {
     return __ffsll(val);
   }
 
-  // Find index of *some* bit that is set to 1.
-  // TODO: Make this more efficient!
   __DEV__ int find_allocated_bit(ContainerT val) const {
-    const int num_bits = sizeof(ContainerT)*8;
-    int bit_pos = threadIdx.x % num_bits;
+    unsigned int rotation_len = threadIdx.x % (sizeof(val)*8);
+    const ContainerT rotated_val = rotl(val, rotation_len);
 
-    for (int i = 0; i < num_bits; ++i) {
-      bit_pos = (bit_pos + 1) % num_bits;
-      if (val & (static_cast<ContainerT>(1) << bit_pos)) {
-        return bit_pos + 1;
-      }
+    int first_bit_pos = __ffsll(rotated_val) - 1;
+    if (first_bit_pos == -1) {
+      return -1;
+    } else {
+      return (first_bit_pos - rotation_len) % (sizeof(val)*8);
     }
-
-    return 0;
   }
 
   __DEV__ int count_bits(ContainerT val) const {

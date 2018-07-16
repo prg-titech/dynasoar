@@ -23,6 +23,8 @@
 namespace wa_tor {
 
 __device__ SoaAllocator<64*64*64*8, Agent, Fish, Shark> memory_allocator;
+// Host side pointer.
+decltype(memory_allocator)* allocator_handle;
 
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
@@ -465,6 +467,7 @@ __global__ void cell_decide() {
   }
 }
 
+/*
 __global__ void fish_prepare() {
   memory_allocator.parallel_do<16, Fish, &Fish::prepare>();
 }
@@ -480,6 +483,7 @@ __global__ void shark_prepare() {
 __global__ void shark_update() {
   memory_allocator.parallel_do<16, Shark, &Shark::update>();
 }
+*/
 
 void generate_shark_fish_arrays() {
   initialize_iteration<Fish><<<128, 128>>>();
@@ -489,29 +493,38 @@ void generate_shark_fish_arrays() {
 }
 
 void step() {
+  // --- FISH ---
   //generate_fish_array();
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_prepare<<<TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<16, Fish, &Fish::prepare>(
+      TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK);
+
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
   //initialize_iteration<Fish><<<128, 128>>>();
   //gpuErrchk(cudaDeviceSynchronize());
-  fish_update<<<TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
 
+  allocator_handle->parallel_do<16, Fish, &Fish::update>(
+      TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK);
+
+
+  // --- SHARKS ---
   //generate_shark_array();
   cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_prepare<<<TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<16, Shark, &Shark::prepare>(
+      TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK);
+
   cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
   //initialize_iteration<Shark><<<128, 128>>>();
   //gpuErrchk(cudaDeviceSynchronize());
-  shark_update<<<TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<16, Shark, &Shark::update>(
+      TOTAL_THREADS/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK);
 }
 
 __global__ void init_memory_system() {
@@ -519,6 +532,10 @@ __global__ void init_memory_system() {
 }
 
 void initialize() {
+  allocator_handle = nullptr;
+  cudaGetSymbolAddress((void**) &allocator_handle, memory_allocator);
+  assert(allocator_handle != nullptr);
+
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 

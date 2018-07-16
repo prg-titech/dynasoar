@@ -26,6 +26,13 @@ __forceinline__ __device__ unsigned int __lanemask_lt() {
   return mask;
 }
 
+template<int W_MULT, class T, void(T::*func)(), typename AllocatorT>
+__global__ void kernel_parallel_do(AllocatorT* allocator) {
+  // TODO: Check overhead of allocator pointer dereference.
+  // There is definitely a 2% overhead or so.....
+  allocator->template parallel_do_cuda<W_MULT, T, func>();
+}
+
 template<typename T, int N, int Field, int Offset>
 class SoaField {
  private:
@@ -442,25 +449,37 @@ class SoaAllocator {
   }
   */
 
+  // Should be invoked from host side.
   template<int W_MULT, class T, void(T::*func)()>
-  __DEV__ void parallel_do() {
+  void parallel_do(int num_blocks, int num_threads) {
+    allocated_[TupleIndex<T, TupleType>::value].scan();
+    kernel_parallel_do<W_MULT, T, func><<<num_blocks, num_threads>>>(this);
+    gpuErrchk(cudaDeviceSynchronize());
+  }
+
+  // Device-side version, invoked from kernel.
+  template<int W_MULT, class T, void(T::*func)()>
+  __DEV__ void parallel_do_cuda() {
+    const uint32_t N_alloc = allocated_[TupleIndex<T, TupleType>::value].scan_num_bits();
+
     int num_threads = blockDim.x * gridDim.x;
-    assert(num_threads > N);
-    int threads_per_block = num_threads/N;
+    assert(num_threads > N_alloc);
+    int threads_per_block = num_threads/N_alloc;
     assert(threads_per_block > 0);
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    int block_idx = tid/threads_per_block;
 
-    // TODO: Consider doing a scan over "allocated" bitmap.
-    if (block_idx < N
-        && allocated_[TupleIndex<T, TupleType>::value][block_idx]) {
+    if (tid/threads_per_block < N_alloc) {
+      int block_idx = allocated_[TupleIndex<T, TupleType>::value].scan_get_index(
+          tid/threads_per_block);
+
+      // TODO: Consider doing a scan over "allocated" bitmap.
       auto* block = get_block<T>(block_idx);
       auto iteration_bitmap = block->iteration_bitmap;
       int block_size = __popcll(iteration_bitmap);
       //int objs_per_thread = block_size/threads_per_block + 1;
 
       // Offset of this thread when processing this block.
-      int thread_offset = tid - block_idx*threads_per_block;
+      int thread_offset = tid - (tid/threads_per_block)*threads_per_block;
       // Advance bitmap to return thread_offset-th bit index.
       for (int i = 0; i < thread_offset; ++i) {
         // Clear last bit.
