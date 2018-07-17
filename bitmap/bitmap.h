@@ -171,6 +171,12 @@ class Bitmap {
     }
   }
 
+  // Return true if index is allocated.
+  __DEV__ bool operator[](SizeT index) const {
+    return data_.containers[index/kBitsize]
+        & (static_cast<ContainerT>(1) << (index % kBitsize));
+  }
+
  private:
   template<SizeT NumContainers, bool HasNested>
   struct BitmapData;
@@ -236,20 +242,27 @@ class Bitmap {
     return __ffsll(val);
   }
 
+  __DEV__ int find_allocated_bit(ContainerT val) const {
+    return find_allocated_bit_fast(val);
+  }
+
   // Find index of *some* bit that is set to 1.
   // TODO: Make this more efficient!
-  __DEV__ int find_allocated_bit(ContainerT val) const {
-    const int num_bits = sizeof(ContainerT)*8;
-    int bit_pos = threadIdx.x % num_bits;
+  __DEV__ int find_allocated_bit_fast(ContainerT val) const {
+    int bit_pos = threadIdx.x % kBitsize;
 
-    for (int i = 0; i < num_bits; ++i) {
-      bit_pos = (bit_pos + 1) % num_bits;
+    for (int i = 0; i < kBitsize; ++i) {
+      bit_pos = (bit_pos + 1) % kBitsize;
       if (val & (static_cast<ContainerT>(1) << bit_pos)) {
         return bit_pos + 1;
       }
     }
 
     return 0;
+  }
+
+  __DEV__ int find_allocated_bit_compact(ContainerT val) const {
+    return __ffsll(val);
   }
 
   __DEV__ int count_bits(ContainerT val) const {
