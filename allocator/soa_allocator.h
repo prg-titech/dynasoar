@@ -357,7 +357,11 @@ class SoaAllocator {
     } else if (dealloc_state == kBlockNowEmpty) {
       // Block is now empty.
       uint64_t before_invalidate = invalidate_block<T>(block_idx);
-      if (before_invalidate == 0) {
+
+      //printf("Block now empty!!! %i\n", __popcll(before_invalidate));
+
+      if (before_invalidate == ~static_cast<uint64_t>(0)) {
+        //printf("DEALLOCATING BLOCK!!!\n");
         // Block is invalidated and no new allocations can be performed.
         bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
         assert(success);
@@ -387,11 +391,19 @@ class SoaAllocator {
     do {
       // Retry a couple of times. May reduce fragmentation.
       // TODO: Tune number of retries.
-      int retries = 2;
+      int retries = 1000;
       do {
-        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>();
+        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false, 1>(retries);
       } while (block_idx == Bitmap<uint32_t, N>::kIndexError
                && --retries > 0);
+
+      if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
+        int retries = 10;
+        do {
+          block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false, 2>();
+        } while (block_idx == Bitmap<uint32_t, N>::kIndexError
+                 && --retries > 0);
+      }
 
       if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
         // TODO: May be out of memory here.

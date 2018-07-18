@@ -80,16 +80,19 @@ class Bitmap {
     return success;
   }
 
+  static const int kFindAllocatedStrategyCompact = 1;
+  static const int kFindAllocatedStrategyRandomized = 2;
+
   // Return the index of an allocated bit, utilizing the hierarchical bitmap
   // structure.
-  template<bool Retry = false>
-  __DEV__ SizeT find_allocated() const {
+  template<bool Retry = false, int Strategy = kFindAllocatedStrategyRandomized>
+  __DEV__ SizeT find_allocated(int try_counter = 0) const {
     SizeT index;
 
     INIT_RETRY;
 
     do {
-      index = find_allocated_private();
+      index = find_allocated_private<Strategy>(try_counter);
     } while (Retry && index == kIndexError && CONTINUE_RETRY);
 
     assert(!Retry || index != kIndexError);
@@ -150,11 +153,12 @@ class Bitmap {
   // of the container in which to search. On the lowest level, the container ID
   // equals the bit index.
   // TODO: Sould be private.
-  __DEV__ SizeT find_allocated_private() const {
+  template<int Strategy>
+  __DEV__ SizeT find_allocated_private(int try_counter) const {
     SizeT container;
 
     if (kHasNested) {
-      container = data_.nested_find_allocated_private();
+      container = data_.template nested_find_allocated_private<Strategy>(try_counter);
 
       if (container == kIndexError) {
         return kIndexError;
@@ -163,7 +167,7 @@ class Bitmap {
       container = 0;
     }
 
-    return find_allocated_in_container(container);
+    return find_allocated_in_container<Strategy>(container, try_counter);
   }
 
   __DEV__ void initialize(bool allocated = false) {
@@ -214,8 +218,9 @@ class Bitmap {
       return nested.deallocate<Retry>(pos);
     }
 
-    __DEV__ SizeT nested_find_allocated_private() const {
-      return nested.find_allocated_private();
+    template<int Strategy>
+    __DEV__ SizeT nested_find_allocated_private(int try_counter) const {
+      return nested.find_allocated_private<Strategy>(try_counter);
     }
 
     __DEV__ void nested_initialize(bool allocated) {
@@ -233,7 +238,8 @@ class Bitmap {
     template<bool Retry>
     __DEV__ bool nested_deallocate(SizeT pos) { assert(false); return false; }
 
-    __DEV__ SizeT nested_find_allocated_private() const {
+    template<int Strategy>
+    __DEV__ SizeT nested_find_allocated_private(int try_counter) const {
       assert(false);
       return kIndexError;
     }
@@ -243,9 +249,10 @@ class Bitmap {
 
   // Returns the index of an allocated bit inside a container. Returns
   // kIndexError if not allocated bit was found.
-  __DEV__ SizeT find_allocated_in_container(SizeT container) const {
+  template<int Strategy>
+  __DEV__ SizeT find_allocated_in_container(SizeT container, int try_counter) const {
     // TODO: For better performance, choose random one.
-    int selected = find_allocated_bit(data_.containers[container]);
+    int selected = find_allocated_bit<Strategy>(data_.containers[container], try_counter);
     if (selected == -1) {
       // No space in here.
       return kIndexError;
@@ -259,13 +266,22 @@ class Bitmap {
     return __ffsll(val);
   }
 
-  __DEV__ int find_allocated_bit(ContainerT val) const {
-    return find_allocated_bit_fast(val);
+  template<int Strategy>
+  __DEV__ int find_allocated_bit(ContainerT val, int try_counter) const {
+    if (Strategy == kFindAllocatedStrategyCompact) {
+      return find_allocated_bit_compact(val, try_counter);
+    } else if (Strategy == kFindAllocatedStrategyRandomized) {
+      return find_allocated_bit_fast(val, try_counter);
+    } else {
+      // Unknown strategy.
+      assert(false);
+      return 0;
+    }
   }
 
   // Find index of *some* bit that is set to 1.
   // TODO: Make this more efficient!
-  __DEV__ int find_allocated_bit_fast(ContainerT val) const {
+  __DEV__ int find_allocated_bit_fast(ContainerT val, int try_counter) const {
     unsigned int rotation_len = threadIdx.x % (sizeof(val)*8);
     const ContainerT rotated_val = rotl(val, rotation_len);
 
@@ -277,7 +293,14 @@ class Bitmap {
     }
   }
 
-  __DEV__ int find_allocated_bit_compact(ContainerT val) const {
+  __DEV__ int find_allocated_bit_compact(ContainerT val, int try_counter) const {
+    int chosen_one = (threadIdx.x + blockIdx.x + try_counter) % 5;
+    chosen_one = min(chosen_one, __popcll(val));
+
+    for (int i = 0; i < chosen_one; ++i) {
+      val &= val - 1;
+    }
+
     return __ffsll(val) - 1;
   }
 
