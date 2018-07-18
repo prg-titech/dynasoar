@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -18,7 +18,7 @@
 #define OPTION_FISH_SPAWN true
 
 #define THREADS_PER_BLOCK 128
-#define TOTAL_THREADS GRID_SIZE_X*GRID_SIZE_Y
+#define TOTAL_THREADS 0.4*GRID_SIZE_X*GRID_SIZE_Y
 
 namespace wa_tor {
 
