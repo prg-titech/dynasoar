@@ -12,6 +12,23 @@ static const int kMaxRetry = 10000000;
 #define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
 #define INIT_RETRY int _retry_counter = 0;
 
+// Shift left, rotating.
+// Copied from: https://gist.github.com/pabigot/7550454
+template <typename T>
+__DEV__ T rotl (T v, unsigned int b)
+{
+  static_assert(std::is_integral<T>::value, "rotate of non-integral type");
+  static_assert(! std::is_signed<T>::value, "rotate of signed type");
+  constexpr unsigned int num_bits {std::numeric_limits<T>::digits};
+  static_assert(0 == (num_bits & (num_bits - 1)), "rotate value bit length not power of two");
+  constexpr unsigned int count_mask {num_bits - 1};
+  const unsigned int mb {b & count_mask};
+  using promoted_type = typename std::common_type<int, T>::type;
+  using unsigned_promoted_type = typename std::make_unsigned<promoted_type>::type;
+  return ((unsigned_promoted_type{v} << mb)
+          | (unsigned_promoted_type{v} >> (-mb & count_mask)));
+}
+
 // Problem: Deadlock if two threads in the same warp want to update the same
 // value. E.g., t0 wants to write "1" and waits for "0" to appear. But t1 cannot
 // write "0" because of thread divergence.
@@ -171,6 +188,12 @@ class Bitmap {
     }
   }
 
+  // Return true if index is allocated.
+  __DEV__ bool operator[](SizeT index) const {
+    return data_.containers[index/kBitsize]
+        & (static_cast<ContainerT>(1) << (index % kBitsize));
+  }
+
  private:
   template<SizeT NumContainers, bool HasNested>
   struct BitmapData;
@@ -223,11 +246,11 @@ class Bitmap {
   __DEV__ SizeT find_allocated_in_container(SizeT container) const {
     // TODO: For better performance, choose random one.
     int selected = find_allocated_bit(data_.containers[container]);
-    if (selected == 0) {
+    if (selected == -1) {
       // No space in here.
       return kIndexError;
     } else {
-      return selected - 1 + container*kBitsize;
+      return selected + container*kBitsize;
     }
   }
 
@@ -236,20 +259,26 @@ class Bitmap {
     return __ffsll(val);
   }
 
+  __DEV__ int find_allocated_bit(ContainerT val) const {
+    return find_allocated_bit_fast(val);
+  }
+
   // Find index of *some* bit that is set to 1.
   // TODO: Make this more efficient!
-  __DEV__ int find_allocated_bit(ContainerT val) const {
-    const int num_bits = sizeof(ContainerT)*8;
-    int bit_pos = threadIdx.x % num_bits;
+  __DEV__ int find_allocated_bit_fast(ContainerT val) const {
+    unsigned int rotation_len = threadIdx.x % (sizeof(val)*8);
+    const ContainerT rotated_val = rotl(val, rotation_len);
 
-    for (int i = 0; i < num_bits; ++i) {
-      bit_pos = (bit_pos + 1) % num_bits;
-      if (val & (static_cast<ContainerT>(1) << bit_pos)) {
-        return bit_pos + 1;
-      }
+    int first_bit_pos = __ffsll(rotated_val) - 1;
+    if (first_bit_pos == -1) {
+      return -1;
+    } else {
+      return (first_bit_pos - rotation_len) % (sizeof(val)*8);
     }
+  }
 
-    return 0;
+  __DEV__ int find_allocated_bit_compact(ContainerT val) const {
+    return __ffsll(val) - 1;
   }
 
   __DEV__ int count_bits(ContainerT val) const {

@@ -1,4 +1,4 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -393,7 +393,14 @@ __global__ void print_checksum() {
     chksum += *(fish[i]->position()->random_state()) % 601;
   }
 
+  uint32_t fish_use = memory_allocator.DBG_used_slots<Fish>();
+  uint32_t fish_num = memory_allocator.DBG_allocated_slots<Fish>();
+  uint32_t shark_use = memory_allocator.DBG_used_slots<Shark>();
+  uint32_t shark_num = memory_allocator.DBG_allocated_slots<Shark>();
+
   printf("%" PRIu64, chksum);
+  printf("   f(Fish)=%u/%u   f(Shark)=%u/%u",
+         fish_use, fish_num, shark_use, shark_num);
 }
 
 __global__ void reset_fish_array() {
@@ -645,7 +652,7 @@ int main(int argc, char* arvg[]) {
     if (i%60==0) {
       print_stats();
       render();
-      printf("    Time: %i usec", time_running);
+      printf("  Time: %i usec", time_running);
       time_running = 0;
     }
 

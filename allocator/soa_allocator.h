@@ -212,6 +212,14 @@ class SoaBlock {
     return BlockAllocationResult(selected_bits, filled_block);
   }
 
+  __DEV__ int DBG_num_bits() {
+    return N;
+  }
+
+  __DEV__ int DBG_allocated_bits() {
+    return N - __popcll(free_bitmap);
+  }
+
  private:
   // Dummy area that may be overridden by zero initialization.
   // Data section begins after 128 bytes.
@@ -349,7 +357,7 @@ class SoaAllocator {
     } else if (dealloc_state == kBlockNowEmpty) {
       // Block is now empty.
       uint64_t before_invalidate = invalidate_block<T>(block_idx);
-      if (before_invalidate == 0) {
+      if (~before_invalidate == 0) {
         // Block is invalidated and no new allocations can be performed.
         bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
         assert(success);
@@ -486,6 +494,30 @@ class SoaAllocator {
   template<class T>
   __DEV__ void uninvalidate_block(uint32_t block_idx, uint64_t previous_val) {
     get_block<T>(block_idx)->uninvalidate(previous_val);
+  }
+
+  // The number of allocated slots of a type. (#blocks * blocksize)
+  template<class T>
+  __DEV__ uint32_t DBG_allocated_slots() {
+    uint32_t counter = 0;
+    for (int i = 0; i < N; ++i) {
+      if (allocated_[TupleIndex<T, TupleType>::value][i]) {
+        counter += get_block<T>(i)->DBG_num_bits();
+      }
+    }
+    return counter;
+  }
+
+  // The number of actually used slots of a type. (#blocks * blocksize)
+  template<class T>
+  __DEV__ uint32_t DBG_used_slots() {
+    uint32_t counter = 0;
+    for (int i = 0; i < N; ++i) {
+      if (allocated_[TupleIndex<T, TupleType>::value][i]) {
+        counter += get_block<T>(i)->DBG_allocated_bits();
+      }
+    }
+    return counter;
   }
 
   using TupleType = std::tuple<Types...>;
