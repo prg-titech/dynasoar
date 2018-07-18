@@ -357,7 +357,7 @@ class SoaAllocator {
     } else if (dealloc_state == kBlockNowEmpty) {
       // Block is now empty.
       uint64_t before_invalidate = invalidate_block<T>(block_idx);
-      if (before_invalidate == 0) {
+      if (~before_invalidate == 0) {
         // Block is invalidated and no new allocations can be performed.
         bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
         assert(success);
