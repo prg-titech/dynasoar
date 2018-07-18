@@ -194,7 +194,7 @@ __device__ uint32_t* Agent::random_state() {
 __device__ void Agent::set_new_position(Cell* new_pos) {
   // Check for race condition. (This is not bullet proof.)
   assert(new_position_ == position_);
-
+  //printf("NEW_POS = %p, POS=%p\n", (Cell*)new_position_, (Cell*)position_);
   new_position_ = new_pos;
 }
 

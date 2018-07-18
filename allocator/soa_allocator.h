@@ -41,28 +41,12 @@ class SoaField {
 
   __DEV__ T* data_ptr() {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
-    uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
-    assert(obj_id < N);
-    uintptr_t block_base = ptr_base & kBlockAddrBitmask;
-    T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + N*Offset);
-
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
-    return soa_array + obj_id;
+    return reinterpret_cast<T*>(ptr_base + Offset);
   }
 
   __DEV__ T* data_ptr() const {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
-    uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
-    assert(obj_id < N);
-    uintptr_t block_base = ptr_base & kBlockAddrBitmask;
-    T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + N*Offset);
-
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
-    return soa_array + obj_id;
+    return reinterpret_cast<T*>(ptr_base + Offset);
   }
 
  public:
@@ -423,9 +407,10 @@ class SoaAllocator {
 
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
+    assert(data_as_int % kBlockMaxSize == 0);
 
-    assert(((ptr_as_int & kBlockAddrBitmask) - data_as_int) % kBlockMaxSize == 0);
-    return ((ptr_as_int & kBlockAddrBitmask) - data_as_int) / kBlockMaxSize;
+    assert((ptr_as_int - data_as_int) / kBlockMaxSize < N);
+    return (ptr_as_int - data_as_int) / kBlockMaxSize;
   }
 
   template<class T>
@@ -434,7 +419,9 @@ class SoaAllocator {
     assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
 
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
-    return ptr_as_int & kObjectAddrBitmask; 
+    assert((ptr_as_int - get_block_idx(ptr)*kBlockMaxSize)%T::kObjectSize == 0);
+    assert((ptr_as_int - get_block_idx(ptr)*kBlockMaxSize) / T::kObjectSize < 64);
+    return (ptr_as_int - get_block_idx(ptr)*kBlockMaxSize) / T::kObjectSize;
   }
 
   template<class T>
@@ -480,7 +467,8 @@ class SoaAllocator {
       // Allocation successful.
       uintptr_t block_base = reinterpret_cast<uintptr_t>(get_block<T>(block_idx));
       assert(block_base >= reinterpret_cast<uintptr_t>(DBG_data_storage));
-      return reinterpret_cast<T*>(block_base + position - 1);
+      return reinterpret_cast<T*>(block_base + (position - 1)*T::kObjectSize);
+      //return reinterpret_cast<T*>(block_base + position - 1);
     } else {
       return nullptr;
     }

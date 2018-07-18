@@ -71,9 +71,12 @@ class Agent {
   SoaField<Cell*, kBlockSize, 1, 8> new_position_;
   SoaField<uint32_t, kBlockSize, 2, 16> random_state_;
   SoaField<uint8_t, kBlockSize, 3, 20> type_identifier_;
+  SoaField<uint8_t, kBlockSize, 4, 21> padding1_;
+  SoaField<uint8_t, kBlockSize, 5, 22> padding2_;
+  SoaField<uint8_t, kBlockSize, 6, 23> padding3_;
 
  public:
-  static const int kObjectSize = 21;
+  static const int kObjectSize = 24;
 
   __device__ Agent(uint32_t random_state, uint8_t type_identifier);
 
@@ -91,10 +94,10 @@ class Agent {
 
 class Fish : public Agent {
  private:
-  SoaField<uint32_t, kBlockSize, 4, 21> egg_timer_;
+  SoaField<uint32_t, kBlockSize, 7, 24> egg_timer_;
 
  public:
-  static const int kObjectSize = 25;
+  static const int kObjectSize = 32;
 
   static const uint8_t kTypeId = 1;
 
@@ -107,11 +110,11 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  private:
-  SoaField<uint32_t, kBlockSize, 4, 21> energy_;
-  SoaField<uint32_t, kBlockSize, 5, 25> egg_timer_;
+  SoaField<uint32_t, kBlockSize, 7, 24> energy_;
+  SoaField<uint32_t, kBlockSize, 8, 28> egg_timer_;
 
  public:
-  static const int kObjectSize = 29;
+  static const int kObjectSize = 32;
 
   static const uint8_t kTypeId = 2;
 
