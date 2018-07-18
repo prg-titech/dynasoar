@@ -115,6 +115,34 @@ class Bitmap {
     return index;
   }
 
+  // Try to deallocate a bit. Retry a given number of times.
+  // TODO: This function can probably be optimized.
+  template<int Retries>
+  __DEV__ SizeT deallocate_retries() {
+    SizeT index;
+    bool success;
+
+    int tries = Retries;
+    assert(tries > 0);
+
+    do {
+      index = find_allocated<false>();
+
+      if (index != kIndexError) {
+        success = deallocate<false>(index); // if false: other thread was faster
+      } else {
+        success = false;
+      }
+
+    } while (!success && (--tries > 0));
+
+    if (success) {
+      return index;
+    } else {
+      return kIndexError;
+    }
+  }
+
   // Deallocate specific position, i.e., set bit to 0. Return value indicates
   // success. If Retry, then continue retrying until successful update.
   template<bool Retry = false>

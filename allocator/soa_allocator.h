@@ -290,10 +290,24 @@ class SoaAllocator {
     }
   }
 
+  // Must be in a separate kernel after initialize.
+  template<typename T>
+  __DEV__ void initialize_active_set() {
+    // TODO: Parallelize.
+    if (blockIdx.x * blockDim.x + threadIdx.x == 0) {
+      // Initialize active set.
+      for (int j = 0; j < kActiveSetSize; ++j) {
+        active_set_[TupleIndex<T, TupleType>::value][j] = grab_active_block<T>();
+      }
+    }
+  }
+
   // Try to allocate everything in the same block.
   template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
     T* result = nullptr;
+
+    int active_idx_incr = 0;
 
     do {
       const unsigned active = __activemask();
@@ -311,15 +325,27 @@ class SoaAllocator {
       if (rank == leader) {
         assert(__popc(__activemask()) == 1);    // Only one thread executing.
 
-        block_idx = find_active_block<T>();
+        // TODO: Check if this is good. May want to add some more randomness.
+        int active_idx = (threadIdx.x + active_idx_incr++) % kActiveSetSize;
+        block_idx = active_set_[TupleIndex<T, TupleType>::value][active_idx];
+
         const auto allocation = allocate_in_block<T>(block_idx,
                                                      /*num=*/ __popc(active));
         allocation_bitmap = allocation.allocation_mask;
 
         if (allocation.block_full) {
           // This request filled up the block entirely.
-          bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
-          assert(success);
+          uint32_t new_active_block = grab_active_block<T>();
+#ifndef NDEBUG
+          // Assert that block is not already active. This is not rock solid.
+          for (int i = 0; i < kActiveSetSize; ++i) {
+            uint32_t idx_b = active_set_[TupleIndex<T, TupleType>::value][i];
+            assert(new_active_block != idx_b);
+          }
+#endif  // NDEBUG
+
+          // Replace active_set slot with new active block.
+          active_set_[TupleIndex<T, TupleType>::value][active_idx] = new_active_block;
         }
       }
 
@@ -352,6 +378,7 @@ class SoaAllocator {
                                                                    obj_id);
 
     if (dealloc_state == kBlockNowActive) {
+      // Block was full and now one element removed.
       bool success = active_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
       assert(success);
     } else if (dealloc_state == kBlockNowEmpty) {
@@ -359,12 +386,19 @@ class SoaAllocator {
       uint64_t before_invalidate = invalidate_block<T>(block_idx);
       if (before_invalidate == 0) {
         // Block is invalidated and no new allocations can be performed.
-        bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
-        assert(success);
-        success = allocated_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
-        assert(success);
-        success = global_free_.allocate<true>(block_idx);
-        assert(success);
+        // If deallocation fails, block must be in active set.
+        bool in_active_set = !active_[TupleIndex<T, TupleType>::value]
+            .deallocate<false>(block_idx);
+
+        if (!in_active_set) {
+          // Deallocate entirely.
+          bool success = allocated_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
+          assert(success);
+          success = global_free_.allocate<true>(block_idx);
+          assert(success);
+        } else {
+          uninvalidate_block<T>(block_idx, before_invalidate);
+        }
       } else {
         uninvalidate_block<T>(block_idx, before_invalidate);
       }
@@ -380,29 +414,21 @@ class SoaAllocator {
 
   // TODO: Should be private.
  public:
+  // This is atomic. Nobody else can get the same active block.
   template<class T>
-  __DEV__ uint32_t find_active_block() {
-    uint32_t block_idx;
+  __DEV__ uint32_t grab_active_block() {
+    // TODO: Tune number of retries.
+    uint32_t block_idx = active_[TupleIndex<T, TupleType>::value]
+        .template deallocate_retries<2>();
 
-    do {
-      // Retry a couple of times. May reduce fragmentation.
-      // TODO: Tune number of retries.
-      int retries = 2;
-      do {
-        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>();
-      } while (block_idx == Bitmap<uint32_t, N>::kIndexError
-               && --retries > 0);
-
-      if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
-        // TODO: May be out of memory here.
-        block_idx = global_free_.deallocate();
-        assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
-        initialize_block<T>(block_idx);
-        bool success = allocated_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
-        assert(success);
-        success = active_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
-      }
-    } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
+    if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
+      // TODO: May be out of memory here.
+      block_idx = global_free_.deallocate();
+      assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
+      initialize_block<T>(block_idx);
+      bool success = allocated_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
+      assert(success);
+    }
 
     assert(block_idx < N);
     return block_idx;
@@ -533,6 +559,9 @@ class SoaAllocator {
   Bitmap<uint32_t, N> allocated_[kNumTypes];
 
   Bitmap<uint32_t, N> active_[kNumTypes];
+
+  static const int kActiveSetSize = 64;
+  uint32_t active_set_[kNumTypes][kActiveSetSize];
 };
 
 #endif  // ALLOCATOR_SOA_ALLOCATOR_H

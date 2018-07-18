@@ -531,8 +531,18 @@ __global__ void init_memory_system() {
   initialize_allocator();
 }
 
+template<typename T>
+__global__ void init_active_set() {
+  assert(blockDim.x*gridDim.x == 1);
+  memory_allocator.initialize_active_set<T>();
+}
+
 void initialize() {
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  init_active_set<Fish><<<1,1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  init_active_set<Shark><<<1,1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
@@ -648,6 +658,13 @@ int main(int argc, char* arvg[]) {
   printf("Computing...");
   int time_running = 0;
 
+  for (int i = 0; i < 4; ++i) {
+  print_stats();
+  generate_shark_fish_arrays();
+  step();
+  }
+  
+  return 0;
   for (int i = 0; ; ++i) {
     if (i%60==0) {
       print_stats();
@@ -668,7 +685,7 @@ int main(int argc, char* arvg[]) {
 
     auto time_before = std::chrono::system_clock::now();
     generate_shark_fish_arrays();
-    step();
+    //step();
     auto time_after = std::chrono::system_clock::now();
     time_running += std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
