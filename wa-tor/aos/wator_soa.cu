@@ -1,4 +1,4 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>

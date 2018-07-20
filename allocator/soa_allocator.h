@@ -179,7 +179,7 @@ class SoaBlock {
     // TODO: Better performance without this check?
     if (free_count <= 0) {
       // Block is already full.
-      return BlockAllocationResult(0, false);
+      return BlockAllocationResult(0ULL, false);
     }
 
     // ---- STEP 1: Reserve bits. ----
@@ -222,15 +222,10 @@ class SoaBlock {
 
     INIT_RETRY;
     do {
-      // Rotate free bitmask to reduce change of collisions.
-      unsigned int rotation_len = warp_id() % 64;
-
-      // Bit set to 1 if slot is free.
-      unsigned long long int updated_mask = rotl(free_bitmap, rotation_len);
+      // Bit set to 1 if slot is free. There are guaranteed to be enough free slots.
+      unsigned long long int updated_mask = free_bitmap;
       assert(__popcll(updated_mask) >= bits_to_allocate);
 
-      // If there are not enough free slots, allocate as many as possible.
-      int free_slots = __popcll(updated_mask);
       unsigned long long int newly_selected_bits = 0;
 
       // Generate bitmask for allocation
@@ -241,8 +236,7 @@ class SoaBlock {
         // Clear bit at position `next_bit_pos` in updated mask.
         updated_mask &= updated_mask - 1;
         // Save location of selected bit.
-        int next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
-        newly_selected_bits |= 1ULL << next_bit_pos_unrot;
+        newly_selected_bits |= 1ULL << next_bit_pos;
       }
 
       assert(__popcll(newly_selected_bits) == bits_to_allocate);
