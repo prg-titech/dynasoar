@@ -134,6 +134,8 @@ class SoaBlock {
  public:
   __DEV__ SoaBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % N == 0);   // Alignment.
+    type_id = T::kTypeId;
+    __threadfence();
     free_bitmap = ~0ULL;
     assert(__popcll(free_bitmap) == 64);
   }
@@ -158,7 +160,8 @@ class SoaBlock {
     unsigned long long int mask = 1ULL << position;
 
     do {
-      // successful if: bit was "0" (allocated).
+      // successful if: bit was "0" (allocated). Needed because we could be in
+      // invalidation check.
       before = atomicOr(&free_bitmap, mask);
     } while ((before & mask) != 0);
 
@@ -232,12 +235,16 @@ class SoaBlock {
     return N - __popcll(free_bitmap);
   }
 
- private:
+  // TODO: Should be private.
+ public:
   // Dummy area that may be overridden by zero initialization.
   // Data section begins after 128 bytes.
   // TODO: Do we need this on GPU?
   // TODO: Can this be replaced when using ROSE?
-  char initialization_header_[128 - sizeof(unsigned long long int)];
+  char initialization_header_[128 - 2*sizeof(unsigned long long int)];
+
+  // Padding to 8 bytes.
+  uint8_t type_id;
 
   // Bitmap of free slots.
   unsigned long long int free_bitmap;
@@ -324,7 +331,8 @@ class SoaAllocator {
         assert(__popc(__activemask()) == 1);    // Only one thread executing.
 
         block_idx = find_active_block<T>();
-        const auto allocation = allocate_in_block<T>(block_idx,
+        auto* block = get_block<T>(block_idx);
+        const auto allocation = allocate_in_block<T>(block,
                                                      /*num=*/ __popc(active));
         allocation_bitmap = allocation.allocation_mask;
 
@@ -332,6 +340,40 @@ class SoaAllocator {
           // This request filled up the block entirely.
           bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
           assert(success);
+        }
+
+        uint8_t actual_type_id = block->type_id;
+        if (actual_type_id != T::kTypeId) {
+          // Block deallocated and initialized for a new type between lookup
+          // from active bitmap and here. This is extremely unlikely!
+          // But possible.
+          // Undo allocation and update bitmaps accordingly.
+          unsigned long long int* free_bitmap = &block->free_bitmap;
+
+          // Note: Cannot be in invalidation here, because we are certain that
+          // we allocated the bits that we are about to deallocate here.
+          auto before_undo = atomicOr(
+              free_bitmap,
+              static_cast<unsigned long long int>(allocation_bitmap));
+          int slots_before_undo = __popcll(before_undo);
+
+          // Cases to handle: block now active again or block empty now.
+          if (slots_before_undo == 0) {
+            // Block became active. (Was full.)
+            bool success = active_[actual_type_id].allocate<true>(block_idx);
+            assert(success);
+          } else if (slots_before_undo == N - 1) {
+            // Block now empty.
+            if (block->invalidate()) {
+              // Block is invalidated and no new allocations can be performed.
+              bool success = active_[actual_type_id].deallocate<true>(block_idx);
+              assert(success);
+              success = allocated_[actual_type_id].deallocate<true>(block_idx);
+              assert(success);
+              success = global_free_.allocate<true>(block_idx);
+              assert(success);
+            }
+          }
         }
       }
 
@@ -367,7 +409,7 @@ class SoaAllocator {
       bool success = active_[TupleIndex<T, TupleType>::value].allocate<true>(block_idx);
       assert(success);
     } else if (dealloc_state == kBlockNowEmpty) {
-      // Block is now empty.
+      // Assume that block is empty.
       if (invalidate_block<T>(block_idx)) {
         // Block is invalidated and no new allocations can be performed.
         bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
@@ -454,10 +496,8 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ BlockAllocationResult allocate_in_block(uint32_t block_idx,
+  __DEV__ BlockAllocationResult allocate_in_block(SoaBlock<T, kNumBlockElements>* block,
                                                   int num_objects) {
-    assert(block_idx < N);
-    auto* block = get_block<T>(block_idx);
     // Only executed by one thread per warp.
     return block->allocate(num_objects);
   }

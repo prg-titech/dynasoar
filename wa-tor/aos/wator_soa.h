@@ -75,6 +75,9 @@ class Agent {
  public:
   static const int kObjectSize = 21;
 
+  // Type ID must correspond to variadic template.
+  static const uint8_t kTypeId = 0;
+
   __device__ Agent(uint32_t random_state, uint8_t type_identifier);
 
   __device__ Cell* position() const;
