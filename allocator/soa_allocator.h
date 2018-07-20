@@ -148,7 +148,13 @@ class SoaBlock {
   }
 
   __DEV__ DeallocationState deallocate(int position) {
-    unsigned long long int before = atomicOr(&free_bitmap, 1ULL << position);
+    unsigned long long int before;
+    unsigned long long int mask = 1ULL << position;
+
+    do {
+      // successful if: bit was "0" (allocated).
+      before = atomicOr(&free_bitmap, mask);
+    } while ((before & mask) != 0);
 
     int slots_free_before = __popcll(before);
     if (slots_free_before == 0) {
