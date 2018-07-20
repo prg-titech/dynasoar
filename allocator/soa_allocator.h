@@ -139,7 +139,13 @@ class SoaBlock {
   }
 
   __DEV__ uint64_t invalidate() {
-    return static_cast<uint64_t>(atomicExch(&free_bitmap, 0ULL));
+    auto old_free_bitmap = atomicExch(&free_bitmap, 0ULL);
+    if (~old_free_bitmap == 0ULL) {
+      return true;
+    } else {
+      free_bitmap = old_free_bitmap;
+      return false;
+    }
   }
 
   __DEV__ void uninvalidate(uint64_t previous_val) {
@@ -362,8 +368,7 @@ class SoaAllocator {
       assert(success);
     } else if (dealloc_state == kBlockNowEmpty) {
       // Block is now empty.
-      uint64_t before_invalidate = invalidate_block<T>(block_idx);
-      if (~before_invalidate == 0) {
+      if (invalidate_block<T>(block_idx)) {
         // Block is invalidated and no new allocations can be performed.
         bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
         assert(success);
@@ -371,8 +376,6 @@ class SoaAllocator {
         assert(success);
         success = global_free_.allocate<true>(block_idx);
         assert(success);
-      } else {
-        uninvalidate_block<T>(block_idx, before_invalidate);
       }
     }
   }
@@ -493,13 +496,8 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ uint64_t invalidate_block(uint32_t block_idx) {
+  __DEV__ bool invalidate_block(uint32_t block_idx) {
     return get_block<T>(block_idx)->invalidate();
-  }
-
-  template<class T>
-  __DEV__ void uninvalidate_block(uint32_t block_idx, uint64_t previous_val) {
-    get_block<T>(block_idx)->uninvalidate(previous_val);
   }
 
   // The number of allocated slots of a type. (#blocks * blocksize)
