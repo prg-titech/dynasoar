@@ -8,12 +8,13 @@
 #include "wa-tor/aos/wator.h"
 #include "wa-tor/aos/scatteralloc_allocator.h"
 //#include "wa-tor/aos/aos_allocator.h"
+//#include "wa-tor/aos/cuda_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 400
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 800
+#define GRID_SIZE_Y 800
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -506,7 +507,7 @@ __global__ void init_memory_system() {
 
 void initialize() {
   //init the heap
-  initHeap();
+  initHeap(64*1024U*1024U);
 
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());

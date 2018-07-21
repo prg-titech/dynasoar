@@ -18,6 +18,8 @@ namespace wa_tor {
   }
 
   __device__ void initialize_allocator() {}
+
+  void initHeap() {}
 }  // namespace wa_tor
 
 #endif  // WA_TOR_AOS_CUDA_ALLOCATOR_H

@@ -10,8 +10,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 400
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 1000
+#define GRID_SIZE_Y 1000
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -399,7 +399,7 @@ __global__ void print_checksum() {
   uint32_t shark_num = memory_allocator.DBG_allocated_slots<Shark>();
 
   printf("%" PRIu64, chksum);
-  printf("   f(Fish)=%u/%u   f(Shark)=%u/%u",
+  printf(",%u,%u,%u,%u\n",
          fish_use, fish_num, shark_use, shark_num);
 }
 
@@ -600,11 +600,9 @@ void render() {
 void print_stats() {
   generate_fish_array();
   generate_shark_array();
-
-  printf("\n Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
+  //printf("FISH: %i,SHARKS: %i,", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  printf("           ");
 }
 
 int main(int argc, char* arvg[]) {
@@ -643,17 +641,15 @@ int main(int argc, char* arvg[]) {
   SDL_RenderPresent(renderer_);
 
   initialize();
+    printf("-1,");
+    print_stats();
   render();
 
-  printf("Computing...");
-  int time_running = 0;
+  //printf("Computing...");
 
-  for (int i = 0; ; ++i) {
-    if (i%60==0) {
-      print_stats();
-      render();
-      printf("  Time: %i usec", time_running);
-      time_running = 0;
+  for (int i = 0; i < 500; ++i) {
+    if (i%50==0) {
+      //render();
     }
 
     SDL_Event e;
@@ -666,15 +662,21 @@ int main(int argc, char* arvg[]) {
       }
     }
 
-    auto time_before = std::chrono::system_clock::now();
     generate_shark_fish_arrays();
+
+    // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
+    auto time_before = std::chrono::system_clock::now();
     step();
     auto time_after = std::chrono::system_clock::now();
-    time_running += std::chrono::duration_cast<std::chrono::microseconds>(
+    int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-
+    printf("%i,", time_running);
+    print_stats();
+    //printf("\n");
     SDL_Delay(25);
   }
+
+  return 0;
 }
 
 }  // namespace wa_tor
