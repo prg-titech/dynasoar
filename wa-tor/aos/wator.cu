@@ -13,8 +13,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 800
-#define GRID_SIZE_Y 800
+#define GRID_SIZE_X 2048
+#define GRID_SIZE_Y 1024
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -374,7 +374,7 @@ __global__ void print_checksum() {
     chksum += *(fish[i]->position()->random_state()) % 601;
   }
 
-  printf("%" PRIu64, chksum);
+  printf("%" PRIu64 "\n", chksum);
 }
 
 __global__ void reset_fish_array() {
@@ -507,7 +507,7 @@ __global__ void init_memory_system() {
 
 void initialize() {
   //init the heap
-  initHeap(64*1024U*1024U);
+  initHeap(256*1024U*1024U);
 
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -578,14 +578,13 @@ void print_stats() {
   generate_fish_array();
   generate_shark_array();
 
-  printf("\n Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
+  //printf("\n Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  printf("           ");
 }
 
 int main(int argc, char* arvg[]) {
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1024*1024*1024);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
 
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
@@ -622,15 +621,15 @@ int main(int argc, char* arvg[]) {
   initialize();
   render();
 
-  printf("Computing...");
-  int time_running = 0;
+  //printf("Computing...\n");
+  //int time_running = 0;
 
-  for (int i = 0; ; ++i) {
-    if (i%60==0) {
-      print_stats();
-      render();
-      printf("    Time: %i usec", time_running);
-      time_running = 0;
+  for (int i = 0; i<500; ++i) {
+    if (i%50==0) {
+      //print_stats();
+      //render();
+      //printf("    Time: %i usec", time_running);
+      //time_running = 0;
     }
 
     SDL_Event e;
@@ -643,15 +642,21 @@ int main(int argc, char* arvg[]) {
       }
     }
 
-    auto time_before = std::chrono::system_clock::now();
     generate_shark_fish_arrays();
+
+    // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
+    auto time_before = std::chrono::system_clock::now();
     step();
     auto time_after = std::chrono::system_clock::now();
-    time_running += std::chrono::duration_cast<std::chrono::microseconds>(
+    int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-  
+    printf("%i,", time_running);
+    print_stats();
+    //printf("\n");
     SDL_Delay(25);
   }
+
+  return 0;
 }
 
 }  // namespace wa_tor
