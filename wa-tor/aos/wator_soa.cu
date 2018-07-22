@@ -10,8 +10,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 800
-#define GRID_SIZE_Y 400
+#define GRID_SIZE_X 2048
+#define GRID_SIZE_Y 1024
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -435,18 +435,68 @@ __global__ void find_sharks() {
   }
 }
 
-void generate_fish_array() {
+__global__ void find_fish_soa() {
+  assert(gridDim.x * blockDim.x == 1);
+  num_fish = 0;
+  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
+    if (memory_allocator.is_block_allocated<Fish>(i)) {
+      auto* block = memory_allocator.get_block<Fish>(i);
+      for (int j = 0; j < 64; ++j) {
+        if (block->is_slot_allocated(j)) {
+          fish[num_fish++] =
+              reinterpret_cast<Fish*>(reinterpret_cast<uintptr_t>(block) + j);
+        }
+      }
+    }
+  }
+}
+
+__global__ void find_sharks_soa() {
+  assert(gridDim.x * blockDim.x == 1);
+  num_sharks = 0;
+  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
+    if (memory_allocator.is_block_allocated<Shark>(i)) {
+      auto* block = memory_allocator.get_block<Shark>(i);
+      for (int j = 0; j < 64; ++j) {
+        if (block->is_slot_allocated(j)) {
+          sharks[num_sharks++] =
+              reinterpret_cast<Shark*>(reinterpret_cast<uintptr_t>(block) + j);
+        }
+      }
+    }
+  }
+}
+
+void generate_fish_array_soa() {
+  find_fish_soa<<<1,1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+void generate_shark_array_soa() {
+  find_sharks_soa<<<1,1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+void generate_fish_array_no_soa() {
   reset_fish_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
   find_fish<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-void generate_shark_array() {
+void generate_shark_array_no_soa() {
   reset_shark_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
   find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
+}
+
+void generate_fish_array() {
+  generate_fish_array_soa();
+}
+
+void generate_shark_array() {
+  generate_shark_array_soa();
 }
 
 

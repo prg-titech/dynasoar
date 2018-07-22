@@ -92,13 +92,13 @@ class Bitmap {
   // Return the index of an allocated bit, utilizing the hierarchical bitmap
   // structure.
   template<bool Retry = false>
-  __DEV__ SizeT find_allocated() const {
+  __DEV__ SizeT find_allocated(int seed) const {
     SizeT index;
 
     INIT_RETRY;
 
     do {
-      index = find_allocated_private();
+      index = find_allocated_private(seed);
     } while (Retry && index == kIndexError && CONTINUE_RETRY);
 
     assert(!Retry || index != kIndexError);
@@ -114,8 +114,9 @@ class Bitmap {
 
     INIT_RETRY;
 
+    int retries = 0;
     do {
-      index = find_allocated<true>();
+      index = find_allocated<true>(retries++);
       success = deallocate<false>(index); // if false: other thread was faster
     } while (!success && CONTINUE_RETRY);
 
@@ -159,11 +160,11 @@ class Bitmap {
   // of the container in which to search. On the lowest level, the container ID
   // equals the bit index.
   // TODO: Sould be private.
-  __DEV__ SizeT find_allocated_private() const {
+  __DEV__ SizeT find_allocated_private(int seed) const {
     SizeT container;
 
     if (kHasNested) {
-      container = data_.nested_find_allocated_private();
+      container = data_.nested_find_allocated_private(seed);
 
       if (container == kIndexError) {
         return kIndexError;
@@ -172,7 +173,7 @@ class Bitmap {
       container = 0;
     }
 
-    return find_allocated_in_container(container);
+    return find_allocated_in_container(container, seed);
   }
 
   __DEV__ void initialize(bool allocated = false) {
@@ -223,8 +224,8 @@ class Bitmap {
       return nested.deallocate<Retry>(pos);
     }
 
-    __DEV__ SizeT nested_find_allocated_private() const {
-      return nested.find_allocated_private();
+    __DEV__ SizeT nested_find_allocated_private(int seed) const {
+      return nested.find_allocated_private(seed);
     }
 
     __DEV__ void nested_initialize(bool allocated) {
@@ -242,7 +243,7 @@ class Bitmap {
     template<bool Retry>
     __DEV__ bool nested_deallocate(SizeT pos) { assert(false); return false; }
 
-    __DEV__ SizeT nested_find_allocated_private() const {
+    __DEV__ SizeT nested_find_allocated_private(int seed) const {
       assert(false);
       return kIndexError;
     }
@@ -252,9 +253,9 @@ class Bitmap {
 
   // Returns the index of an allocated bit inside a container. Returns
   // kIndexError if not allocated bit was found.
-  __DEV__ SizeT find_allocated_in_container(SizeT container) const {
+  __DEV__ SizeT find_allocated_in_container(SizeT container, int seed) const {
     // TODO: For better performance, choose random one.
-    int selected = find_allocated_bit(data_.containers[container]);
+    int selected = find_allocated_bit(data_.containers[container], seed);
     if (selected == -1) {
       // No space in here.
       return kIndexError;
@@ -268,14 +269,14 @@ class Bitmap {
     return __ffsll(val);
   }
 
-  __DEV__ int find_allocated_bit(ContainerT val) const {
-    return find_allocated_bit_fast(val);
+  __DEV__ int find_allocated_bit(ContainerT val, int seed) const {
+    return find_allocated_bit_fast(val, seed);
   }
 
   // Find index of *some* bit that is set to 1.
   // TODO: Make this more efficient!
-  __DEV__ int find_allocated_bit_fast(ContainerT val) const {
-    unsigned int rotation_len = warp_id() % (sizeof(val)*8);
+  __DEV__ int find_allocated_bit_fast(ContainerT val, int seed) const {
+    unsigned int rotation_len = (seed+warp_id()) % (sizeof(val)*8);
     const ContainerT rotated_val = rotl(val, rotation_len);
 
     int first_bit_pos = __ffsll(rotated_val) - 1;

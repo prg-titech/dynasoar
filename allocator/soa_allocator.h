@@ -238,6 +238,10 @@ class SoaBlock {
     return N - __popcll(free_bitmap);
   }
 
+  __DEV__ bool is_slot_allocated(int index) {
+    return (free_bitmap & (1ULL << index)) == 0;
+  }
+
   // TODO: Should be private.
  public:
   // Dummy area that may be overridden by zero initialization.
@@ -441,9 +445,9 @@ class SoaAllocator {
     do {
       // Retry a couple of times. May reduce fragmentation.
       // TODO: Tune number of retries.
-      int retries = 2;   // retries=2 before
+      int retries = 5;   // retries=2 before
       do {
-        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>();
+        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>(retries);
       } while (block_idx == Bitmap<uint32_t, N>::kIndexError
                && --retries > 0);
 
@@ -567,11 +571,18 @@ class SoaAllocator {
     return counter;
   }
 
+  template<typename T>
+  __DEV__ bool is_block_allocated(uint32_t index) {
+    return allocated_[TupleIndex<T, TupleType>::value][index];
+  }
+
   using TupleType = std::tuple<Types...>;
 
   static const int kNumTypes = std::tuple_size<TupleType>::value;
 
   static const int kBlockMaxSize = TupleMaxBlockSize<TupleType>::value;
+
+  static const uint32_t kN = N;
 
   char data_[N*kBlockMaxSize];
 
