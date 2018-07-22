@@ -29,6 +29,15 @@ __DEV__ T rotl (T v, unsigned int b)
           | (unsigned_promoted_type{v} >> (-mb & count_mask)));
 }
 
+// Seems like this is a scheduler warp ID and may change.
+__forceinline__ __device__ unsigned warp_id()
+{
+    unsigned ret; 
+    asm volatile ("mov.u32 %0, %warpid;" : "=r"(ret));
+    return ret;
+}
+
+
 // Problem: Deadlock if two threads in the same warp want to update the same
 // value. E.g., t0 wants to write "1" and waits for "0" to appear. But t1 cannot
 // write "0" because of thread divergence.
@@ -266,7 +275,7 @@ class Bitmap {
   // Find index of *some* bit that is set to 1.
   // TODO: Make this more efficient!
   __DEV__ int find_allocated_bit_fast(ContainerT val) const {
-    unsigned int rotation_len = threadIdx.x % (sizeof(val)*8);
+    unsigned int rotation_len = warp_id() % (sizeof(val)*8);
     const ContainerT rotated_val = rotl(val, rotation_len);
 
     int first_bit_pos = __ffsll(rotated_val) - 1;
