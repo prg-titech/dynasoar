@@ -6,9 +6,9 @@
 #include <SDL2/SDL2_gfxPrimitives.h>
 
 #include "wa-tor/aos/wator.h"
-#include "wa-tor/aos/scatteralloc_allocator.h"
+//#include "wa-tor/aos/scatteralloc_allocator.h"
 //#include "wa-tor/aos/aos_allocator.h"
-//#include "wa-tor/aos/cuda_allocator.h"
+#include "wa-tor/aos/cuda_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
@@ -584,11 +584,7 @@ void print_stats() {
 }
 
 int main(int argc, char* arvg[]) {
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
-
-  size_t heap_size;
-  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
-  printf("CUDA heap size: %lu\n", heap_size);
+  //cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
 
   // Initialize renderer.
   if (SDL_Init(SDL_INIT_VIDEO)) {
@@ -619,6 +615,9 @@ int main(int argc, char* arvg[]) {
   SDL_RenderPresent(renderer_);
 
   initialize();
+  size_t heap_size;
+  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
+  printf("CUDA heap size: %lu\n", heap_size);
   render();
 
   //printf("Computing...\n");

@@ -19,7 +19,9 @@ namespace wa_tor {
 
   __device__ void initialize_allocator() {}
 
-  void initHeap() {}
+  void initHeap(int bytes) {
+    cudaDeviceSetLimit(cudaLimitMallocHeapSize, bytes);
+  }
 }  // namespace wa_tor
 
 #endif  // WA_TOR_AOS_CUDA_ALLOCATOR_H
