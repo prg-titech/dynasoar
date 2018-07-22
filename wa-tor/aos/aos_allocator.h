@@ -6,7 +6,7 @@
 #include "wa-tor/aos/wator.h"
 
 namespace wa_tor {
-  __device__ AosAllocator<64*64*64, Agent, Fish, Shark> memory_allocator;
+  __device__ AosAllocator<64*64*64*64, Agent, Fish, Shark> memory_allocator;
 
   template<typename T, typename... Args>
   __device__ T* allocate(Args... args) {
@@ -27,7 +27,7 @@ namespace wa_tor {
     memory_allocator.initialize();
   }
 
-  void initHeap() {}
+  void initHeap(int size) {}
 }  // namespace wa_tor
 
 #endif  // WA_TOR_AOS_AOS_ALLOCATOR_H
