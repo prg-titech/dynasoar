@@ -507,7 +507,7 @@ __global__ void init_memory_system() {
 
 void initialize() {
   //init the heap
-  initHeap(256*1024U*1024U);
+  initHeap(512*1024U*1024U);
 
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
