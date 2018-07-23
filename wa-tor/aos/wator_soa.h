@@ -20,7 +20,7 @@ class Agent;
 class Cell {
  private:
   static const int kObjectSize = 49;
-  static const uint8_t kBlockSize = 32;
+  static const uint8_t kBlockSize = 36;
 
 /*
   static const int kObjectSize = 49;
@@ -36,7 +36,7 @@ class Cell {
   // left, top, right, bottom, self
   SoaField<std::array<bool, 5>, 3, 44> neighbor_request_;
 */
-  
+
   // left, top, right, bottom
   Cell* neighbors_[4];
 
@@ -86,10 +86,10 @@ class Agent {
   SoaField<Cell*, 0, 0> position_;
   SoaField<Cell*, 1, 8> new_position_;
   SoaField<uint32_t, 2, 16> random_state_;
-  SoaField<uint8_t, 3, 20> type_identifier_;
+  SoaField<uint8_t, 3, 20> type_identifier_;    // Custom alignment
 
  public:
-  static const int kObjectSize = 21;
+  static const int kObjectSize = 24;
   static const uint8_t kBlockSize = 64;   // Never appears.
 
   // Type ID must correspond to variadic template.
@@ -111,10 +111,10 @@ class Agent {
 
 class Fish : public Agent {
  private:
-  SoaField<uint32_t, 4, 21> egg_timer_;
+  SoaField<uint32_t, 4, 24> egg_timer_;
 
  public:
-  static const int kObjectSize = 25;
+  static const int kObjectSize = 28;
   static const uint8_t kBlockSize = 64;
 
   static const uint8_t kTypeId = 1;
@@ -128,12 +128,12 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  private:
-  SoaField<uint32_t, 4, 21> energy_;
-  SoaField<uint32_t, 5, 25> egg_timer_;
+  SoaField<uint32_t, 4, 24> energy_;
+  SoaField<uint32_t, 5, 28> egg_timer_;
 
  public:
-  static const int kObjectSize = 29;
-  static const uint8_t kBlockSize = 55;
+  static const int kObjectSize = 32;
+  static const uint8_t kBlockSize = 56;
   static const uint8_t kTypeId = 2;
 
   __device__ Shark(uint32_t random_state);
