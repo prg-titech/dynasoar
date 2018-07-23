@@ -15,37 +15,42 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 
 namespace wa_tor {
 
+// Custom std::array because std::array is not available on device.
+template<typename T, size_t N>
+class DevArray {
+ private:
+  T data[N];
+
+ public:
+  __device__ T& operator[](size_t pos) {
+    return data[pos];
+  }
+};
+
 class Agent;
 
 class Cell {
- private:
+ public:
+  static const uint8_t kTypeId = 3;
   static const int kObjectSize = 49;
   static const uint8_t kBlockSize = 36;
 
-/*
-  static const int kObjectSize = 49;
-  static const uint8_t kBlockSize = 32;
-
+ private:
   // left, top, right, bottom
-  SoaField<std::array<Cell*, 4>, 0, 0> position_;
+  SoaField<DevArray<Cell*, 4>, 0, 0> neighbors_;
+  __device__ Cell*& arr_neighbors(size_t index) {
+    return ((DevArray<Cell*, 4>) neighbors_)[index];
+  }
 
   SoaField<Agent*, 1, 32> agent_;
 
   SoaField<uint32_t, 2, 40> random_state_;
 
   // left, top, right, bottom, self
-  SoaField<std::array<bool, 5>, 3, 44> neighbor_request_;
-*/
-
-  // left, top, right, bottom
-  Cell* neighbors_[4];
-
-  Agent* agent_;
-
-  uint32_t random_state_;
-
-  // left, top, right, bottom, self
-  bool neighbor_request_[5];
+  SoaField<DevArray<bool, 5>, 3, 44> neighbor_request_;
+  __device__ bool& arr_neighbor_request(size_t index) {
+    return ((DevArray<bool, 5>) neighbor_request_)[index];
+  }
 
  public:
   __device__ Cell(uint32_t random_state);

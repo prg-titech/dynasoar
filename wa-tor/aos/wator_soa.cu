@@ -21,7 +21,7 @@
 
 namespace wa_tor {
 
-__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark> memory_allocator;
+__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
 
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
@@ -71,7 +71,8 @@ __device__ Agent* Cell::agent() const {
 }
 
 __device__ void Cell::decide() {
-  if (neighbor_request_[4]) {
+  // TODO: Not sure why manual type cast is necessary.
+  if (arr_neighbor_request(4)) {
     // This cell has priority.
     agent_->set_new_position(this);
   } else {
@@ -79,14 +80,14 @@ __device__ void Cell::decide() {
     uint8_t num_candidates = 0;
 
     for (int i = 0; i < 4; ++i) {
-      if (neighbor_request_[i]) {
+      if (arr_neighbor_request(i)) {
         candidates[num_candidates++] = i;
       }
     }
 
     if (num_candidates > 0) {
       uint32_t selected_index = random_number(&random_state_, num_candidates);
-      neighbors_[candidates[selected_index]]->agent()->set_new_position(this);
+      arr_neighbors(candidates[selected_index])->agent()->set_new_position(this);
     }
   }
 }
@@ -107,11 +108,13 @@ __device__ void Cell::enter(Agent* agent) {
 }
 
 __device__ bool Cell::has_fish() const {
-  return agent_ != nullptr && agent_->type_identifier() == Fish::kTypeId;
+  // TODO: Not sure why typecast is necessary.
+  return agent_ != nullptr && ((Agent*)agent_)->type_identifier() == Fish::kTypeId;
 }
 
 __device__ bool Cell::has_shark() const {
-  return agent_ != nullptr && agent_->type_identifier() == Shark::kTypeId;
+  // TODO: Not sure why typecast is necessary.
+  return agent_ != nullptr && ((Agent*)agent_)->type_identifier() == Shark::kTypeId;
 }
 
 __device__ bool Cell::is_free() const {
@@ -125,7 +128,7 @@ __device__ void Cell::leave() {
 
 __device__ void Cell::prepare() {
   for (int i = 0; i < 5; ++i) {
-    neighbor_request_[i] = false;
+    arr_neighbor_request(i) = false;
   }
 }
 
@@ -137,14 +140,14 @@ __device__ void Cell::request_random_fish_neighbor() {
   if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
     // No fish found. Look for free cell.
     if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-      neighbor_request_[4] = true;
+      arr_neighbor_request(4) = true;
     }
   }
 }
 
 __device__ void Cell::request_random_free_neighbor() {
   if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-    neighbor_request_[4] = true;
+    arr_neighbor_request(4) = true;
   }
 }
 
@@ -154,7 +157,7 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
   uint8_t num_candidates = 0;
 
   for (int i = 0; i < 4; ++i) {
-    if ((neighbors_[i]->*predicate)()) {
+    if ((arr_neighbors(i)->*predicate)()) {
       candidates[num_candidates++] = i;
     }
   }
@@ -165,10 +168,10 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
     uint32_t selected_index = random_number(random_state, num_candidates);
     uint8_t selected = candidates[selected_index];
     uint8_t neighbor_index = (selected + 2) % 4;
-    neighbors_[selected]->neighbor_request_[neighbor_index] = true;
+    arr_neighbors(selected)->arr_neighbor_request(neighbor_index) = true;
 
     // Check correctness of neighbor calculation.
-    assert(neighbors_[selected]->neighbors_[neighbor_index] == this);
+    assert(arr_neighbors(selected)->arr_neighbors(neighbor_index) == this);
 
     return true;
   }
@@ -176,10 +179,10 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
 
 __device__ void Cell::set_neighbors(Cell* left, Cell* top,
                                     Cell* right, Cell* bottom) {
-  neighbors_[0] = left;
-  neighbors_[1] = top;
-  neighbors_[2] = right;
-  neighbors_[3] = bottom;
+  arr_neighbors(0) = left;
+  arr_neighbors(1) = top;
+  arr_neighbors(2) = right;
+  arr_neighbors(3) = bottom;
 }
 
 __device__ Agent::Agent(uint32_t random_state, uint8_t type_identifier)
@@ -329,7 +332,7 @@ __global__ void create_cells() {
     uint32_t init_state_int = *reinterpret_cast<uint32_t*>(&init_state);
 
     // Cell* new_cell = new Cell(init_state_int);
-    Cell* new_cell = new Cell(601*x*x*y + init_state_int);
+    Cell* new_cell = allocate<Cell>(601*x*x*y + init_state_int);
     assert(new_cell != nullptr);
     cells[tid] = new_cell;
   }

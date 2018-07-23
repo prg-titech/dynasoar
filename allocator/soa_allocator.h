@@ -266,7 +266,7 @@ class SoaBlock {
   static const int kRawStorageBytes = N*T::kObjectSize;
 
   // Object size must be multiple of 64 bytes.
-  static const int kStorageBytes = ((kRawStorageBytes + N - 1) / N) * N;
+  static const int kStorageBytes = ((kRawStorageBytes + N_Max - 1) / N_Max) * N_Max;
 
   static_assert(N <= N_Max, "Assertion failed: N <= N_Max");
 
