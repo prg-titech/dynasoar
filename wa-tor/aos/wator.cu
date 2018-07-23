@@ -309,7 +309,7 @@ __global__ void create_cells() {
     uint32_t init_state_int = *reinterpret_cast<uint32_t*>(&init_state);
 
     // Cell* new_cell = new Cell(init_state_int);
-    Cell* new_cell = new Cell(601*x*x*y + init_state_int);
+    Cell* new_cell = allocate<Cell>(601*x*x*y + init_state_int);
     assert(new_cell != nullptr);
     cells[tid] = new_cell;
   }
@@ -506,7 +506,7 @@ __global__ void init_memory_system() {
 
 void initialize() {
   //init the heap
-  initHeap();
+  initHeap(512*1024*1024);
 
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
