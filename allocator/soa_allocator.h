@@ -26,26 +26,21 @@ __forceinline__ __device__ unsigned int __lanemask_lt() {
   return mask;
 }
 
-template<typename T, int N, int Field, int Offset>
+template<typename T, int Field, int Offset>
 class SoaField {
  private:
-  // TODO: Avoid duplication from SoaAllocator.
-  static const uint8_t kObjectAddrBits = 6;
-  static const uint32_t kNumBlockElements = 1ULL << kObjectAddrBits;
-  static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
-  static const uint64_t kBlockAddrBitmask = ~kObjectAddrBitmask;
-
   // Offset of data section within SOA buffer.
   // TODO: Do not hard-code.
   static const int kSoaBufferOffset = 128;
 
   __DEV__ T* data_ptr() {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
-    uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
-    assert(obj_id < N);
-    uintptr_t block_base = ptr_base & kBlockAddrBitmask;
+    uint8_t block_size = ptr_base >> 48;    // Should be truncated.
+    uint8_t obj_id = static_cast<uint8_t>(ptr_base) & static_cast<uint8_t>(0x3F);   // Truncated.
+    uintptr_t block_base = ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0);
+    assert(obj_id < block_size);
     T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + N*Offset);
+        block_base + kSoaBufferOffset + block_size*Offset);
 
     assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
     assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
@@ -54,11 +49,12 @@ class SoaField {
 
   __DEV__ T* data_ptr() const {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
-    uintptr_t obj_id = ptr_base & kObjectAddrBitmask;
-    assert(obj_id < N);
-    uintptr_t block_base = ptr_base & kBlockAddrBitmask;
+    uint8_t block_size = ptr_base >> 48;    // Should be truncated.
+    uint8_t obj_id = static_cast<uint8_t>(ptr_base) & static_cast<uint8_t>(0x3F);   // Truncated.
+    uintptr_t block_base = ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0);
+    assert(obj_id < block_size);
     T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + N*Offset);
+        block_base + kSoaBufferOffset + block_size*Offset);
 
     assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
     assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
@@ -138,6 +134,19 @@ class SoaBlock {
     __threadfence();
     free_bitmap = ~0ULL;
     assert(__popcll(free_bitmap) == 64);
+  }
+
+  __DEV__ T* make_pointer(uint8_t index) {
+    uintptr_t ptr_as_int = index;
+    uintptr_t block_size = N;
+    ptr_as_int |= block_size << 48;
+    uintptr_t type_id = T::kTypeId;
+    ptr_as_int |= type_id << 56;
+    uintptr_t block_ptr = reinterpret_cast<uintptr_t>(this);
+    assert(block_ptr < (1ULL << 49));   // Only 48 bits used in address space.
+    assert((block_ptr & 0x3F) == 0);    // Block is aligned.
+    ptr_as_int |= block_ptr;
+    return reinterpret_cast<T*>(ptr_as_int);
   }
 
   __DEV__ uint64_t invalidate() {
@@ -289,9 +298,9 @@ template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
  private:
   static const uint8_t kObjectAddrBits = 6;
-  static const uint32_t kNumBlockElements = 1ULL << kObjectAddrBits;
+  static const uint32_t kNumBlockElements = 64;
   static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
-  static const uint64_t kBlockAddrBitmask = ~kObjectAddrBitmask;
+  static const uint64_t kBlockAddrBitmask = 0xFFFFFFFFFFC0;
   static_assert(kNumBlockElements == 64,
                 "Not implemented: Block size != 64.");
   static const int N = N_Objects / kNumBlockElements;
@@ -396,15 +405,15 @@ class SoaAllocator {
 
     } while (result == nullptr);
 
-    assert(reinterpret_cast<char*>(result) >= data_);
-    assert(reinterpret_cast<char*>(result) < data_ + N*kBlockMaxSize);
+    //assert(reinterpret_cast<char*>(result) >= data_);
+    //assert(reinterpret_cast<char*>(result) < data_ + N*kBlockMaxSize);
     return new(result) T(args...);
   }
 
   template<class T>
   __DEV__ void free(T* obj) {
-    assert(reinterpret_cast<char*>(obj) >= data_);
-    assert(reinterpret_cast<char*>(obj) < data_ + N*kBlockMaxSize);
+    //assert(reinterpret_cast<char*>(obj) >= data_);
+    //assert(reinterpret_cast<char*>(obj) < data_ + N*kBlockMaxSize);
 
     obj->~T();
     const uint32_t block_idx = get_block_idx<T>(obj);
@@ -476,9 +485,6 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ uint32_t get_block_idx(T* ptr) {
-    assert(reinterpret_cast<char*>(ptr) >= data_);
-    assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
-
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
 
@@ -488,9 +494,6 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ uint32_t get_object_id(T* ptr) {
-    assert(reinterpret_cast<char*>(ptr) >= data_);
-    assert(reinterpret_cast<char*>(ptr) < data_ + N*kBlockMaxSize);
-
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     return ptr_as_int & kObjectAddrBitmask; 
   }
@@ -534,9 +537,7 @@ class SoaAllocator {
 
     if (position > 0) {
       // Allocation successful.
-      uintptr_t block_base = reinterpret_cast<uintptr_t>(get_block<T>(block_idx));
-      assert(block_base >= reinterpret_cast<uintptr_t>(DBG_data_storage));
-      return reinterpret_cast<T*>(block_base + position - 1);
+      return get_block<T>(block_idx)->make_pointer(position - 1);
     } else {
       return nullptr;
     }

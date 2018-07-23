@@ -13,8 +13,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-static const int kBlockSize = 64;
-
 namespace wa_tor {
 
 class Agent;
@@ -67,10 +65,10 @@ class Cell {
 
 class Agent {
  protected:
-  SoaField<Cell*, kBlockSize, 0, 0> position_;
-  SoaField<Cell*, kBlockSize, 1, 8> new_position_;
-  SoaField<uint32_t, kBlockSize, 2, 16> random_state_;
-  SoaField<uint8_t, kBlockSize, 3, 20> type_identifier_;
+  SoaField<Cell*, 0, 0> position_;
+  SoaField<Cell*, 1, 8> new_position_;
+  SoaField<uint32_t, 2, 16> random_state_;
+  SoaField<uint8_t, 3, 20> type_identifier_;
 
  public:
   static const int kObjectSize = 21;
@@ -94,7 +92,7 @@ class Agent {
 
 class Fish : public Agent {
  private:
-  SoaField<uint32_t, kBlockSize, 4, 21> egg_timer_;
+  SoaField<uint32_t, 4, 21> egg_timer_;
 
  public:
   static const int kObjectSize = 25;
@@ -110,8 +108,8 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  private:
-  SoaField<uint32_t, kBlockSize, 4, 21> energy_;
-  SoaField<uint32_t, kBlockSize, 5, 25> egg_timer_;
+  SoaField<uint32_t, 4, 21> energy_;
+  SoaField<uint32_t, 5, 25> egg_timer_;
 
  public:
   static const int kObjectSize = 29;

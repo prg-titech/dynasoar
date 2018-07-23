@@ -443,8 +443,7 @@ __global__ void find_fish_soa() {
       auto* block = memory_allocator.get_block<Fish>(i);
       for (int j = 0; j < 64; ++j) {
         if (block->is_slot_allocated(j)) {
-          fish[num_fish++] =
-              reinterpret_cast<Fish*>(reinterpret_cast<uintptr_t>(block) + j);
+          fish[num_fish++] = block->make_pointer(j);
         }
       }
     }
@@ -459,8 +458,7 @@ __global__ void find_sharks_soa() {
       auto* block = memory_allocator.get_block<Shark>(i);
       for (int j = 0; j < 64; ++j) {
         if (block->is_slot_allocated(j)) {
-          sharks[num_sharks++] =
-              reinterpret_cast<Shark*>(reinterpret_cast<uintptr_t>(block) + j);
+          sharks[num_sharks++] = block->make_pointer(j);
         }
       }
     }
