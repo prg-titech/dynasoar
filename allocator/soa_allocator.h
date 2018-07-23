@@ -201,8 +201,7 @@ class SoaBlock {
 
     do {
       // Bit set to 1 if slot is free.
-      unsigned int rotation_len = warp_id() % 64;
-      unsigned long long int updated_mask = rotl(free_bitmap, rotation_len);
+      unsigned long long int updated_mask = free_bitmap;
 
       // If there are not enough free slots, allocate as many as possible.
       int free_slots = __popcll(updated_mask);
@@ -219,8 +218,7 @@ class SoaBlock {
         // Clear bit at position `next_bit_pos` in updated mask.
         updated_mask &= updated_mask - 1;
         // Save location of selected bit.
-        int next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
-        newly_selected_bits |= 1ULL << next_bit_pos_unrot;
+        newly_selected_bits |= 1ULL << next_bit_pos;
       }
 
       assert(__popcll(newly_selected_bits) == allocation_size);
@@ -459,9 +457,9 @@ class SoaAllocator {
     do {
       // Retry a couple of times. May reduce fragmentation.
       // TODO: Tune number of retries.
-      int retries = 5;   // retries=2 before
+      int retries = 2;   // retries=2 before
       do {
-        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>(retries);
+        block_idx = active_[TupleIndex<T, TupleType>::value].template find_allocated<false>();
       } while (block_idx == Bitmap<uint32_t, N>::kIndexError
                && --retries > 0);
 

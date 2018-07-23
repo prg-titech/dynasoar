@@ -29,15 +29,6 @@ __DEV__ T rotl (T v, unsigned int b)
           | (unsigned_promoted_type{v} >> (-mb & count_mask)));
 }
 
-// Seems like this is a scheduler warp ID and may change.
-__forceinline__ __device__ unsigned warp_id()
-{
-    unsigned ret; 
-    asm volatile ("mov.u32 %0, %warpid;" : "=r"(ret));
-    return ret;
-}
-
-
 // Problem: Deadlock if two threads in the same warp want to update the same
 // value. E.g., t0 wants to write "1" and waits for "0" to appear. But t1 cannot
 // write "0" because of thread divergence.
@@ -92,13 +83,13 @@ class Bitmap {
   // Return the index of an allocated bit, utilizing the hierarchical bitmap
   // structure.
   template<bool Retry = false>
-  __DEV__ SizeT find_allocated(int seed) const {
+  __DEV__ SizeT find_allocated() const {
     SizeT index;
 
     INIT_RETRY;
 
     do {
-      index = find_allocated_private(seed);
+      index = find_allocated_private();
     } while (Retry && index == kIndexError && CONTINUE_RETRY);
 
     assert(!Retry || index != kIndexError);
@@ -114,9 +105,8 @@ class Bitmap {
 
     INIT_RETRY;
 
-    int retries = 0;
     do {
-      index = find_allocated<true>(retries++);
+      index = find_allocated<true>();
       success = deallocate<false>(index); // if false: other thread was faster
     } while (!success && CONTINUE_RETRY);
 
@@ -160,11 +150,11 @@ class Bitmap {
   // of the container in which to search. On the lowest level, the container ID
   // equals the bit index.
   // TODO: Sould be private.
-  __DEV__ SizeT find_allocated_private(int seed) const {
+  __DEV__ SizeT find_allocated_private() const {
     SizeT container;
 
     if (kHasNested) {
-      container = data_.nested_find_allocated_private(seed);
+      container = data_.nested_find_allocated_private();
 
       if (container == kIndexError) {
         return kIndexError;
@@ -173,7 +163,7 @@ class Bitmap {
       container = 0;
     }
 
-    return find_allocated_in_container(container, seed);
+    return find_allocated_in_container(container);
   }
 
   __DEV__ void initialize(bool allocated = false) {
@@ -224,8 +214,8 @@ class Bitmap {
       return nested.deallocate<Retry>(pos);
     }
 
-    __DEV__ SizeT nested_find_allocated_private(int seed) const {
-      return nested.find_allocated_private(seed);
+    __DEV__ SizeT nested_find_allocated_private() const {
+      return nested.find_allocated_private();
     }
 
     __DEV__ void nested_initialize(bool allocated) {
@@ -243,7 +233,7 @@ class Bitmap {
     template<bool Retry>
     __DEV__ bool nested_deallocate(SizeT pos) { assert(false); return false; }
 
-    __DEV__ SizeT nested_find_allocated_private(int seed) const {
+    __DEV__ SizeT nested_find_allocated_private() const {
       assert(false);
       return kIndexError;
     }
@@ -253,9 +243,9 @@ class Bitmap {
 
   // Returns the index of an allocated bit inside a container. Returns
   // kIndexError if not allocated bit was found.
-  __DEV__ SizeT find_allocated_in_container(SizeT container, int seed) const {
+  __DEV__ SizeT find_allocated_in_container(SizeT container) const {
     // TODO: For better performance, choose random one.
-    int selected = find_allocated_bit(data_.containers[container], seed);
+    int selected = find_allocated_bit(data_.containers[container]);
     if (selected == -1) {
       // No space in here.
       return kIndexError;
@@ -269,14 +259,14 @@ class Bitmap {
     return __ffsll(val);
   }
 
-  __DEV__ int find_allocated_bit(ContainerT val, int seed) const {
-    return find_allocated_bit_fast(val, seed);
+  __DEV__ int find_allocated_bit(ContainerT val) const {
+    return find_allocated_bit_fast(val);
   }
 
   // Find index of *some* bit that is set to 1.
   // TODO: Make this more efficient!
-  __DEV__ int find_allocated_bit_fast(ContainerT val, int seed) const {
-    unsigned int rotation_len = (seed+warp_id()) % (sizeof(val)*8);
+  __DEV__ int find_allocated_bit_fast(ContainerT val) const {
+    unsigned int rotation_len = threadIdx.x % (sizeof(val)*8);
     const ContainerT rotated_val = rotl(val, rotation_len);
 
     int first_bit_pos = __ffsll(rotated_val) - 1;

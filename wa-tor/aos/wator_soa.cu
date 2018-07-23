@@ -10,8 +10,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 2048
-#define GRID_SIZE_Y 1024
+#define GRID_SIZE_X 400
+#define GRID_SIZE_Y 300
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -389,11 +389,11 @@ __global__ void print_checksum() {
 
   // Sorting of the array does not matter in the calculation here.
   for (int i = 0; i < num_sharks; ++i) {
-    chksum += *(sharks[i]->position()->random_state()) % 601;
+    //chksum += *(sharks[i]->position()->random_state()) % 601;
   }
 
   for (int i = 0; i < num_fish; ++i) {
-    chksum += *(fish[i]->position()->random_state()) % 601;
+    //chksum += *(fish[i]->position()->random_state()) % 601;
   }
 
   uint32_t fish_use = memory_allocator.DBG_used_slots<Fish>();
