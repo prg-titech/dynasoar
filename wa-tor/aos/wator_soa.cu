@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -444,7 +444,7 @@ __global__ void find_fish_soa() {
   for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
     if (memory_allocator.is_block_allocated<Fish>(i)) {
       auto* block = memory_allocator.get_block<Fish>(i);
-      for (int j = 0; j < 64; ++j) {
+      for (int j = 0; j < Fish::kBlockSize; ++j) {
         if (block->is_slot_allocated(j)) {
           fish[num_fish++] = block->make_pointer(j);
         }
@@ -459,7 +459,7 @@ __global__ void find_sharks_soa() {
   for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
     if (memory_allocator.is_block_allocated<Shark>(i)) {
       auto* block = memory_allocator.get_block<Shark>(i);
-      for (int j = 0; j < 64; ++j) {
+      for (int j = 0; j < Shark::kBlockSize; ++j) {
         if (block->is_slot_allocated(j)) {
           sharks[num_sharks++] = block->make_pointer(j);
         }
