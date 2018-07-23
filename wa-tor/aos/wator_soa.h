@@ -15,19 +15,42 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 
 namespace wa_tor {
 
+// Custom std::array because std::array is not available on device.
+template<typename T, size_t N>
+class DevArray {
+ private:
+  T data[N];
+
+ public:
+  __device__ T& operator[](size_t pos) {
+    return data[pos];
+  }
+};
+
 class Agent;
 
 class Cell {
+ public:
+  static const uint8_t kTypeId = 3;
+  static const int kObjectSize = 49;
+  static const uint8_t kBlockSize = 36;
+
  private:
   // left, top, right, bottom
-  Cell* neighbors_[4];
+  SoaField<DevArray<Cell*, 4>, 0, 0> neighbors_;
+  __device__ Cell*& arr_neighbors(size_t index) {
+    return ((DevArray<Cell*, 4>) neighbors_)[index];
+  }
 
-  Agent* agent_;
+  SoaField<Agent*, 1, 32> agent_;
 
-  uint32_t random_state_;
+  SoaField<uint32_t, 2, 40> random_state_;
 
   // left, top, right, bottom, self
-  bool neighbor_request_[5];
+  SoaField<DevArray<bool, 5>, 3, 44> neighbor_request_;
+  __device__ bool& arr_neighbor_request(size_t index) {
+    return ((DevArray<bool, 5>) neighbor_request_)[index];
+  }
 
  public:
   __device__ Cell(uint32_t random_state);
@@ -68,10 +91,11 @@ class Agent {
   SoaField<Cell*, 0, 0> position_;
   SoaField<Cell*, 1, 8> new_position_;
   SoaField<uint32_t, 2, 16> random_state_;
-  SoaField<uint8_t, 3, 20> type_identifier_;
+  SoaField<uint8_t, 3, 20> type_identifier_;    // Custom alignment
 
  public:
-  static const int kObjectSize = 21;
+  static const int kObjectSize = 24;
+  static const uint8_t kBlockSize = 64;   // Never appears.
 
   // Type ID must correspond to variadic template.
   static const uint8_t kTypeId = 0;
@@ -92,10 +116,11 @@ class Agent {
 
 class Fish : public Agent {
  private:
-  SoaField<uint32_t, 4, 21> egg_timer_;
+  SoaField<uint32_t, 4, 24> egg_timer_;
 
  public:
-  static const int kObjectSize = 25;
+  static const int kObjectSize = 28;
+  static const uint8_t kBlockSize = 64;
 
   static const uint8_t kTypeId = 1;
 
@@ -108,12 +133,12 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  private:
-  SoaField<uint32_t, 4, 21> energy_;
-  SoaField<uint32_t, 5, 25> egg_timer_;
+  SoaField<uint32_t, 4, 24> energy_;
+  SoaField<uint32_t, 5, 28> egg_timer_;
 
  public:
-  static const int kObjectSize = 29;
-
+  static const int kObjectSize = 32;
+  static const uint8_t kBlockSize = 56;
   static const uint8_t kTypeId = 2;
 
   __device__ Shark(uint32_t random_state);

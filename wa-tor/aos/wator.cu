@@ -310,7 +310,7 @@ __global__ void create_cells() {
     uint32_t init_state_int = *reinterpret_cast<uint32_t*>(&init_state);
 
     // Cell* new_cell = new Cell(init_state_int);
-    Cell* new_cell = new Cell(601*x*x*y + init_state_int);
+    Cell* new_cell = allocate<Cell>(601*x*x*y + init_state_int);
     assert(new_cell != nullptr);
     cells[tid] = new_cell;
   }
