@@ -6,9 +6,10 @@
 #include <SDL2/SDL2_gfxPrimitives.h>
 
 #include "wa-tor/aos/wator.h"
+#include "wa-tor/aos/halloc_allocator.h"
 //#include "wa-tor/aos/scatteralloc_allocator.h"
 //#include "wa-tor/aos/aos_allocator.h"
-#include "wa-tor/aos/cuda_allocator.h"
+//#include "wa-tor/aos/cuda_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4

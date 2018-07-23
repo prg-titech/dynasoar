@@ -468,6 +468,21 @@ __global__ void find_sharks_soa() {
   }
 }
 
+__global__ void find_cells_soa() {
+  assert(gridDim.x * blockDim.x == 1);
+  uint32_t num_cells = 0;
+  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
+    if (memory_allocator.is_block_allocated<Cell>(i)) {
+      auto* block = memory_allocator.get_block<Cell>(i);
+      for (int j = 0; j < Cell::kBlockSize; ++j) {
+        if (block->is_slot_allocated(j)) {
+          cells[num_cells++] = block->make_pointer(j);
+        }
+      }
+    }
+  }
+}
+
 void generate_fish_array_soa() {
   find_fish_soa<<<1,1>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -695,6 +710,10 @@ int main(int argc, char* arvg[]) {
     printf("-1,");
     print_stats();
   render();
+
+  // To ensure cells are accessed properly (SOA).
+  find_cells_soa<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 
   //printf("Computing...");
 
