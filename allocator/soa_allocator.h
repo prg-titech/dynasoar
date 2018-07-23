@@ -125,15 +125,20 @@ enum DeallocationState : int8_t {
   kRegularDealloc
 };
 
-template<class T, int N>
+template<class T, int N_Max>
 class SoaBlock {
  public:
+  static const int N = T::kBlockSize;
+
+  static const unsigned long long int kBitmapInitState =
+      N == 64 ? (~0ULL) : ((1ULL << N) - 1);
+
   __DEV__ SoaBlock() {
-    assert(reinterpret_cast<uintptr_t>(this) % N == 0);   // Alignment.
+    assert(reinterpret_cast<uintptr_t>(this) % N_Max == 0);   // Alignment.
     type_id = T::kTypeId;
     __threadfence();
-    free_bitmap = ~0ULL;
-    assert(__popcll(free_bitmap) == 64);
+    free_bitmap = kBitmapInitState;
+    assert(__popcll(free_bitmap) == N);
   }
 
   __DEV__ T* make_pointer(uint8_t index) {
@@ -151,7 +156,7 @@ class SoaBlock {
 
   __DEV__ uint64_t invalidate() {
     auto old_free_bitmap = atomicExch(&free_bitmap, 0ULL);
-    if (~old_free_bitmap == 0ULL) {
+    if (old_free_bitmap == kBitmapInitState) {
       return true;
     } else {
       free_bitmap = old_free_bitmap;
@@ -263,14 +268,14 @@ class SoaBlock {
   // Object size must be multiple of 64 bytes.
   static const int kStorageBytes = ((kRawStorageBytes + N - 1) / N) * N;
 
-  static_assert(N == 64, "Not implemented: N != 64.");
+  static_assert(N <= N_Max, "Assertion failed: N <= N_Max");
 
   // Data storage.
   char data_[kStorageBytes];
 };
 
 // Get largest SOA block size among all tuple elements.
-// TODO: Assuming block size of 64.
+// TODO: Assuming max. block size of 64.
 template<class Tuple>
 struct TupleMaxBlockSize;
 
@@ -278,13 +283,13 @@ template<class T, class... Types>
 struct TupleMaxBlockSize<std::tuple<T, Types...>> {
   static const size_t value =
       sizeof(T) > TupleMaxBlockSize<std::tuple<Types...>>::value
-          ? sizeof(SoaBlock<T, 64>)
+          ? sizeof(SoaBlock<T, /*N_Max=*/ 64>)
           : TupleMaxBlockSize<std::tuple<Types...>>::value;
 };
 
 template<class T>
 struct TupleMaxBlockSize<std::tuple<T>> {
-  static const size_t value = sizeof(SoaBlock<T, 64>);
+  static const size_t value = sizeof(SoaBlock<T, /*N_Max=*/ 64>);
 };
 
 template<uint32_t N_Objects, class... Types>

@@ -19,6 +19,24 @@ class Agent;
 
 class Cell {
  private:
+  static const int kObjectSize = 49;
+  static const uint8_t kBlockSize = 32;
+
+/*
+  static const int kObjectSize = 49;
+  static const uint8_t kBlockSize = 32;
+
+  // left, top, right, bottom
+  SoaField<std::array<Cell*, 4>, 0, 0> position_;
+
+  SoaField<Agent*, 1, 32> agent_;
+
+  SoaField<uint32_t, 2, 40> random_state_;
+
+  // left, top, right, bottom, self
+  SoaField<std::array<bool, 5>, 3, 44> neighbor_request_;
+*/
+  
   // left, top, right, bottom
   Cell* neighbors_[4];
 
@@ -72,6 +90,7 @@ class Agent {
 
  public:
   static const int kObjectSize = 21;
+  static const uint8_t kBlockSize = 64;   // Never appears.
 
   // Type ID must correspond to variadic template.
   static const uint8_t kTypeId = 0;
@@ -96,6 +115,7 @@ class Fish : public Agent {
 
  public:
   static const int kObjectSize = 25;
+  static const uint8_t kBlockSize = 64;
 
   static const uint8_t kTypeId = 1;
 
@@ -113,7 +133,7 @@ class Shark : public Agent {
 
  public:
   static const int kObjectSize = 29;
-
+  static const uint8_t kBlockSize = 55;
   static const uint8_t kTypeId = 2;
 
   __device__ Shark(uint32_t random_state);
