@@ -90,6 +90,18 @@ class AosAllocator {
     free(typed);
   }
 
+  template<typename T>
+  __DEV__ bool is_allocated(uint32_t index) {
+    return allocated_[TupleIndex<T, TupleType>::value][index];
+  }
+
+  template<typename T>
+  __DEV__ T* get_obj(uint32_t index) {
+    return reinterpret_cast<T*>(data_location(index));
+  }
+
+  static const uint32_t kN = N;
+  
  private:
   using TupleType = std::tuple<Types...>;
 
