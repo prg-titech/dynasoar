@@ -3,7 +3,6 @@
 #include <chrono>
 #include <stdio.h>
 #include <assert.h>
-#include <SDL2/SDL2_gfxPrimitives.h>
 
 #include "wa-tor/aos/wator.h"
 #include "wa-tor/aos/halloc_allocator.h"
@@ -543,37 +542,9 @@ void update_gui_map() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-// SDL helper variables.
-SDL_Window* window_;
-SDL_Renderer* renderer_;
-
 int h_num_fish = 0;
 int h_num_sharks = 0;
 
-
-void render() {
-  update_gui_map();
-
-  h_num_fish = 0;
-  h_num_sharks = 0;
-
-  for (int i = 0; i < GRID_SIZE_X*GRID_SIZE_Y; ++i) {
-    int x = i % GRID_SIZE_X;
-    int y = i / GRID_SIZE_X;
-
-    if (gui_map[i] == Fish::kTypeId) {
-      pixelRGBA(renderer_, x, y, 0, 255, 0, 255);
-      h_num_fish++;
-    } else if (gui_map[i] == Shark::kTypeId) {
-      pixelRGBA(renderer_, x, y, 255, 0, 0, 255);
-      h_num_sharks++;
-    } else {
-      pixelRGBA(renderer_, x, y, 0, 0, 0, 255);
-    }
-  }
-
-  SDL_RenderPresent(renderer_);
-}
 
 void print_stats() {
   generate_fish_array();
@@ -587,39 +558,10 @@ void print_stats() {
 int main(int argc, char* arvg[]) {
   //cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
 
-  // Initialize renderer.
-  if (SDL_Init(SDL_INIT_VIDEO)) {
-    printf("SDL_Init Error: %s", SDL_GetError());
-    exit(1);
-  }
-
-  window_ = SDL_CreateWindow("Wa-Tor", 100, 100,
-                             GRID_SIZE_X, GRID_SIZE_Y, SDL_WINDOW_OPENGL);
-  if (window_ == NULL) { 
-    printf("SDL_CreateWindow Error: %s", SDL_GetError());
-    SDL_Quit();
-    exit(2);
-  }
-
-  renderer_ = SDL_CreateRenderer(window_, -1,
-      SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  if (renderer_ == NULL) { 
-    SDL_DestroyWindow(window_);
-    printf("SDL_CreateRenderer Error: %s", SDL_GetError());
-    SDL_Quit();
-    exit(3);
-  }
-
-  // Draw black background.
-  SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-  SDL_RenderClear(renderer_);
-  SDL_RenderPresent(renderer_);
-
   initialize();
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
   printf("CUDA heap size: %lu\n", heap_size);
-  render();
 
   //printf("Computing...\n");
   //int time_running = 0;
@@ -630,16 +572,6 @@ int main(int argc, char* arvg[]) {
       //render();
       //printf("    Time: %i usec", time_running);
       //time_running = 0;
-    }
-
-    SDL_Event e;
-    if (SDL_PollEvent(&e)) {
-      switch (e.type) {
-        case SDL_QUIT:
-          printf("\n");
-          exit(0);
-          break;
-      }
     }
 
     generate_shark_fish_arrays();
@@ -653,7 +585,6 @@ int main(int argc, char* arvg[]) {
     printf("%i,", time_running);
     print_stats();
     //printf("\n");
-    SDL_Delay(25);
   }
 
   return 0;
