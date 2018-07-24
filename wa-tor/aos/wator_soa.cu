@@ -3,6 +3,7 @@
 #include <chrono>
 #include <stdio.h>
 #include <assert.h>
+#include <inttypes.h>
 
 #include "wa-tor/aos/wator_soa.h"
 
