@@ -9,9 +9,29 @@ typedef unsigned int uint;
 
 using namespace mallocMC;
 
+struct ScatterHeapConfig : mallocMC::CreationPolicies::Scatter<>::HeapProperties{
+    typedef boost::mpl::int_<4096>  pagesize;
+    typedef boost::mpl::int_<8>     accessblocks;
+    typedef boost::mpl::int_<16>    regionsize;
+    typedef boost::mpl::int_<2>     wastefactor;
+    typedef boost::mpl::bool_<false> resetfreedpages;
+};
+
+struct ScatterHashConfig : mallocMC::CreationPolicies::Scatter<>::HashingProperties{
+    typedef boost::mpl::int_<38183> hashingK;
+    typedef boost::mpl::int_<17497> hashingDistMP;
+    typedef boost::mpl::int_<1>     hashingDistWP;
+    typedef boost::mpl::int_<1>     hashingDistWPRel;
+};
+
+// configure the DistributionPolicy "XMallocSIMD"
+struct DistributionConfig{
+  typedef ScatterHeapConfig::pagesize pagesize;
+};
+
 typedef mallocMC::Allocator<
-  CreationPolicies::Scatter<>,
-  DistributionPolicies::XMallocSIMD<>,
+  CreationPolicies::Scatter<ScatterHeapConfig, ScatterHashConfig>,
+  DistributionPolicies::XMallocSIMD<DistributionConfig>,
   OOMPolicies::ReturnNull,
   ReservePoolPolicies::SimpleCudaMalloc,
   AlignmentPolicies::Noop
@@ -46,7 +66,7 @@ namespace wa_tor {
   }
 
   void initHeap(int bytes) {
-    auto* sa = new ScatterAllocator( 1U * 512U * 1024U * 1024U ); // heap size of 512MiB
+    auto* sa = new ScatterAllocator( 1U * 1024U * 1024U * 1024U ); // heap size of 512MiB
     copy_handle<<<1,1>>>(*sa);
     gpuErrchk(cudaDeviceSynchronize());
   }

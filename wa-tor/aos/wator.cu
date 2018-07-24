@@ -6,18 +6,18 @@
 #include <inttypes.h>
 
 #include "wa-tor/aos/wator.h"
-//#include "wa-tor/aos/halloc_allocator.h"
+#include "wa-tor/aos/halloc_allocator.h"
 //#include "wa-tor/aos/scatteralloc_allocator.h"
 //#include "wa-tor/aos/aos_allocator.h"
 //#include "wa-tor/aos/cuda_allocator.h"
-#include "wa-tor/aos/mallocmc_allocator.h"
+//#include "wa-tor/aos/mallocmc_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
 #define GRID_SIZE_X 2048
 #define GRID_SIZE_Y 1024
-#define THREADS_PER_BLOCK 128
+#define THREADS_PER_BLOCK 256
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true

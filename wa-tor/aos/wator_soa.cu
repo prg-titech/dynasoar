@@ -17,7 +17,7 @@
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
 
-#define THREADS_PER_BLOCK 128
+#define THREADS_PER_BLOCK 256
 
 namespace wa_tor {
 
