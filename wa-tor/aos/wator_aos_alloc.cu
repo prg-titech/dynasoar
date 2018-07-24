@@ -15,8 +15,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 400
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 2048
+#define GRID_SIZE_Y 1024
 #define THREADS_PER_BLOCK 256
 
 #define OPTION_SHARK_DIE true
