@@ -1,0 +1,1 @@
+/usr/bin/c++    -Wall -Wshadow -Wno-unknown-pragmas -Wextra -Wno-unused-parameter -Wno-unused-local-typedefs   CMakeFiles/VerifyHeap.dir/tests/VerifyHeap_generated_verify_heap.cu.o  -o VerifyHeap -rdynamic /usr/local/cuda/lib64/libcudart_static.a -lpthread -ldl -lrt 
