@@ -16,6 +16,7 @@
 #define ENERGY_START 2
 #define GRID_SIZE_X 2048
 #define GRID_SIZE_Y 1024
+#define THREADS_PER_BLOCK 128
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -413,14 +414,14 @@ __global__ void find_sharks() {
 void generate_fish_array() {
   reset_fish_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  find_fish<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  find_fish<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
 void generate_shark_array() {
   reset_shark_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
@@ -483,22 +484,22 @@ void generate_shark_fish_arrays() {
 }
 
 void step() {
-  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
@@ -510,12 +511,12 @@ void initialize() {
   //init the heap
   initHeap(512*1024U*1024U);
 
-  init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  setup_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  setup_cells<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
@@ -535,7 +536,7 @@ __global__ void fill_gui_map() {
 }
 
 void update_gui_map() {
-  fill_gui_map<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  fill_gui_map<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*GRID_SIZE_X*GRID_SIZE_Y,
