@@ -89,13 +89,14 @@ namespace DistributionPolicies{
       uint32 collect(uint32 bytes){
 
         can_use_coalescing = false;
-        warpid = mallocMC::warpid();
+        warpid = threadIdx.x / 32; //mallocMC::warpid();
         myoffset = 0;
         threadcount = 0;
 
         //init with initial counter
         __shared__ uint32 warp_sizecounter[32];
-        warp_sizecounter[warpid] = 16;
+	assert(warpid < 32);        
+warp_sizecounter[warpid] = 16;
 
         //second half: make sure that all coalesced allocations can fit within one page
         //necessary for offset calculation
