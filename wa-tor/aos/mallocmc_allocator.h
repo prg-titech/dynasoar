@@ -10,7 +10,7 @@ typedef unsigned int uint;
 using namespace mallocMC;
 
 struct ScatterHeapConfig : mallocMC::CreationPolicies::Scatter<>::HeapProperties{
-    typedef boost::mpl::int_<2048>  pagesize;
+    typedef boost::mpl::int_<4096>  pagesize;
     typedef boost::mpl::int_<8>     accessblocks;
     typedef boost::mpl::int_<16>    regionsize;
     typedef boost::mpl::int_<8>     wastefactor;
