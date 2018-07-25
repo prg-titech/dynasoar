@@ -662,7 +662,7 @@ int main(int argc, char* arvg[]) {
 
   //printf("Computing...");
 
-  for (int i = 0; i < 500; ++i) {
+  for (int i = 0; i < 1000; ++i) {
     if (i%50==0) {
       //render();
     }

@@ -575,7 +575,7 @@ int main(int argc, char* arvg[]) {
   //printf("Computing...\n");
   //int time_running = 0;
 
-  for (int i = 0; i<500; ++i) {
+  for (int i = 0; i<1000; ++i) {
     if (i%50==0) {
       //print_stats();
       //render();

@@ -32,7 +32,7 @@ namespace wa_tor {
     printf("PTR: %p\n", x);
   }
   void initHeap(int bytes) {
-    ha_init();
+    ha_init(halloc_opts_t(512*1024*1024));
   }
 }  // namespace wa_tor
 

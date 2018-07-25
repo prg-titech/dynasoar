@@ -6,9 +6,9 @@
 #include <inttypes.h>
 
 #include "wa-tor/aos/wator.h"
-//#include "wa-tor/aos/halloc_allocator.h"
+#include "wa-tor/aos/halloc_allocator.h"
 //#include "wa-tor/aos/scatteralloc_allocator.h"
-#include "wa-tor/aos/aos_allocator.h"
+//#include "wa-tor/aos/aos_allocator.h"
 //#include "wa-tor/aos/cuda_allocator.h"
 //#include "wa-tor/aos/mallocmc_allocator.h"
 
@@ -570,7 +570,7 @@ int main(int argc, char* arvg[]) {
   //printf("Computing...\n");
   //int time_running = 0;
 
-  for (int i = 0; i<500; ++i) {
+  for (int i = 0; i<1000; ++i) {
     if (i%50==0) {
       //print_stats();
       //render();
