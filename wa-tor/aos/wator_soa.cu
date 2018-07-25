@@ -18,6 +18,7 @@
 #define OPTION_FISH_SPAWN true
 
 #define THREADS_PER_BLOCK 256
+#define NUM_BLOCKS 1024
 
 namespace wa_tor {
 
@@ -517,52 +518,52 @@ void generate_shark_array() {
 
 
 __global__ void cell_prepare() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < GRID_SIZE_Y*GRID_SIZE_X;
+       tid += blockDim.x*gridDim.x) {
     cells[tid]->prepare();
   }
 }
 
 __global__ void cell_decide() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < GRID_SIZE_Y*GRID_SIZE_X;
+       tid += blockDim.x*gridDim.x) {
     cells[tid]->decide();
   }
 }
 
 __global__ void fish_prepare() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < num_fish) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < num_fish;
+       tid += blockDim.x*gridDim.x) {
     assert(fish[tid] != nullptr);
     fish[tid]->prepare();
   }
 }
 
 __global__ void fish_update() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < num_fish) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < num_fish;
+       tid += blockDim.x*gridDim.x) {
     assert(fish[tid] != nullptr);
     fish[tid]->update();
   }
 }
 
 __global__ void shark_prepare() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < num_sharks) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < num_sharks;
+       tid += blockDim.x*gridDim.x) {
     assert(sharks[tid] != nullptr);
     sharks[tid]->prepare();
   }
 }
 
 __global__ void shark_update() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < num_sharks) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < num_sharks;
+       tid += blockDim.x*gridDim.x) {
     assert(sharks[tid] != nullptr);
     sharks[tid]->update();
   }
@@ -574,22 +575,22 @@ void generate_shark_fish_arrays() {
 }
 
 void step() {
-  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  cell_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  fish_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  cell_decide<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  fish_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  fish_update<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  cell_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  cell_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_prepare<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  shark_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  cell_decide<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  shark_update<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  shark_update<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
