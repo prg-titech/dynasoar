@@ -124,9 +124,12 @@ namespace mallocMC
 
   MAMC_ACCELERATOR inline boost::uint32_t warpid()
   {
+    return threadIdx.x / 32;
+    /*
     boost::uint32_t mywarpid;
     asm("mov.u32 %0, %%warpid;" : "=r" (mywarpid));
     return mywarpid;
+    */
   }
   MAMC_ACCELERATOR inline boost::uint32_t nwarpid()
   {

@@ -136,9 +136,12 @@ namespace GPUTools
 
   __device__ inline uint warpid()
   {
+    return threadIdx.x / 32;
+    /*
     uint mywarpid;
     asm("mov.u32 %0, %warpid;" : "=r" (mywarpid));
     return mywarpid;
+    */
   }
   __device__ inline uint nwarpid()
   {
