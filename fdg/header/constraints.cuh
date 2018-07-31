@@ -1,0 +1,6 @@
+#ifndef __FDGMALLOC_CONSTRAINTS_CUH
+#define __FDGMALLOC_CONSTRAINTS_CUH
+
+
+
+#endif
