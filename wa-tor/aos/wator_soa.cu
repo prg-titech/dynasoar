@@ -10,8 +10,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-//#define GRID_SIZE_X 400
-//#define GRID_SIZE_Y 300
+//#define GRID_SIZE_X 256
+//#define GRID_SIZE_Y 8192
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -660,7 +660,7 @@ int main(int argc, char* arvg[]) {
 
   //printf("Computing...");
   int total_time = 0;
-  for (int i = 0; i < 100; ++i) {
+  for (int i = 0; i < 500; ++i) {
     if (i%50==0) {
       //render();
     }
