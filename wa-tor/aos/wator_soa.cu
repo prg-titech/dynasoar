@@ -10,8 +10,8 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 2048
-#define GRID_SIZE_Y 1024
+//#define GRID_SIZE_X 400
+//#define GRID_SIZE_Y 300
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -403,8 +403,8 @@ __global__ void print_checksum() {
   uint32_t shark_num = memory_allocator.DBG_allocated_slots<Shark>();
 
   printf("%" PRIu64, chksum);
-  printf(",%u,%u,%u,%u\n",
-         fish_use, fish_num, shark_use, shark_num);
+  printf(",%u,%u,%u,%u,%i\n",
+         fish_use, fish_num, shark_use, shark_num, (int) GRID_SIZE_X*GRID_SIZE_Y);
 }
 
 __global__ void reset_fish_array() {
@@ -650,19 +650,17 @@ int main(int argc, char* arvg[]) {
 
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
-  printf("CUDA heap size: %lu\n", heap_size);
+  //printf("CUDA heap size: %lu\n", heap_size);
 
   initialize();
-    printf("-1,");
-    print_stats();
 
   // To ensure cells are accessed properly (SOA).
   find_cells_soa<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   //printf("Computing...");
-
-  for (int i = 0; i < 1000; ++i) {
+  int total_time = 0;
+  for (int i = 0; i < 100; ++i) {
     if (i%50==0) {
       //render();
     }
@@ -675,9 +673,10 @@ int main(int argc, char* arvg[]) {
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-    printf("%i,", time_running);
-    print_stats();
+    total_time += time_running;
   }
+  printf("%i,", total_time);
+  print_stats();
 
   return 0;
 }
