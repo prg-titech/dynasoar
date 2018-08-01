@@ -26,6 +26,7 @@ __forceinline__ __device__ unsigned int __lanemask_lt() {
   return mask;
 }
 
+// In AOS mode: block_size is object size.
 template<typename T, int Field, int Offset>
 class SoaField {
  private:
@@ -39,12 +40,11 @@ class SoaField {
     uint8_t obj_id = static_cast<uint8_t>(ptr_base) & static_cast<uint8_t>(0x3F);   // Truncated.
     uintptr_t block_base = ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0);
     assert(obj_id < block_size);
-    T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + block_size*Offset);
-
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
-    return soa_array + obj_id;
+    //T* soa_array = reinterpret_cast<T*>(
+    //    block_base + kSoaBufferOffset + block_size*Offset);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
+    return reinterpret_cast<T*>(block_base + kSoaBufferOffset + obj_id*block_size + Offset);
   }
 
   __DEV__ T* data_ptr() const {
@@ -53,12 +53,11 @@ class SoaField {
     uint8_t obj_id = static_cast<uint8_t>(ptr_base) & static_cast<uint8_t>(0x3F);   // Truncated.
     uintptr_t block_base = ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0);
     assert(obj_id < block_size);
-    T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + block_size*Offset);
-
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
-    return soa_array + obj_id;
+    //T* soa_array = reinterpret_cast<T*>(
+    //    block_base + kSoaBufferOffset + block_size*Offset);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
+    return reinterpret_cast<T*>(block_base + kSoaBufferOffset + obj_id*block_size + Offset);
   }
 
  public:
@@ -143,7 +142,8 @@ class SoaBlock {
 
   __DEV__ T* make_pointer(uint8_t index) {
     uintptr_t ptr_as_int = index;
-    uintptr_t block_size = N;
+    // In AOS mode: block_size is actually object size.
+    uintptr_t block_size = T::kObjectSize;
     ptr_as_int |= block_size << 48;
     uintptr_t type_id = T::kTypeId;
     ptr_as_int |= type_id << 56;
