@@ -32,7 +32,7 @@ class Agent;
 class Cell {
  public:
   static const uint8_t kTypeId = 3;
-  static const int kObjectSize = 49;
+  static const int kObjectSize = 56;
   static const uint8_t kBlockSize = 36;
 
  private:
@@ -119,7 +119,7 @@ class Fish : public Agent {
   SoaField<uint32_t, 4, 24> egg_timer_;
 
  public:
-  static const int kObjectSize = 28;
+  static const int kObjectSize = 32;
   static const uint8_t kBlockSize = 64;
 
   static const uint8_t kTypeId = 1;
@@ -138,7 +138,7 @@ class Shark : public Agent {
 
  public:
   static const int kObjectSize = 32;
-  static const uint8_t kBlockSize = 56;
+  static const uint8_t kBlockSize = 64;
   static const uint8_t kTypeId = 2;
 
   __device__ Shark(uint32_t random_state);
