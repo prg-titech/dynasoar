@@ -28,7 +28,7 @@ __global__ void  benchmark(int num_iterations, void** ptrs) {
   }
 
   for (int i = 0; i < num_iterations; ++i) {
-    memory_allocator.free(my_ptrs[i]);
+    free(my_ptrs[i]);
   }
 }
 
