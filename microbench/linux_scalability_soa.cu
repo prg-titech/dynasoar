@@ -23,8 +23,10 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 class DummyClass {
  public:
   static const uint8_t kTypeId = 0;
-  static const int kObjectSize = 8;
+  static const int kObjectSize = ALLOC_SIZE;
   static const uint8_t kBlockSize = 64;
+
+  SoaField<int, 0, 0> var;
 };
 
 __device__ SoaAllocator<64*64*64*64, DummyClass> memory_allocator;
@@ -33,9 +35,10 @@ __global__ void  benchmark(int num_iterations, DummyClass** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   DummyClass** my_ptrs = ptrs + tid*num_iterations;
 
-  for (int k = 0; k < 10; ++k) {
+  for (int k = 0; k < 1; ++k) {
     for (int i = 0; i < num_iterations; ++i) {
       my_ptrs[i] = memory_allocator.make_new<DummyClass>();
+      //my_ptrs[i]->var = 1234;
     }
 
     for (int i = 0; i < num_iterations; ++i) {

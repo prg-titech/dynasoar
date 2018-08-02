@@ -57,7 +57,7 @@ typedef mallocMC::Allocator<
 class DummyClass {
  public:
   static const uint8_t kTypeId = 0;
-  static const int kObjectSize = 8;
+  static const int kObjectSize = ALLOC_SIZE;
   static const uint8_t kBlockSize = 64;
 };
 
@@ -72,10 +72,11 @@ __global__ void  benchmark(int num_iterations, void** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   void** my_ptrs = ptrs + tid*num_iterations;
 
-  for (int k = 0; k < 10; ++k) {
+  for (int k = 0; k < 1; ++k) {
     for (int i = 0; i < num_iterations; ++i) {
-      my_ptrs[i] = new(alloc_handle.malloc(8)) DummyClass();
+      my_ptrs[i] = new(alloc_handle.malloc(ALLOC_SIZE)) DummyClass();
       assert(my_ptrs[i] != nullptr);
+      //*reinterpret_cast<int*>(my_ptrs[i]) = 1234;
     }
 
     for (int i = 0; i < num_iterations; ++i) {
