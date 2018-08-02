@@ -9,6 +9,18 @@
 
 #define __DEV__ __device__
 
+#ifndef gpuErrchk
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+#endif  // gpuErrchk
+
 // Only for debug purposes.
 __device__ char* DBG_data_storage;
 __device__ char* DBG_data_storage_end;
@@ -298,6 +310,23 @@ template<class T>
 struct TupleMaxBlockSize<std::tuple<T>> {
   static const size_t value = sizeof(SoaBlock<T, /*N_Max=*/ 64>);
 };
+
+template<typename A>
+__global__ void kernel_init_heap(A* allocator, void* ptr) {
+  printf("ALLO: %p\n", allocator);
+  allocator->data_ = reinterpret_cast<char*>(ptr);
+}
+
+template<typename A>
+void init_allocator_heap(A* dev_allocator, uint64_t bytes) {
+  void* heap_addr;
+  cudaMalloc(&heap_addr, bytes);
+  assert(heap_addr != nullptr);
+  assert(dev_allocator != nullptr);
+  printf("DEV ALLOCATOR: %p\nHEAP: %p\n", dev_allocator, heap_addr);
+  kernel_init_heap<<<1,1>>>(dev_allocator, heap_addr);
+  gpuErrchk(cudaDeviceSynchronize());
+}
 
 template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
@@ -590,7 +619,7 @@ class SoaAllocator {
 
   static const uint32_t kN = N;
 
-  char data_[N*kBlockMaxSize];
+  char* data_;
 
   Bitmap<uint32_t, N> global_free_;
 

@@ -599,6 +599,12 @@ __global__ void init_memory_system() {
 }
 
 void initialize() {
+  decltype(memory_allocator)* dev_allocator;
+  cudaGetSymbolAddress((void**)&dev_allocator, memory_allocator);
+
+  init_allocator_heap(dev_allocator, 2048U*1024*1024);  // 2GB heap
+  gpuErrchk(cudaDeviceSynchronize());
+
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
