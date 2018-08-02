@@ -43,7 +43,7 @@ int main() {
   gpuErrchk(cudaDeviceSynchronize());
 
   // INIT MEMORY ALLOCATOR
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512U*1024U*1024U);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256U*1024U*1024U);
 
   dummy_kernel<<<64, 64>>>();
   gpuErrchk(cudaDeviceSynchronize());

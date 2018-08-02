@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -6,18 +6,18 @@
 #include <inttypes.h>
 
 #include "wa-tor/aos/wator.h"
-#include "wa-tor/aos/fdg_allocator.h"
+//#include "wa-tor/aos/fdg_allocator.h"
 //#include "wa-tor/aos/halloc_allocator.h"
 //#include "wa-tor/aos/scatteralloc_allocator.h"
 //#include "wa-tor/aos/aos_allocator.h"
 //#include "wa-tor/aos/cuda_allocator.h"
-//#include "wa-tor/aos/mallocmc_allocator.h"
+#include "wa-tor/aos/mallocmc_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 400
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 2048
+#define GRID_SIZE_Y 1024
 #define THREADS_PER_BLOCK 256
 #define NUM_BLOCKS 1024
 

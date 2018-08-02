@@ -66,7 +66,7 @@ namespace wa_tor {
   }
 
   void initHeap(int bytes) {
-    auto* sa = new ScatterAllocator( 1U * 512U * 1024U * 1024U ); // heap size of 512MiB
+    auto* sa = new ScatterAllocator( 2U * 512U * 1024U * 1024U ); // heap size of 512MiB
     copy_handle<<<1,1>>>(*sa);
     gpuErrchk(cudaDeviceSynchronize());
   }

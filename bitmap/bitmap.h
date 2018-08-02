@@ -116,8 +116,12 @@ class Bitmap {
 
     int retries = 0;
     do {
-      index = find_allocated<true>(retries++);
-      success = deallocate<false>(index); // if false: other thread was faster
+      index = find_allocated<false>(retries++);
+      if (index == kIndexError) {
+        success = false;
+      } else {
+        success = deallocate<false>(index); // if false: other thread was faster
+      }
     } while (!success && CONTINUE_RETRY);
 
     assert(success);

@@ -29,13 +29,13 @@ class DummyClass {
   SoaField<int, 0, 0> var;
 };
 
-__device__ SoaAllocator<64*64*64*64, DummyClass> memory_allocator;
+__device__ SoaAllocator<1*64*64*64*64, DummyClass> memory_allocator;
 
 __global__ void  benchmark(int num_iterations, DummyClass** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   DummyClass** my_ptrs = ptrs + tid*num_iterations;
 
-  for (int k = 0; k < 1; ++k) {
+  for (int k = 0; k < 10; ++k) {
     for (int i = 0; i < num_iterations; ++i) {
       my_ptrs[i] = memory_allocator.make_new<DummyClass>();
       //my_ptrs[i]->var = 1234;
@@ -77,5 +77,5 @@ int main() {
   auto time_after = std::chrono::system_clock::now();
   int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
       time_after - time_before).count();
-  printf("%i,%i\n", NUM_ALLOCS, time_running);
+  printf("%i,%i,%i\n", NUM_ALLOCS,ALLOC_SIZE, time_running);
 }

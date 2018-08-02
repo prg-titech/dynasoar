@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 #include <chrono>
 #include <stdio.h>
 #include <assert.h>
@@ -27,7 +27,7 @@ struct ScatterHeapConfig : mallocMC::CreationPolicies::Scatter<>::HeapProperties
     typedef boost::mpl::int_<4096>  pagesize;
     typedef boost::mpl::int_<8>     accessblocks;
     typedef boost::mpl::int_<16>    regionsize;
-    typedef boost::mpl::int_<8>     wastefactor;
+    typedef boost::mpl::int_<2>     wastefactor;
     typedef boost::mpl::bool_<false> resetfreedpages;
 };
 
@@ -72,7 +72,7 @@ __global__ void  benchmark(int num_iterations, void** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   void** my_ptrs = ptrs + tid*num_iterations;
 
-  for (int k = 0; k < 1; ++k) {
+  for (int k = 0; k < 10; ++k) {
     for (int i = 0; i < num_iterations; ++i) {
       my_ptrs[i] = new(alloc_handle.malloc(ALLOC_SIZE)) DummyClass();
       assert(my_ptrs[i] != nullptr);
@@ -91,7 +91,7 @@ __global__ void copy_handle(ScatterAllocator::AllocatorHandle handle) {
 }
 
 void initHeap(int bytes) {
-  auto* sa = new ScatterAllocator( 1U * 512U * 1024U * 1024U ); // heap size of 512MiB
+  auto* sa = new ScatterAllocator( 256U *1024U * 1024U ); // heap size of 512MiB
   copy_handle<<<1,1>>>(*sa);
   gpuErrchk(cudaDeviceSynchronize());
 }
@@ -102,8 +102,8 @@ int main() {
   gpuErrchk(cudaDeviceSynchronize());
 
   // INIT MEMORY ALLOCATOR
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128U*1024U*1024U);
-  initHeap(1024U*1024*512);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256U*1024U*1024U);
+  initHeap(1024U*1024*256);
 
   dummy_kernel<<<64, 64>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -114,6 +114,6 @@ int main() {
   auto time_after = std::chrono::system_clock::now();
   int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
       time_after - time_before).count();
-  printf("%i,%i\n", NUM_ALLOCS, time_running);
+  printf("%i,%i,%i\n", NUM_ALLOCS, ALLOC_SIZE, time_running);
 }
 
