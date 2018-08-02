@@ -18,6 +18,10 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 #define THREADS_PER_BLOCK 256
 #define NUM_BLOCKS 1024
 
+__device__ int x;
+__global__ void dummy_kernel() {
+  x = 1;
+}
 
 __global__ void  benchmark(int num_iterations, void** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -38,16 +42,18 @@ int main() {
   cudaMalloc((void**) &ptr_storage, sizeof(void*)*64*64*64*64);
   gpuErrchk(cudaDeviceSynchronize());
 
-  for (int i = 0; i < 20; ++i) {
-    // INIT MEMORY ALLOCATOR
+  // INIT MEMORY ALLOCATOR
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512U*1024U*1024U);
 
-    auto time_before = std::chrono::system_clock::now();
-    benchmark<<<64, 256>>>(i, ptr_storage);
-    gpuErrchk(cudaDeviceSynchronize());
-    auto time_after = std::chrono::system_clock::now();
-    int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
-        time_after - time_before).count();
-    printf("%i\n", time_running);
-  }
+  dummy_kernel<<<64, 64>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  auto time_before = std::chrono::system_clock::now();
+  benchmark<<<64, 256>>>(NUM_ALLOCS, ptr_storage);
+  gpuErrchk(cudaDeviceSynchronize());
+  auto time_after = std::chrono::system_clock::now();
+  int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
+      time_after - time_before).count();
+  printf("%i,%i\n", NUM_ALLOCS, time_running);
 }
 
