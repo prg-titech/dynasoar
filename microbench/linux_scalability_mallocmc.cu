@@ -59,6 +59,8 @@ class DummyClass {
   static const uint8_t kTypeId = 0;
   static const int kObjectSize = ALLOC_SIZE;
   static const uint8_t kBlockSize = 64;
+
+  char one_field;
 };
 
 __device__ int x;
