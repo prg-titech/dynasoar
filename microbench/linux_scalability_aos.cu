@@ -15,7 +15,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 }
 
 
-#include "allocator/soa_allocator.h"
+#include "allocator/aos_allocator.h"
 
 #define THREADS_PER_BLOCK 256
 #define NUM_BLOCKS 1024
@@ -26,10 +26,10 @@ class DummyClass {
   static const int kObjectSize = ALLOC_SIZE;
   static const uint8_t kBlockSize = 64;
 
-  SoaField<int, 0, 0> var;
+  char field;
 };
 
-__device__ SoaAllocator<1*64*64*64*64, DummyClass> memory_allocator;
+__device__ AosAllocator<1*64*64*64*64, DummyClass> memory_allocator;
 
 __global__ void  benchmark(int num_iterations, DummyClass** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;

@@ -74,9 +74,13 @@ __global__ void  benchmark(int num_iterations, void** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   void** my_ptrs = ptrs + tid*num_iterations;
 
-  for (int k = 0; k < 10; ++k) {
+  for (int k = 0; k < 1; ++k) {
     for (int i = 0; i < num_iterations; ++i) {
-      my_ptrs[i] = new(alloc_handle.malloc(ALLOC_SIZE)) DummyClass();
+      DummyClass* p =  (DummyClass*) (alloc_handle.malloc(ALLOC_SIZE));
+      my_ptrs[i] = p;
+      if (p == nullptr) {
+        asm("trap;");
+      }
       assert(my_ptrs[i] != nullptr);
       //*reinterpret_cast<int*>(my_ptrs[i]) = 1234;
     }

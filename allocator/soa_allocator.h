@@ -413,6 +413,7 @@ class SoaAllocator {
     //assert(reinterpret_cast<char*>(result) >= data_);
     //assert(reinterpret_cast<char*>(result) < data_ + N*kBlockMaxSize);
     return new(result) T(args...);
+    //return (T*) result;
   }
 
   template<class T>

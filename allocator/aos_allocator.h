@@ -63,6 +63,7 @@ class AosAllocator {
     bool success = allocated_[TupleIndex<T, TupleType>::value].allocate<true>(index);
     assert(success);
 
+    //return (T*) data_location(index);
     return new(data_location(index)) T(args...);
   }
 

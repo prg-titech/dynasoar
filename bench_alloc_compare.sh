@@ -9,6 +9,12 @@ do
   echo "MALLOCMC"
   cat bench_alloc_compare_mallocmc.csv
 
+  /usr/local/cuda/bin/nvcc -std=c++11 -DNUM_ALLOCS=${i} -DALLOC_SIZE=16 -O3 -use_fast_math microbench/linux_scalability_aos.cu -I. -arch compute_61
+  ./a.out >> bench_alloc_compare_aos.csv
+
+  echo "AOS"
+  cat bench_alloc_compare_aos.csv
+
   /usr/local/cuda/bin/nvcc -std=c++11 -DNUM_ALLOCS=${i} -DALLOC_SIZE=16 -O3 -use_fast_math microbench/linux_scalability_soa.cu -I. -arch compute_61
   ./a.out >> bench_alloc_compare_soa.csv
 

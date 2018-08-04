@@ -15,26 +15,47 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 }
 
 
+#include <cuda.h>
+
+#define uint32 uint32_t
+typedef unsigned int uint;
+
+
 #define THREADS_PER_BLOCK 256
 #define NUM_BLOCKS 1024
 
-__device__ int x;
-__global__ void dummy_kernel() {
-  x = 1;
-}
+class DummyClass {
+ public:
+  static const uint8_t kTypeId = 0;
+  static const int kObjectSize = ALLOC_SIZE;
+  static const uint8_t kBlockSize = 64;
+
+  char one_field;
+};
+
 
 __global__ void  benchmark(int num_iterations, void** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   void** my_ptrs = ptrs + tid*num_iterations;
 
-  for (int i = 0; i < num_iterations; ++i) {
-    my_ptrs[i] = malloc(8);
-  }
+  for (int k = 0; k < 1; ++k) {
+    for (int i = 0; i < num_iterations; ++i) {
+      DummyClass* p = (DummyClass*) malloc(ALLOC_SIZE); //new(alloc_handle.malloc(ALLOC_SIZE)) DummyClass();
+      my_ptrs[i] = p;
+      if (p == nullptr) {
+        asm("trap;");
+      }
 
-  for (int i = 0; i < num_iterations; ++i) {
-    free(my_ptrs[i]);
+      assert(my_ptrs[i] != nullptr);
+      //*reinterpret_cast<int*>(my_ptrs[i]) = 1234;
+    }
+
+    for (int i = 0; i < num_iterations; ++i) {
+      free(my_ptrs[i]);
+    }
   }
 }
+
 
 
 int main() {
@@ -45,8 +66,6 @@ int main() {
   // INIT MEMORY ALLOCATOR
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256U*1024U*1024U);
 
-  dummy_kernel<<<64, 64>>>();
-  gpuErrchk(cudaDeviceSynchronize());
 
   auto time_before = std::chrono::system_clock::now();
   benchmark<<<64, 256>>>(NUM_ALLOCS, ptr_storage);
@@ -54,6 +73,6 @@ int main() {
   auto time_after = std::chrono::system_clock::now();
   int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
       time_after - time_before).count();
-  printf("%i,%i\n", NUM_ALLOCS, time_running);
+  printf("%i,%i,%i\n", NUM_ALLOCS, ALLOC_SIZE, time_running);
 }
 

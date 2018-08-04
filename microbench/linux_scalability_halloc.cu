@@ -15,7 +15,12 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 }
 
 
-#include "allocator/soa_allocator.h"
+#include <cuda.h>
+#include "halloc.h"
+
+#define uint32 uint32_t
+typedef unsigned int uint;
+
 
 #define THREADS_PER_BLOCK 256
 #define NUM_BLOCKS 1024
@@ -26,55 +31,42 @@ class DummyClass {
   static const int kObjectSize = ALLOC_SIZE;
   static const uint8_t kBlockSize = 64;
 
-  SoaField<int, 0, 0> var;
+  char one_field;
 };
 
-__device__ SoaAllocator<1*64*64*64*64, DummyClass> memory_allocator;
 
-__global__ void  benchmark(int num_iterations, DummyClass** ptrs) {
+__global__ void  benchmark(int num_iterations, void** ptrs) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  DummyClass** my_ptrs = ptrs + tid*num_iterations;
+  void** my_ptrs = ptrs + tid*num_iterations;
 
   for (int k = 0; k < 1; ++k) {
     for (int i = 0; i < num_iterations; ++i) {
-      DummyClass* p = memory_allocator.make_new<DummyClass>();
+      DummyClass* p = (DummyClass*) hamalloc(ALLOC_SIZE);  //new(alloc_handle.malloc(ALLOC_SIZE)) DummyClass();
       my_ptrs[i] = p;
       if (p == nullptr) {
         asm("trap;");
       }
 
-      //my_ptrs[i]->var = 1234;
+      assert(my_ptrs[i] != nullptr);
+      //*reinterpret_cast<int*>(my_ptrs[i]) = 1234;
     }
 
     for (int i = 0; i < num_iterations; ++i) {
-      memory_allocator.free(my_ptrs[i]);
+      hafree(my_ptrs[i]);
     }
   }
 }
 
-__device__ void initialize_allocator() {
-  memory_allocator.initialize();
-}
 
-__global__ void init_memory_system() {
-  initialize_allocator();
-}
-
-__device__ int x;
-__global__ void dummy_kernel() {
-  x = 1;
-}
 
 int main() {
-  DummyClass** ptr_storage;
+  void** ptr_storage;
   cudaMalloc((void**) &ptr_storage, sizeof(void*)*64*64*64*64);
   gpuErrchk(cudaDeviceSynchronize());
 
-  init_memory_system<<<256, 512>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  dummy_kernel<<<64, 64>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  // INIT MEMORY ALLOCATOR
+  //cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256U*1024U*1024U);
+  ha_init(halloc_opts_t(256*1024*1024));
 
   auto time_before = std::chrono::system_clock::now();
   benchmark<<<64, 256>>>(NUM_ALLOCS, ptr_storage);
@@ -82,5 +74,6 @@ int main() {
   auto time_after = std::chrono::system_clock::now();
   int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
       time_after - time_before).count();
-  printf("%i,%i,%i\n", NUM_ALLOCS,ALLOC_SIZE, time_running);
+  printf("%i,%i,%i\n", NUM_ALLOCS, ALLOC_SIZE, time_running);
 }
+
