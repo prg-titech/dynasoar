@@ -5,42 +5,27 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#include "wa-tor/aos/wator_soa.h"
+#include "wa-tor/aos/wator.h"
+//#include "wa-tor/aos/fdg_allocator.h"
+//#include "wa-tor/aos/halloc_allocator.h"
+//#include "wa-tor/aos/scatteralloc_allocator.h"
+#include "wa-tor/aos/aos_allocator.h"
+//#include "wa-tor/aos/cuda_allocator.h"
+//#include "wa-tor/aos/mallocmc_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
 #define GRID_SIZE_X 2048
+#define THREADS_PER_BLOCK 256
+#define NUM_BLOCKS 1024
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
 
-#define THREADS_PER_BLOCK 256
-#define NUM_BLOCKS 1024
 
 namespace wa_tor {
-
-__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
-
-template<typename T, typename... Args>
-__device__ T* allocate(Args... args) {
-  return memory_allocator.make_new<T>(args...);
-}
-
-template<typename T>
-__device__ void deallocate(T* ptr) {
-  memory_allocator.free<T>(ptr);
-}
-
-  template<int TypeIndex>
-  __device__ void deallocate_untyped(void* ptr) {
-    memory_allocator.free_untyped<TypeIndex>(ptr);
-  }
-
-__device__ void initialize_allocator() {
-  memory_allocator.initialize();
-}
 
 __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
   // Advance and return random state.
@@ -71,8 +56,7 @@ __device__ Agent* Cell::agent() const {
 }
 
 __device__ void Cell::decide() {
-  // TODO: Not sure why manual type cast is necessary.
-  if (arr_neighbor_request(4)) {
+  if (neighbor_request_[4]) {
     // This cell has priority.
     agent_->set_new_position(this);
   } else {
@@ -80,14 +64,14 @@ __device__ void Cell::decide() {
     uint8_t num_candidates = 0;
 
     for (int i = 0; i < 4; ++i) {
-      if (arr_neighbor_request(i)) {
+      if (neighbor_request_[i]) {
         candidates[num_candidates++] = i;
       }
     }
 
     if (num_candidates > 0) {
       uint32_t selected_index = random_number(&random_state_, num_candidates);
-      arr_neighbors(candidates[selected_index])->agent()->set_new_position(this);
+      neighbors_[candidates[selected_index]]->agent()->set_new_position(this);
     }
   }
 }
@@ -95,26 +79,24 @@ __device__ void Cell::decide() {
 __device__ void Cell::enter(Agent* agent) {
   assert(agent_ == nullptr);
 
-//#ifndef NDEBUG
-//  // Ensure that no two agents are trying to enter this cell at the same time.
-//  uint64_t old_val = atomicExch(reinterpret_cast<unsigned long long int*>(&agent_),
-//                                reinterpret_cast<unsigned long long int>(agent));
-//  assert(old_val == 0);
-//#else
+#ifndef NDEBUG
+  // Ensure that no two agents are trying to enter this cell at the same time.
+  uint64_t old_val = atomicExch(reinterpret_cast<unsigned long long int*>(&agent_),
+                                reinterpret_cast<unsigned long long int>(agent));
+  assert(old_val == 0);
+#else
   agent_ = agent;
-//#endif
+#endif
 
   agent->set_position(this);
 }
 
 __device__ bool Cell::has_fish() const {
-  // TODO: Not sure why typecast is necessary.
-  return agent_ != nullptr && ((Agent*)agent_)->type_identifier() == Fish::kTypeId;
+  return agent_ != nullptr && agent_->type_identifier() == Fish::kTypeId;
 }
 
 __device__ bool Cell::has_shark() const {
-  // TODO: Not sure why typecast is necessary.
-  return agent_ != nullptr && ((Agent*)agent_)->type_identifier() == Shark::kTypeId;
+  return agent_ != nullptr && agent_->type_identifier() == Shark::kTypeId;
 }
 
 __device__ bool Cell::is_free() const {
@@ -128,7 +110,7 @@ __device__ void Cell::leave() {
 
 __device__ void Cell::prepare() {
   for (int i = 0; i < 5; ++i) {
-    arr_neighbor_request(i) = false;
+    neighbor_request_[i] = false;
   }
 }
 
@@ -140,14 +122,14 @@ __device__ void Cell::request_random_fish_neighbor() {
   if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
     // No fish found. Look for free cell.
     if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-      arr_neighbor_request(4) = true;
+      neighbor_request_[4] = true;
     }
   }
 }
 
 __device__ void Cell::request_random_free_neighbor() {
   if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-    arr_neighbor_request(4) = true;
+    neighbor_request_[4] = true;
   }
 }
 
@@ -157,7 +139,7 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
   uint8_t num_candidates = 0;
 
   for (int i = 0; i < 4; ++i) {
-    if ((arr_neighbors(i)->*predicate)()) {
+    if ((neighbors_[i]->*predicate)()) {
       candidates[num_candidates++] = i;
     }
   }
@@ -168,10 +150,10 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
     uint32_t selected_index = random_number(random_state, num_candidates);
     uint8_t selected = candidates[selected_index];
     uint8_t neighbor_index = (selected + 2) % 4;
-    arr_neighbors(selected)->arr_neighbor_request(neighbor_index) = true;
+    neighbors_[selected]->neighbor_request_[neighbor_index] = true;
 
     // Check correctness of neighbor calculation.
-    assert(arr_neighbors(selected)->arr_neighbors(neighbor_index) == this);
+    assert(neighbors_[selected]->neighbors_[neighbor_index] == this);
 
     return true;
   }
@@ -179,10 +161,10 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
 
 __device__ void Cell::set_neighbors(Cell* left, Cell* top,
                                     Cell* right, Cell* bottom) {
-  arr_neighbors(0) = left;
-  arr_neighbors(1) = top;
-  arr_neighbors(2) = right;
-  arr_neighbors(3) = bottom;
+  neighbors_[0] = left;
+  neighbors_[1] = top;
+  neighbors_[2] = right;
+  neighbors_[3] = bottom;
 }
 
 __device__ Agent::Agent(uint32_t random_state, uint8_t type_identifier)
@@ -245,7 +227,7 @@ __device__ void Fish::update() {
       auto* new_fish = allocate<Fish>(new_random_state);
       assert(new_fish != nullptr);
       old_position->enter(new_fish);
-      egg_timer_ = (uint32_t) 0;
+      egg_timer_ = 0;
     }
   }
 }
@@ -322,9 +304,9 @@ __device__ void Cell::kill() {
 __device__ Cell* cells[GRID_SIZE_X * GRID_SIZE_Y];
 
 __global__ void create_cells() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < GRID_SIZE_Y*GRID_SIZE_X;
+       tid += blockDim.x*gridDim.x) {
     int x = tid % GRID_SIZE_X;
     int y = tid / GRID_SIZE_X;
 
@@ -339,9 +321,9 @@ __global__ void create_cells() {
 }
 
 __global__ void setup_cells() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < GRID_SIZE_Y*GRID_SIZE_X;
+       tid += blockDim.x*gridDim.x) {
     int x = tid % GRID_SIZE_X;
     int y = tid / GRID_SIZE_X;
 
@@ -396,14 +378,7 @@ __global__ void print_checksum() {
     chksum += *(fish[i]->position()->random_state()) % 601;
   }
 
-  uint32_t fish_use = memory_allocator.DBG_used_slots<Fish>();
-  uint32_t fish_num = memory_allocator.DBG_allocated_slots<Fish>();
-  uint32_t shark_use = memory_allocator.DBG_used_slots<Shark>();
-  uint32_t shark_num = memory_allocator.DBG_allocated_slots<Shark>();
-
-  printf("%" PRIu64, chksum);
-  printf(",%u,%u,%u,%u\n",
-         fish_use, fish_num, shark_use, shark_num);
+  printf("%" PRIu64 "\n", chksum);
 }
 
 __global__ void reset_fish_array() {
@@ -438,81 +413,18 @@ __global__ void find_sharks() {
   }
 }
 
-__global__ void find_fish_soa() {
-  assert(gridDim.x * blockDim.x == 1);
-  num_fish = 0;
-  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
-    if (memory_allocator.is_block_allocated<Fish>(i)) {
-      auto* block = memory_allocator.get_block<Fish>(i);
-      for (int j = 0; j < Fish::kBlockSize; ++j) {
-        if (block->is_slot_allocated(j)) {
-          fish[num_fish++] = block->make_pointer(j);
-        }
-      }
-    }
-  }
-}
-
-__global__ void find_sharks_soa() {
-  assert(gridDim.x * blockDim.x == 1);
-  num_sharks = 0;
-  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
-    if (memory_allocator.is_block_allocated<Shark>(i)) {
-      auto* block = memory_allocator.get_block<Shark>(i);
-      for (int j = 0; j < Shark::kBlockSize; ++j) {
-        if (block->is_slot_allocated(j)) {
-          sharks[num_sharks++] = block->make_pointer(j);
-        }
-      }
-    }
-  }
-}
-
-__global__ void find_cells_soa() {
-  assert(gridDim.x * blockDim.x == 1);
-  uint32_t num_cells = 0;
-  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
-    if (memory_allocator.is_block_allocated<Cell>(i)) {
-      auto* block = memory_allocator.get_block<Cell>(i);
-      for (int j = 0; j < Cell::kBlockSize; ++j) {
-        if (block->is_slot_allocated(j)) {
-          cells[num_cells++] = block->make_pointer(j);
-        }
-      }
-    }
-  }
-}
-
-void generate_fish_array_soa() {
-  find_fish_soa<<<1,1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
-void generate_shark_array_soa() {
-  find_sharks_soa<<<1,1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
-void generate_fish_array_no_soa() {
+void generate_fish_array() {
   reset_fish_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  find_fish<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  find_fish<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-}
-
-void generate_shark_array_no_soa() {
-  reset_shark_array<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
-void generate_fish_array() {
-  generate_fish_array_soa();
 }
 
 void generate_shark_array() {
-  generate_shark_array_soa();
+  reset_shark_array<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 }
 
 
@@ -598,12 +510,15 @@ __global__ void init_memory_system() {
 }
 
 void initialize() {
-  init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  //init the heap
+  initHeap(512*1024U*1024U);
+
+  init_memory_system<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  create_cells<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  setup_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  setup_cells<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
@@ -623,14 +538,13 @@ __global__ void fill_gui_map() {
 }
 
 void update_gui_map() {
-  fill_gui_map<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  fill_gui_map<<<GRID_SIZE_X*GRID_SIZE_Y/THREADS_PER_BLOCK + 1, THREADS_PER_BLOCK>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*GRID_SIZE_X*GRID_SIZE_Y,
                        0, cudaMemcpyDeviceToHost);
   gpuErrchk(cudaDeviceSynchronize());
 }
-
 
 int h_num_fish = 0;
 int h_num_sharks = 0;
@@ -639,30 +553,29 @@ int h_num_sharks = 0;
 void print_stats() {
   generate_fish_array();
   generate_shark_array();
-  //printf("FISH: %i,SHARKS: %i,", h_num_fish, h_num_sharks);
+
+  //printf("\n Fish: %i, Sharks: %i    CHKSUM: ", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
 int main(int argc, char* arvg[]) {
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
-
-  size_t heap_size;
-  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
-  //printf("CUDA heap size: %lu\n", heap_size);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512U*1024*1024);
 
   initialize();
+  size_t heap_size;
+  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
 
-  // To ensure cells are accessed properly (SOA).
-  find_cells_soa<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  //printf("Computing...\n");
+  //int time_running = 0;
+	int total_time = 0;
 
-  //printf("Computing...");
-
-int total_time = 0;
-  for (int i = 0; i < 500; ++i) {
+  for (int i = 0; i<500; ++i) {
     if (i%50==0) {
+      //print_stats();
       //render();
+      //printf("    Time: %i usec", time_running);
+      //time_running = 0;
     }
 
     generate_shark_fish_arrays();
@@ -674,6 +587,7 @@ int total_time = 0;
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
     total_time += time_running;
+    //printf("\n");
   }
 
     printf("%i,", total_time);

@@ -13,7 +13,7 @@ struct ScatterHeapConfig : mallocMC::CreationPolicies::Scatter<>::HeapProperties
     typedef boost::mpl::int_<4096>  pagesize;
     typedef boost::mpl::int_<8>     accessblocks;
     typedef boost::mpl::int_<16>    regionsize;
-    typedef boost::mpl::int_<8>     wastefactor;
+    typedef boost::mpl::int_<2>     wastefactor;
     typedef boost::mpl::bool_<false> resetfreedpages;
 };
 
@@ -66,7 +66,7 @@ namespace wa_tor {
   }
 
   void initHeap(int bytes) {
-    auto* sa = new ScatterAllocator( 2U * 512U * 1024U * 1024U ); // heap size of 512MiB
+    auto* sa = new ScatterAllocator( 1U * 512U * 1024U * 1024U ); // heap size of 512MiB
     copy_handle<<<1,1>>>(*sa);
     gpuErrchk(cudaDeviceSynchronize());
   }

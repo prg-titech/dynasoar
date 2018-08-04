@@ -10,14 +10,13 @@
 //#include "wa-tor/aos/halloc_allocator.h"
 //#include "wa-tor/aos/scatteralloc_allocator.h"
 //#include "wa-tor/aos/aos_allocator.h"
-//#include "wa-tor/aos/cuda_allocator.h"
-#include "wa-tor/aos/mallocmc_allocator.h"
+#include "wa-tor/aos/cuda_allocator.h"
+//#include "wa-tor/aos/mallocmc_allocator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
 #define GRID_SIZE_X 2048
-#define GRID_SIZE_Y 1024
 #define THREADS_PER_BLOCK 256
 #define NUM_BLOCKS 1024
 
@@ -561,17 +560,17 @@ void print_stats() {
 }
 
 int main(int argc, char* arvg[]) {
-  //cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512U*1024*1024);
 
   initialize();
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
-  printf("CUDA heap size: %lu\n", heap_size);
 
   //printf("Computing...\n");
   //int time_running = 0;
+	int total_time = 0;
 
-  for (int i = 0; i<1000; ++i) {
+  for (int i = 0; i<500; ++i) {
     if (i%50==0) {
       //print_stats();
       //render();
@@ -587,11 +586,12 @@ int main(int argc, char* arvg[]) {
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-    printf("%i,", time_running);
-    print_stats();
+    total_time += time_running;
     //printf("\n");
   }
 
+    printf("%i,", total_time);
+    print_stats();
   return 0;
 }
 
