@@ -598,5 +598,6 @@ int main(int argc, char* arvg[]) {
 }  // namespace wa_tor
 
 int main(int argc, char* arvg[]) {
-  return wa_tor::main(0, nullptr);
+    return 0;
+//  return wa_tor::main(0, nullptr);
 }
