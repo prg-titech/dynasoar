@@ -458,8 +458,9 @@ class SoaAllocator {
   }
 
   // Device-side version, invoked from kernel.
+  // This version does a #threads-stride loop, which is probably not optimal.
   template<int W_MULT, class T, void(T::*func)()>
-  __DEV__ void parallel_do_cuda() {
+  __DEV__ void parallel_do_cuda_2() {
     const uint32_t N_alloc = allocated_[TupleIndex<T, TupleType>::value].scan_num_bits();
 
     int num_threads = blockDim.x * gridDim.x;
@@ -500,6 +501,41 @@ class SoaAllocator {
             // Clear last bit.
             iteration_bitmap &= iteration_bitmap - 1;
           }
+        }
+      }
+    }
+  }
+
+  // This version assigns 64 threads to every block.
+  template<int W_MULT, class T, void(T::*func)()>
+  __DEV__ void parallel_do_cuda() {
+    const uint32_t N_alloc = allocated_[TupleIndex<T, TupleType>::value].scan_num_bits();
+
+    // Round to multiple of 64.
+    int num_threads = ((blockDim.x * gridDim.x)/64)*64;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid < num_threads) {
+      for (int j = tid/64; j < N_alloc; j += num_threads/64) {
+        // i is the index of in the scan array.
+        int block_idx = allocated_[TupleIndex<T, TupleType>::value].scan_get_index(j);
+
+        // TODO: Consider doing a scan over "allocated" bitmap.
+        auto* block = get_block<T>(block_idx);
+        auto iteration_bitmap = block->iteration_bitmap;
+        int block_size = __popcll(iteration_bitmap);
+        //int objs_per_thread = block_size/threads_per_block + 1;
+
+        int thread_offset = tid % 64;
+        // Advance bitmap to return thread_offset-th bit index.
+        for (int i = 0; i < thread_offset; ++i) {
+          // Clear last bit.
+          iteration_bitmap &= iteration_bitmap - 1;
+        }
+        int obj_bit = __ffsll(iteration_bitmap);
+        if (obj_bit > 0) {
+          T* obj = get_object<T>(block, obj_bit - 1);
+          // call the function.
+          (obj->*func)();
         }
       }
     }
