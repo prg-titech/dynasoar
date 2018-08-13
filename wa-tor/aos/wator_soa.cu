@@ -1,4 +1,4 @@
-//#define NDEBUG
+#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -626,7 +626,6 @@ int total_time = 0;
     if (i%50==0) {
       //render();
     }
-
     // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
     auto time_before = std::chrono::system_clock::now();
     generate_shark_fish_arrays();
