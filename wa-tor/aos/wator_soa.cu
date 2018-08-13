@@ -1,4 +1,4 @@
-#define NDEBUG
+//#define NDEBUG
 
 #include <chrono>
 #include <stdio.h>
@@ -10,7 +10,9 @@
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
-#define GRID_SIZE_X 2048
+
+#define GRID_SIZE_X 400
+#define GRID_SIZE_Y 300
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -22,6 +24,8 @@
 namespace wa_tor {
 
 __device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
+// Host side pointer.
+decltype(memory_allocator)* allocator_handle;
 
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
@@ -406,14 +410,6 @@ __global__ void print_checksum() {
          fish_use, fish_num, shark_use, shark_num);
 }
 
-__global__ void reset_fish_array() {
-  num_fish = 0;
-}
-
-__global__ void reset_shark_array() {
-  num_sharks = 0;
-}
-
 // One thread per cell.
 __global__ void find_fish() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
@@ -438,34 +434,17 @@ __global__ void find_sharks() {
   }
 }
 
-__global__ void find_fish_soa() {
-  assert(gridDim.x * blockDim.x == 1);
-  num_fish = 0;
-  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
-    if (memory_allocator.is_block_allocated<Fish>(i)) {
-      auto* block = memory_allocator.get_block<Fish>(i);
-      for (int j = 0; j < Fish::kBlockSize; ++j) {
-        if (block->is_slot_allocated(j)) {
-          fish[num_fish++] = block->make_pointer(j);
-        }
-      }
-    }
-  }
+template<typename T>
+__global__ void initialize_iteration() {
+  memory_allocator.initialize_iteration<T>();
 }
 
-__global__ void find_sharks_soa() {
-  assert(gridDim.x * blockDim.x == 1);
+__global__ void reset_fish_array() {
+  num_fish = 0;
+}
+
+__global__ void reset_shark_array() {
   num_sharks = 0;
-  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
-    if (memory_allocator.is_block_allocated<Shark>(i)) {
-      auto* block = memory_allocator.get_block<Shark>(i);
-      for (int j = 0; j < Shark::kBlockSize; ++j) {
-        if (block->is_slot_allocated(j)) {
-          sharks[num_sharks++] = block->make_pointer(j);
-        }
-      }
-    }
-  }
 }
 
 __global__ void find_cells_soa() {
@@ -483,114 +462,92 @@ __global__ void find_cells_soa() {
   }
 }
 
-void generate_fish_array_soa() {
-  find_fish_soa<<<1,1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
 
-void generate_shark_array_soa() {
-  find_sharks_soa<<<1,1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
-void generate_fish_array_no_soa() {
+void generate_fish_array() {
   reset_fish_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
   find_fish<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-void generate_shark_array_no_soa() {
+void generate_shark_array() {
   reset_shark_array<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
   find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-void generate_fish_array() {
-  generate_fish_array_soa();
-}
-
-void generate_shark_array() {
-  generate_shark_array_soa();
-}
-
-
-__global__ void cell_prepare() {
-  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
-       tid < GRID_SIZE_Y*GRID_SIZE_X;
-       tid += blockDim.x*gridDim.x) {
-    cells[tid]->prepare();
-  }
-}
-
-__global__ void cell_decide() {
-  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
-       tid < GRID_SIZE_Y*GRID_SIZE_X;
-       tid += blockDim.x*gridDim.x) {
-    cells[tid]->decide();
-  }
-}
-
+/*
 __global__ void fish_prepare() {
-  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
-       tid < num_fish;
-       tid += blockDim.x*gridDim.x) {
-    assert(fish[tid] != nullptr);
-    fish[tid]->prepare();
-  }
+  memory_allocator.parallel_do<16, Fish, &Fish::prepare>();
 }
 
 __global__ void fish_update() {
-  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
-       tid < num_fish;
-       tid += blockDim.x*gridDim.x) {
-    assert(fish[tid] != nullptr);
-    fish[tid]->update();
-  }
+  memory_allocator.parallel_do<16, Fish, &Fish::update>();
 }
 
 __global__ void shark_prepare() {
-  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
-       tid < num_sharks;
-       tid += blockDim.x*gridDim.x) {
-    assert(sharks[tid] != nullptr);
-    sharks[tid]->prepare();
-  }
+  memory_allocator.parallel_do<16, Shark, &Shark::prepare>();
 }
 
 __global__ void shark_update() {
-  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
-       tid < num_sharks;
-       tid += blockDim.x*gridDim.x) {
-    assert(sharks[tid] != nullptr);
-    sharks[tid]->update();
-  }
+  memory_allocator.parallel_do<16, Shark, &Shark::update>();
 }
+
+__global__ void cell_prepare() {
+  memory_allocator.parallel_do<16, Cell, &Cell::prepare>();
+}
+
+__global__ void cell_decide() {
+  memory_allocator.parallel_do<16, Cell, &Cell::decide>();
+}
+*/
 
 void generate_shark_fish_arrays() {
-  generate_fish_array();
-  generate_shark_array();
+  initialize_iteration<Fish><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  initialize_iteration<Shark><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  // TODO: only do this once.
+  initialize_iteration<Cell><<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 }
 
-void step() {
-  cell_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  fish_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  fish_update<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
 
-  cell_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  shark_prepare<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  cell_decide<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  shark_update<<<NUM_BLOCKS, THREADS_PER_BLOCK>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+void step() {
+  // --- FISH ---
+  //generate_fish_array();
+  allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
+
+  allocator_handle->parallel_do<16, Fish, &Fish::prepare>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
+
+  allocator_handle->parallel_do<16, Cell, &Cell::decide>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
+  //initialize_iteration<Fish><<<128, 128>>>();
+  //gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<16, Fish, &Fish::update>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
+
+
+  // --- SHARKS ---
+  //generate_shark_array();
+  allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
+
+  allocator_handle->parallel_do<16, Shark, &Shark::prepare>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
+
+  allocator_handle->parallel_do<16, Cell, &Cell::decide>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
+  //initialize_iteration<Shark><<<128, 128>>>();
+  //gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<16, Shark, &Shark::update>(
+      NUM_BLOCKS, THREADS_PER_BLOCK);
 }
 
 __global__ void init_memory_system() {
@@ -598,6 +555,10 @@ __global__ void init_memory_system() {
 }
 
 void initialize() {
+  allocator_handle = nullptr;
+  cudaGetSymbolAddress((void**) &allocator_handle, memory_allocator);
+  assert(allocator_handle != nullptr);
+
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
@@ -642,6 +603,7 @@ void print_stats() {
   //printf("FISH: %i,SHARKS: %i,", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
+  printf("           ");
 }
 
 int main(int argc, char* arvg[]) {
@@ -665,10 +627,9 @@ int total_time = 0;
       //render();
     }
 
-    generate_shark_fish_arrays();
-
     // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
     auto time_before = std::chrono::system_clock::now();
+    generate_shark_fish_arrays();
     step();
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(

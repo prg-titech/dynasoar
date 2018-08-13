@@ -1,8 +1,6 @@
 #ifndef WA_TOR_AOS_WATOR_H
 #define WA_TOR_AOS_WATOR_H
 
-#include "allocator/soa_allocator.h"
-
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -12,6 +10,10 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
       if (abort) exit(code);
    }
 }
+
+#include "allocator/soa_allocator.h"
+
+static const int kBlockSize = 64;
 
 namespace wa_tor {
 
