@@ -1,0 +1,78 @@
+Fast GPU Memory Allocators
+--------------------------
+Implementation by Marek Vinkler
+Copyright 2014, Faculty of Informatics, Masaryk University
+
+This package contains full source code for the fast GPU-based allocators used 
+in the following paper:
+
+    "Register Efficient Memory Allocator for GPUs",
+    Marek Vinkler, Vlastimil Havran
+    Proc. High-Performance Graphics 2014
+
+The source code is licensed under New BSD License (see LICENSE), and
+hosted on the server of the HCI laboratory:
+
+http://decibel.fi.muni.cz/~xvinkl/CMalloc/
+Version: 1.1
+
+File list
+---------
+CMalloc - the main directory
+|-- src
+  |-- alloc - directory containing the project specific source codes
+  |  |-- kernels - source codes for all compared allocators
+  |  |  |-- gpualloc.cu	- allocation and deallocation routines
+  |  |  |-- gpualloc.h - allocator declarations (uses setting from AllocTest.hpp)
+  |  |  |-- warp_common.cu - common memory access function definition
+  |  |  |-- warp_common.cuh - common memory access function declaration
+  |  |-- tests - source codes for the evaluation tests
+  |  |  |-- alloc_test.cu	- evaluation tests in CUDA
+  |  |  |-- AllocTest.hpp - allocator settings
+  |  |  |-- CudaAllocTest.cpp - setup and testing procedures
+  |  |  |-- CudaAllocTest.hpp - setup and testing procedures
+  |  |-- util - source codes for processing of the configuration file
+  |-- framework -- framework of Timo Aila and Terro Karras
+|-- alloc.sln - the project file for MSVC 2010
+|-- alloc_Win32_*.exe - precompiled binaries for the application
+|-- config.conf - the configuration file
+|-- README - this readme 
+
+
+System requirements
+-------------------
+
+- Microsoft Windows XP, Vista, or 7.
+
+- At least 1GB of system memory.
+
+- NVIDIA CUDA-compatible GPU with compute capability 3.0 (due to Halloc).
+
+- Microsoft Visual Studio 2010. Required even if you do not plan to build
+  the source code, as the runtime CUDA compilation mechanism depends on it.
+
+
+Instructions
+------------
+
+1. Install Visual Studio 2010. The Express edition can be downloaded from:
+   http://www.microsoft.com/visualstudio/en-us/products/2010-editions/visual-cpp-express
+
+2. Install the latest NVIDIA GPU drivers and CUDA Toolkit.
+   http://developer.nvidia.com/object/cuda_archive.html
+
+3. Set the benchmark in config.conf and run alloc_Win32_Release.exe to 
+start the application.
+
+4. If you get an error during initialization, the most probable explanation
+   is that the application is unable to launch nvcc.exe contained in the
+   CUDA Toolkit. In this case, you should:
+
+   - Set CUDA_BIN_PATH to point to the CUDA Toolkit "bin" directory, e.g.
+     "set CUDA_BIN_PATH=C:\Program Files (x86)\NVIDIA GPU Computing Toolkit\CUDA\v4.2\bin".
+
+   - Set CUDA_INC_PATH to point to the CUDA Toolkit "include" directory, e.g.
+     "set CUDA_INC_PATH=C:\Program Files (x86)\NVIDIA GPU Computing Toolkit\CUDA\v4.2\include".
+
+   - Run vcvars32.bat to setup Visual Studio paths, e.g.
+     "C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\vcvars32.bat".

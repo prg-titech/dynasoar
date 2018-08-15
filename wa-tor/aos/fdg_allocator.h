@@ -41,7 +41,7 @@ namespace wa_tor {
     // select device
     //selectDevice();
     //setHeapLimit(512 * 1024 * 1024);
-    cudaDeviceSetLimit(cudaLimitMallocHeapSize, 512*1024*1024);
+    cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1024*1024*1024);
   }
 }  // namespace wa_tor
 

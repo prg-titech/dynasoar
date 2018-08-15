@@ -1,0 +1,56 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="tests">
+      <UniqueIdentifier>{82320b35-4c68-416e-a413-91a010154eea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="kernels">
+      <UniqueIdentifier>{342d34a4-9d21-4559-8e4b-33dfbc57d47f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="util">
+      <UniqueIdentifier>{7658b90f-371b-4e51-a747-a32448572db3}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\alloc\tests\CudaAllocTest.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="src\alloc\util\AppEnvironment.cpp">
+      <Filter>util</Filter>
+    </ClCompile>
+    <ClCompile Include="src\alloc\util\Environment.cpp">
+      <Filter>util</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\alloc\tests\AllocTest.hpp">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="src\alloc\tests\CudaAllocTest.hpp">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="src\alloc\util\Environment.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\alloc\util\AppEnvironment.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\alloc\kernels\gpualloc.h">
+      <Filter>kernels</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\alloc\kernels\warp_common.cu">
+      <Filter>kernels</Filter>
+    </None>
+    <None Include="src\alloc\kernels\warp_common.cuh">
+      <Filter>kernels</Filter>
+    </None>
+    <None Include="src\alloc\tests\alloc_test.cu">
+      <Filter>tests</Filter>
+    </None>
+    <None Include="src\alloc\kernels\gpualloc.cu">
+      <Filter>kernels</Filter>
+    </None>
+  </ItemGroup>
+</Project>

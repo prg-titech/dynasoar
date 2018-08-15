@@ -1,0 +1,14 @@
+This framework is part of the accompanying material for the following paper:
+
+    "Understanding the Efficiency of Ray Traversal on GPUs",
+    Timo Aila and Samuli Laine,
+    Proc. High-Performance Graphics 2009
+    http://www.tml.tkk.fi/~timo/publications/aila2009hpg_paper.pdf
+    
+Implementation by Tero Karras, Timo Aila, and Samuli Laine
+Copyright 2009-2012 NVIDIA Corporation
+
+The source code is licensed under New BSD License (see LICENSE), and
+hosted by Google Code:
+
+http://code.google.com/p/understanding-the-efficiency-of-ray-traversal-on-gpus/

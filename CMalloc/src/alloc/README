@@ -1,0 +1,14 @@
+This framework is part of the accompanying material for the following paper:
+
+    "Register Efficient Memory Allocator for GPUs",
+    Marek Vinkler, Vlastimil Havran
+    Proc. High-Performance Graphics 2014
+    
+Implementation by Marek Vinkler
+Copyright 2014, Faculty of Informatics, Masaryk University
+
+The source code is licensed under New BSD License (see LICENSE), and
+hosted on the server of the HCI laboratory:
+
+http://decibel.fi.muni.cz/~xvinkl/CMalloc/
+Version: 1.1
