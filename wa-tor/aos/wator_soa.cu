@@ -626,9 +626,10 @@ int total_time = 0;
     if (i%50==0) {
       //render();
     }
+ generate_shark_fish_arrays();
     // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
     auto time_before = std::chrono::system_clock::now();
-    generate_shark_fish_arrays();
+//    generate_shark_fish_arrays();
     step();
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
