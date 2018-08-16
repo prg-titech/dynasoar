@@ -23,7 +23,7 @@
 
 namespace wa_tor {
 
-__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
+__device__ SoaAllocator<64*64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
 // Host side pointer.
 decltype(memory_allocator)* allocator_handle;
 
@@ -558,6 +558,10 @@ void initialize() {
   allocator_handle = nullptr;
   cudaGetSymbolAddress((void**) &allocator_handle, memory_allocator);
   assert(allocator_handle != nullptr);
+
+
+  init_allocator_heap(allocator_handle, 3000U*1024*1024);  // 2GB heap
+  gpuErrchk(cudaDeviceSynchronize());
 
   init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
