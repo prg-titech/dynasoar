@@ -11,8 +11,8 @@
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
 
-#define GRID_SIZE_X 400
-#define GRID_SIZE_Y 300
+#define GRID_SIZE_X 2048
+//#define GRID_SIZE_Y 300
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -636,7 +636,7 @@ int total_time = 0;
     total_time += time_running;
   }
 
-    printf("%i,", total_time);
+    printf("%i,%i,", GRID_SIZE_Y, total_time);
     print_stats();
   return 0;
 }
