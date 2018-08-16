@@ -339,12 +339,12 @@ class Bitmap {
 
     // TODO: Run with num_selected threads, then we can remove the loop.
     __DEV__ void pre_scan() {
-      SizeT* selected = nested.data_.enumeration_result_buffer;
-      SizeT num_selected = nested.data_.enumeration_result_size;
+      //SizeT* selected = nested.data_.enumeration_result_buffer;
+      SizeT num_selected = NumContainers; //nested.data_.enumeration_result_size;
 
       for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
            sid < num_selected; sid += blockDim.x * gridDim.x) {
-        SizeT container_id = selected[sid];
+        SizeT container_id = sid;
         auto value = containers[container_id];
         for (int i = 0; i < kBitsize; ++i) {
           // Write "1" if allocated, "0" otherwise.
@@ -361,12 +361,12 @@ class Bitmap {
     // Run with num_selected threads.
     // Assumption: enumeration_base_buffer contains exclusive prefix sum.
     __DEV__ void post_scan() {
-      SizeT* selected = nested.data_.enumeration_result_buffer;
-      SizeT num_selected = nested.data_.enumeration_result_size;
+      //SizeT* selected = nested.data_.enumeration_result_buffer;
+      SizeT num_selected = NumContainers; //nested.data_.enumeration_result_size;
 
       for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
            sid < num_selected; sid += blockDim.x * gridDim.x) {
-        SizeT container_id = selected[sid];
+        SizeT container_id = sid;
         auto value = containers[container_id];
         for (int i = 0; i < kBitsize; ++i) {
           // Write "1" if allocated, "0" otherwise.
@@ -381,16 +381,16 @@ class Bitmap {
     }
 
     __DEV__ void set_result_size() {
-      SizeT num_selected = nested.data_.enumeration_result_size;
+      SizeT num_selected = NumContainers;
       // Base buffer contains prefix sum.
       SizeT result_size = enumeration_cub_output[num_selected*kBitsize - 1];
       enumeration_result_size = result_size;
     }
 
     void scan() {
-      run_atomic_add_scan();
+      //run_atomic_add_scan();
       // Performance evaluation...
-      //run_cub_scan();
+      run_cub_scan();
     }
 
     void run_atomic_add_scan() {
@@ -407,9 +407,9 @@ class Bitmap {
     }
 
     void run_cub_scan() {  
-      nested.scan();
+      //nested.scan();
 
-      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
+      SizeT num_selected = NumContainers; //read_from_device<SizeT>(&nested.data_.enumeration_result_size);
       kernel_pre_scan<<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
       // TODO: Replace with cub for better performance.
