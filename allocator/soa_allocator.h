@@ -283,6 +283,7 @@ class SoaBlock {
 
 // Get largest SOA block size among all tuple elements.
 // TODO: Assuming max. block size of 64.
+// TODO: This calculation is wrong!
 template<class Tuple>
 struct TupleMaxBlockSize;
 

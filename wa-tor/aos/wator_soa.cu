@@ -11,6 +11,7 @@
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
 #define GRID_SIZE_X 2048
+#define GRID_SIZE_Y 1024
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -23,8 +24,26 @@ namespace wa_tor {
 
 __device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
 
+__device__ int d_num_alloc_fish;
+__device__ int d_num_alloc_shark;
+__device__ int d_num_free_fish;
+__device__ int d_num_free_shark;
+
+__global__ void print_reset_stats() {
+  printf("%i,%i,%i,%i\n",d_num_alloc_fish, d_num_alloc_shark, d_num_free_fish,d_num_free_shark);
+  d_num_alloc_fish=0;
+  d_num_alloc_shark=0;
+  d_num_free_fish=0;
+  d_num_free_shark=0;
+}
+
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
+  if (std::is_same<T, Fish>::value) {
+    atomicAdd(&d_num_alloc_fish, 1);
+  } else if (std::is_same<T, Shark>::value) {
+    atomicAdd(&d_num_alloc_shark, 1);
+  }
   return memory_allocator.make_new<T>(args...);
 }
 
@@ -35,6 +54,12 @@ __device__ void deallocate(T* ptr) {
 
   template<int TypeIndex>
   __device__ void deallocate_untyped(void* ptr) {
+    if (TypeIndex == 1) {
+      atomicAdd(&d_num_free_fish, 1);
+    } else if (TypeIndex == 2) {
+      atomicAdd(&d_num_free_shark, 1);
+    }
+
     memory_allocator.free_untyped<TypeIndex>(ptr);
   }
 
@@ -669,6 +694,8 @@ int total_time = 0;
 
     // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
     auto time_before = std::chrono::system_clock::now();
+    print_reset_stats<<<1,1>>>();
+    gpuErrchk(cudaDeviceSynchronize());
     step();
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -676,8 +703,8 @@ int total_time = 0;
     total_time += time_running;
   }
 
-    printf("%i,", total_time);
-    print_stats();
+    print_reset_stats<<<1,1>>>();
+    gpuErrchk(cudaDeviceSynchronize());
   return 0;
 }
 
