@@ -12,7 +12,7 @@
 #define ENERGY_START 2
 
 #define GRID_SIZE_X 2048
-//#define GRID_SIZE_Y 300
+#define GRID_SIZE_Y 1024
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -23,7 +23,7 @@
 
 namespace wa_tor {
 
-__device__ SoaAllocator<64*64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
+__device__ SoaAllocator<HEAP_SIZE*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
 // Host side pointer.
 decltype(memory_allocator)* allocator_handle;
 
@@ -625,23 +625,32 @@ int main(int argc, char* arvg[]) {
 
   //printf("Computing...");
 
-int total_time = 0;
+int compute_time = 0;
+int enumerate_time = 0;
+
   for (int i = 0; i < 500; ++i) {
     if (i%50==0) {
       //render();
     }
- generate_shark_fish_arrays();
-    // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
+
     auto time_before = std::chrono::system_clock::now();
-//    generate_shark_fish_arrays();
-    step();
+    generate_shark_fish_arrays();
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-    total_time += time_running;
+    enumerate_time += time_running;
+
+    // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
+    time_before = std::chrono::system_clock::now();
+//    generate_shark_fish_arrays();
+    step();
+    time_after = std::chrono::system_clock::now();
+    time_running = std::chrono::duration_cast<std::chrono::microseconds>(
+        time_after - time_before).count();
+    compute_time += time_running;
   }
 
-    printf("%i,%i,", GRID_SIZE_Y, total_time);
+    printf("%i,%i,%i,", GRID_SIZE_Y, compute_time, enumerate_time);
     print_stats();
   return 0;
 }

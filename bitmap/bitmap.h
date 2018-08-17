@@ -388,9 +388,9 @@ class Bitmap {
     }
 
     void scan() {
-      //run_atomic_add_scan();
+      run_atomic_add_scan();
       // Performance evaluation...
-      run_cub_scan();
+      //run_cub_scan();
     }
 
     void run_atomic_add_scan() {
