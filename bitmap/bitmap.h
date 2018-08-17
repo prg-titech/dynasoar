@@ -406,7 +406,7 @@ class Bitmap {
       //printf("Occupied bits: %i / %i\n", (int) res_size, (int) NumContainers*kBitsize);
     }
 
-    void run_cub_scan() {  
+    void run_cub_scan() {
       //nested.scan();
 
       SizeT num_selected = NumContainers; //read_from_device<SizeT>(&nested.data_.enumeration_result_size);
