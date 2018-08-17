@@ -650,7 +650,7 @@ int enumerate_time = 0;
     compute_time += time_running;
   }
 
-    printf("%i,%i,%i,", GRID_SIZE_Y, compute_time, enumerate_time);
+    printf("%i,%i,%i,", HEAP_SIZE, compute_time, enumerate_time);
     print_stats();
   return 0;
 }
