@@ -1,6 +1,6 @@
 #!/bin/bash
 # Tested using bash version 4.1.5
-for ((i=32;i<=768;i+=1)); 
+for ((i=1;i<=768;i+=1)); 
 do 
   echo ${i}
 
