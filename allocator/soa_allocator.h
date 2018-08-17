@@ -329,7 +329,7 @@ struct TupleMaxBlockSize<std::tuple<T>> {
 
 template<typename A>
 __global__ void kernel_init_heap(A* allocator, void* ptr) {
-  printf("ALLO: %p\n", allocator);
+  //printf("ALLO: %p\n", allocator);
   allocator->data_ = reinterpret_cast<char*>(ptr);
 }
 
@@ -339,7 +339,7 @@ void init_allocator_heap(A* dev_allocator, uint64_t bytes) {
   cudaMalloc(&heap_addr, bytes);
   assert(heap_addr != nullptr);
   assert(dev_allocator != nullptr);
-  printf("DEV ALLOCATOR: %p\nHEAP: %p\n", dev_allocator, heap_addr);
+  //printf("DEV ALLOCATOR: %p\nHEAP: %p\n", dev_allocator, heap_addr);
   kernel_init_heap<<<1,1>>>(dev_allocator, heap_addr);
   gpuErrchk(cudaDeviceSynchronize());
 }
