@@ -388,9 +388,9 @@ class Bitmap {
     }
 
     void scan() {
-      run_atomic_add_scan();
+      //run_atomic_add_scan();
       // Performance evaluation...
-      //run_cub_scan();
+      run_cub_scan();
     }
 
     void run_atomic_add_scan() {
@@ -520,12 +520,12 @@ class Bitmap {
 
   static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
-  static const SizeT kNumContainers = N <= 64 ? 1 : N / kBitsize;
+  static const SizeT kNumContainers = N <= 64 ? 1 : (N+64-1) / kBitsize;
 
-  static const bool kHasNested = kNumContainers > 1;
+  static const bool kHasNested = N > 64; //kNumContainers > 1;
 
-  static_assert(!kHasNested || N % kBitsize == 0,
-                "N must be of size (sizeof(ContainerT)*8)**D * x.");
+  //static_assert(!kHasNested || N % kBitsize == 0,
+  //              "N must be of size (sizeof(ContainerT)*8)**D * x.");
 
   BitmapData<kNumContainers, kHasNested> data_;
 };

@@ -61,8 +61,8 @@ class SoaField {
     T* soa_array = reinterpret_cast<T*>(
         block_base + kSoaBufferOffset + block_size*Offset);
 
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
     return soa_array + obj_id;
   }
 
@@ -75,8 +75,8 @@ class SoaField {
     T* soa_array = reinterpret_cast<T*>(
         block_base + kSoaBufferOffset + block_size*Offset);
 
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
+    //assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
     return soa_array + obj_id;
   }
 
