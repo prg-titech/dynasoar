@@ -314,13 +314,13 @@ class Bitmap {
     }
 
     __DEV__ void atomic_add_scan() {
-      SizeT* selected = nested.data_.enumeration_result_buffer;
-      SizeT num_selected = nested.data_.enumeration_result_size;
+      //SizeT* selected = nested.data_.enumeration_result_buffer;
+      SizeT num_selected = NumContainers; //nested.data_.enumeration_result_size;
       //printf("num_selected=%i\n", (int) num_selected);
 
       for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
            sid < num_selected; sid += blockDim.x * gridDim.x) {
-        SizeT container_id = selected[sid];
+        SizeT container_id = sid;
         auto value = containers[container_id];
         int num_bits = __popcll(value);
 
@@ -388,15 +388,15 @@ class Bitmap {
     }
 
     void scan() {
-      //run_atomic_add_scan();
+      run_atomic_add_scan();
       // Performance evaluation...
-      run_cub_scan();
+      //run_cub_scan();
     }
 
     void run_atomic_add_scan() {
-      nested.scan();
+      //nested.scan();
 
-      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
+      SizeT num_selected = NumContainers; //read_from_device<SizeT>(&nested.data_.enumeration_result_size);
       kernel_atomic_add_scan_init<<<1, 1>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
       kernel_atomic_add_scan<<<num_selected/256+1, 256>>>(this);
