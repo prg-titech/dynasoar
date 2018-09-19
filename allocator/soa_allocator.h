@@ -202,8 +202,6 @@ class SoaBlock {
 
       // Generate bitmask for allocation
       for (int i = 0; i < allocation_size; ++i) {
-        // TODO: To reduce collisions attempt to start allocation at
-        // different positions (rotating shift).
         int next_bit_pos = __ffsll(updated_mask) - 1;
         assert(next_bit_pos >= 0);
         assert(((1ULL << next_bit_pos) & updated_mask) > 0);
@@ -310,13 +308,6 @@ class SoaAllocator {
                 "N_Objects Must be divisible by BlockSize.");
 
  public:
-  template<typename T>
-  __DEV__ void remove_dirty() {
-    // TODO: There may be a more efficient way to do this.
-    // dirty_[TupleIndex<T, TupleType>::value].initialize(false);
-    // Have to do this also with SoaBlocks.
-  }
-
   __DEV__ void initialize() {
     // Check alignment of data storage buffer.
     assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
@@ -325,7 +316,6 @@ class SoaAllocator {
     for (int i = 0; i < kNumTypes; ++i) {
       allocated_[i].initialize(false);
       active_[i].initialize(false);
-      dirty_[i].initialize(false);
     }
   }
 
@@ -404,22 +394,13 @@ class SoaAllocator {
       assert(block_idx < N);
       result = get_ptr_from_allocation<T>(
           block_idx, __popc(__lanemask_lt() & active), allocation_bitmap);
-
-      //printf("ALLOCTED: %i / %i, rank=%i, lt=%i, result=%p,\n",(int) __popc(allocation_bitmap), (int)__popc(active), (int)rank, (int)__popc(__lanemask_lt()&active), result);
-
     } while (result == nullptr);
 
-    //assert(reinterpret_cast<char*>(result) >= data_);
-    //assert(reinterpret_cast<char*>(result) < data_ + N*kBlockMaxSize);
     return new(result) T(args...);
-    //return (T*) result;
   }
 
   template<class T>
   __DEV__ void free(T* obj) {
-    //assert(reinterpret_cast<char*>(obj) >= data_);
-    //assert(reinterpret_cast<char*>(obj) < data_ + N*kBlockMaxSize);
-
     obj->~T();
     const uint32_t block_idx = get_block_idx<T>(obj);
     const uint32_t obj_id = get_object_id<T>(obj);
@@ -450,117 +431,12 @@ class SoaAllocator {
     free(typed);
   }
 
-  // W_SZ: Allocated threads per block.
-  // Problem: Small W_SZ means less memory coalescing.
-  /*
-  template<int W_SZ, class T, void(T::*func)()>
-  __DEV__ void parallel_do() {
-    // TODO: This may not be doing the right thing. What if we have more
-    // threads than blocks?
-
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
-         i += blockDim.x * gridDim.x) {
-      // Process element (block) i with W_SZ many threads.
-      int warp_id = i / W_SZ;
-      int warp_offset = i % W_SZ;
-
-      for (int j = 0; j < W_SZ; ++j) {
-        uint32_t block_idx = warp_id*W_SZ + j;
-
-        if (block_idx < N
-            && allocated_[TupleIndex<T, TupleType>::value][block_idx]) {
-          auto* block = get_block<T>(block_idx);
-          assert(reinterpret_cast<uintptr_t>(block)
-              >= reinterpret_cast<uintptr_t>(DBG_data_storage));
-          assert(reinterpret_cast<uintptr_t>(block)+64
-              < reinterpret_cast<uintptr_t>(DBG_data_storage_end));
-
-          auto iteration_bitmap = block->iteration_bitmap;
-          int block_size = __popcll(iteration_bitmap);
-
-          // Advance bitmap to return warp_offset-th bit index.
-          for (int i = 0; i < warp_offset; ++i) {
-            // Clear last bit.
-            iteration_bitmap &= iteration_bitmap - 1;
-          }
-
-          for (int object_idx = warp_offset; object_idx < block_size;
-               object_idx += W_SZ) {
-            int obj_bit = __ffsll(iteration_bitmap);
-            assert(obj_bit > 0);
-            T* obj = get_object<T>(block, obj_bit - 1);
-            // Call function.
-            (obj->*func)();
-
-            if (object_idx + W_SZ < block_size) {
-              // There will be another iteration. Advance bitmap.
-              for (int i = 0; i < W_SZ; ++i) {
-                // Clear last bit.
-                iteration_bitmap &= iteration_bitmap - 1;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  */
-
   // Should be invoked from host side.
   template<int W_MULT, class T, void(T::*func)()>
   void parallel_do(int num_blocks, int num_threads) {
     allocated_[TupleIndex<T, TupleType>::value].scan();
     kernel_parallel_do<W_MULT, T, func><<<num_blocks, num_threads>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
-  }
-
-  // Device-side version, invoked from kernel.
-  // This version does a #threads-stride loop, which is probably not optimal.
-  template<int W_MULT, class T, void(T::*func)()>
-  __DEV__ void parallel_do_cuda2() {
-    const uint32_t N_alloc = allocated_[TupleIndex<T, TupleType>::value].scan_num_bits();
-
-    int num_threads = blockDim.x * gridDim.x;
-    assert(num_threads > N_alloc);
-    int threads_per_block = num_threads/N_alloc;
-    assert(threads_per_block > 0);
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (tid/threads_per_block < N_alloc) {
-      int block_idx = allocated_[TupleIndex<T, TupleType>::value].scan_get_index(
-          tid/threads_per_block);
-
-      // TODO: Consider doing a scan over "allocated" bitmap.
-      auto* block = get_block<T>(block_idx);
-      auto iteration_bitmap = block->iteration_bitmap;
-      int block_size = __popcll(iteration_bitmap);
-      //int objs_per_thread = block_size/threads_per_block + 1;
-
-      // Offset of this thread when processing this block.
-      int thread_offset = tid - (tid/threads_per_block)*threads_per_block;
-      // Advance bitmap to return thread_offset-th bit index.
-      for (int i = 0; i < thread_offset; ++i) {
-        // Clear last bit.
-        iteration_bitmap &= iteration_bitmap - 1;
-      }
-
-      // Now process objects within block.
-      for (int pos = thread_offset; pos < block_size; pos += threads_per_block) {
-        int obj_bit = __ffsll(iteration_bitmap);
-        assert(obj_bit > 0);
-        T* obj = get_object<T>(block, obj_bit - 1);
-        // Call function.
-        (obj->*func)();
-
-        if (pos + threads_per_block < block_size) {
-          // There will be another iteration. Advance bitmap.
-          for (int i = 0; i < threads_per_block; ++i) {
-            // Clear last bit.
-            iteration_bitmap &= iteration_bitmap - 1;
-          }
-        }
-      }
-    }
   }
 
   // This version assigns 64 threads to every block.
@@ -580,8 +456,6 @@ class SoaAllocator {
         // TODO: Consider doing a scan over "allocated" bitmap.
         auto* block = get_block<T>(block_idx);
         auto iteration_bitmap = block->iteration_bitmap;
-        int block_size = __popcll(iteration_bitmap);
-        //int objs_per_thread = block_size/threads_per_block + 1;
 
         int thread_offset = tid % num_objs;
         // Advance bitmap to return thread_offset-th bit index.
@@ -603,7 +477,6 @@ class SoaAllocator {
   __DEV__ void initialize_iteration() {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
          i += blockDim.x * gridDim.x) {
-      // TODO: Check dirty bitmap instead?
       if (allocated_[TupleIndex<T, TupleType>::value][i]) {
         // Initialize block.
         get_block<T>(i)->initialize_iteration();
@@ -797,10 +670,6 @@ class SoaAllocator {
   Bitmap<uint32_t, N> allocated_[kNumTypes];
 
   Bitmap<uint32_t, N> active_[kNumTypes];
-
-  // TODO: No hierarchy needed in this bitmap.
-  // TODO: Not needed anymore.
-  Bitmap<uint32_t, N> dirty_[kNumTypes];
 };
 
 #endif  // ALLOCATOR_SOA_ALLOCATOR_H
