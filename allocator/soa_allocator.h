@@ -9,10 +9,6 @@
 
 #define __DEV__ __device__
 
-// Only for debug purposes.
-__device__ char* DBG_data_storage;
-__device__ char* DBG_data_storage_end;
-
 __forceinline__ __device__ unsigned lane_id()
 {
     unsigned ret; 
@@ -33,66 +29,53 @@ __global__ void kernel_parallel_do(AllocatorT* allocator) {
   allocator->template parallel_do_cuda<W_MULT, T, func>();
 }
 
+// Data section begins after 128 bytes. This leaves enough space for bitmaps
+// and other data structures in blocks.
+static const int kBlockDataSectionOffset = 128;
+
+// Wrapper type for fields of SOA-structured classes. This class contains the
+// logic for calculating the data location of a field from an object
+// identifier.
 template<typename T, int Field, int Offset>
 class SoaField {
  private:
-  // Offset of data section within SOA buffer.
-  // TODO: Do not hard-code.
-  static const int kSoaBufferOffset = 128;
-
-  __DEV__ T* data_ptr() {
-    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
-    uint8_t block_size = ptr_base >> 48;    // Should be truncated.
-    uint8_t obj_id = static_cast<uint8_t>(ptr_base) & static_cast<uint8_t>(0x3F);   // Truncated.
-    uintptr_t block_base = ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0);
-    assert(obj_id < block_size);
-    T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + block_size*Offset);
-
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
-    return soa_array + obj_id;
-  }
-
+  // Calculate data pointer from address.
   __DEV__ T* data_ptr() const {
-    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this) - Field;
-    uint8_t block_size = ptr_base >> 48;    // Should be truncated.
-    uint8_t obj_id = static_cast<uint8_t>(ptr_base) & static_cast<uint8_t>(0x3F);   // Truncated.
+    // Base address of the pointer, i.e., without the offset of the SoaField
+    // type.
+    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this)
+        - sizeof(SoaField<T, Field, Offset>)*Field;
+    // Block size (N_T), i.e., number of object slots in this block.
+    uint8_t block_size = ptr_base >> 48;  // Truncated.
+    // Object slot ID.
+    uint8_t obj_id = static_cast<uint8_t>(ptr_base)
+        & static_cast<uint8_t>(0x3F);  // Truncated.
+    // Base address of the block.
     uintptr_t block_base = ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0);
     assert(obj_id < block_size);
+    // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(
-        block_base + kSoaBufferOffset + block_size*Offset);
-
-    assert(reinterpret_cast<char*>(soa_array + obj_id) > DBG_data_storage);
-    assert(reinterpret_cast<char*>(soa_array + obj_id) < DBG_data_storage_end);
+        block_base + kBlockDataSectionOffset + block_size*Offset);
     return soa_array + obj_id;
   }
 
  public:
+  // Field initialization.
   __DEV__ SoaField() {}
+  __DEV__ explicit SoaField(const T& value) { *data_ptr() = value; }
 
-  __DEV__ explicit SoaField(const T& value) {
-    *data_ptr() = value;
-  }
+  // Explicit conversion for automatic conversion to base type.
+  __DEV__ operator T&() { return *data_ptr(); }
+  __DEV__ operator const T&() const { return *data_ptr(); }
 
-  __DEV__ operator T&() {
-    return *data_ptr();
-  }
+  // Custom address-of operator.
+  __DEV__ T* operator&() { return data_ptr(); }
 
-  __DEV__ operator const T&() const {
-    return *data_ptr();
-  }
+  // Support member function calls.
+  __DEV__ T operator->() { return *data_ptr(); }
 
-  __DEV__ T* operator&() {
-    return data_ptr();
-  }
-
-  __DEV__ T operator->() {
-    return *data_ptr();
-  }
-
-  // TODO: This may not be the correct implementation. Need a const reference?
-  __DEV__ T& operator=(T value) {
+  // Assignment operator.
+  __DEV__ T& operator=(const T& value) {
     *data_ptr() = value;
     return *data_ptr();
   }
@@ -115,6 +98,7 @@ struct TupleIndex<T, std::tuple<U, Types...>> {
       1 + TupleIndex<T, std::tuple<Types...>>::value;
 };
 
+// Result of block allocation.
 struct BlockAllocationResult {
   __device__ BlockAllocationResult(uint64_t allocation_mask_p,
                                    bool block_full_p)
@@ -127,27 +111,37 @@ struct BlockAllocationResult {
 };
 
 enum DeallocationState : int8_t {
-  kBlockNowEmpty,
-  kBlockNowActive,
-  kRegularDealloc
+  kBlockNowEmpty,     // Deallocate block.
+  kBlockNowActive,    // Activate block.
+  kRegularDealloc     // Nothing to do.
 };
 
+// A SOA block containing objects.
+// T: Base type of the block.
+// N_Max: Maximum number of objects per block (regardless of type). Currently
+//        fixed at 64.
 template<class T, int N_Max>
 class SoaBlock {
  public:
+  static_assert(N_Max == 64, "Not implemented: Custom N_Max.");
+
+  // N_T: Number of object slots.
   static const int N = T::kBlockSize;
 
+  // Bitmap initializer: N_T bits set to 1.
   static const unsigned long long int kBitmapInitState =
-      N == 64 ? (~0ULL) : ((1ULL << N) - 1);
+      N == N_Max ? (~0ULL) : ((1ULL << N) - 1);
 
+  // Initializes a new block.
   __DEV__ SoaBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % N_Max == 0);   // Alignment.
     type_id = T::kTypeId;
-    __threadfence();
+    __threadfence();  // Initialize bitmap after type_id is visible.
     free_bitmap = kBitmapInitState;
     assert(__popcll(free_bitmap) == N);
   }
 
+  // Constructs an object identifier.
   __DEV__ T* make_pointer(uint8_t index) {
     uintptr_t ptr_as_int = index;
     uintptr_t block_size = N;
@@ -161,23 +155,27 @@ class SoaBlock {
     return reinterpret_cast<T*>(ptr_as_int);
   }
 
+  // Initializes object iteration bitmap.
   __DEV__ void initialize_iteration() {
     iteration_bitmap = (~free_bitmap) & kBitmapInitState;
   }
 
-  __DEV__ uint64_t invalidate() {
+  // Invalidates the block so that it can be deleted safely. Returns true if
+  // the block was invalidated.
+  __DEV__ bool invalidate() {
     auto old_free_bitmap = atomicExch(&free_bitmap, 0ULL);
     if (old_free_bitmap == kBitmapInitState) {
       return true;
     } else {
+      // At least one object is still allocated. Rollback invalidation.
+      // This is dangerous because other allocations or deallocations could
+      // have occurred until now.
+      // Case 1: Rollback empties block. Retry rollback and deallocation.
+      //         TODO: There should be a loop here.
+      // Case 2: Rollback 
       free_bitmap = old_free_bitmap;
       return false;
     }
-  }
-
-  __DEV__ void uninvalidate(uint64_t previous_val) {
-    free_bitmap = previous_val;
-    // TODO: Thread fence?
   }
 
   __DEV__ DeallocationState deallocate(int position) {
@@ -271,10 +269,10 @@ class SoaBlock {
 
  public:
   // Dummy area that may be overridden by zero initialization.
-  // Data section begins after 128 bytes.
+  // Data section begins after kBlockDataSectionOffset bytes.
   // TODO: Do we need this on GPU?
   // TODO: Can this be replaced when using ROSE?
-  char initialization_header_[128 - 3*sizeof(unsigned long long int)];
+  char initialization_header_[kBlockDataSectionOffset - 3*sizeof(unsigned long long int)];
 
   // Bitmap of free slots.
   unsigned long long int free_bitmap;
@@ -346,11 +344,6 @@ class SoaAllocator {
       allocated_[i].initialize(false);
       active_[i].initialize(false);
       dirty_[i].initialize(false);
-    }
-
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-      DBG_data_storage = data_;
-      DBG_data_storage_end = data_ + N*kBlockMaxSize;
     }
   }
 
