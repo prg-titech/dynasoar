@@ -10,10 +10,14 @@
 
 #define __DEV__ __device__
 
-// TODO: Remove this once code work properly.
+#ifndef NDEBUG
 static const int kMaxRetry = 10000000;
 #define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
 #define INIT_RETRY int _retry_counter = 0;
+#else
+#define CONTINUE_RETRY (true)
+#define INIT_RETRY
+#endif  // NDEBUG
 
 // Shift left, rotating.
 // Copied from: https://gist.github.com/pabigot/7550454
@@ -83,16 +87,6 @@ T read_from_device(T* ptr) {
 }
 
 
-// Problem: Deadlock if two threads in the same warp want to update the same
-// value. E.g., t0 wants to write "1" and waits for "0" to appear. But t1 cannot
-// write "0" because of thread divergence.
-
-// Sol. 1: Only one thread per warp is allowed to update values.
-
-// Bitmap mode: Set nested (parent) bitmap bit to 1 if there is at least one
-// bit set to 1 in the current bitmap. Allows for efficient deallocate(), but
-// not allocate().
-// TODO: ContainerT must be unsigned (?). Or maybe signed is also OK.
 // TODO: Only works with unsigned ContainerT types.
 template<typename SizeT, SizeT N, typename ContainerT = unsigned long long int>
 class Bitmap {
@@ -401,9 +395,6 @@ class Bitmap {
       gpuErrchk(cudaDeviceSynchronize());
       kernel_atomic_add_scan<<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
-
-      //int res_size = read_from_device<SizeT>(&enumeration_result_size);
-      //printf("Occupied bits: %i / %i\n", (int) res_size, (int) NumContainers*kBitsize);
     }
 
     void run_cub_scan() {  
@@ -412,10 +403,7 @@ class Bitmap {
       SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
       kernel_pre_scan<<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
-      // TODO: Replace with cub for better performance.
-      //thrust::inclusive_scan(thrust::device, enumeration_base_buffer,
-      //                       enumeration_base_buffer + num_selected*kBitsize,
-      //                       enumeration_base_buffer);
+
       size_t temp_size = 3*NumContainers*kBitsize;
       cub::DeviceScan::InclusiveSum(enumeration_cub_temp,
                                     temp_size,
