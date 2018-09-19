@@ -160,24 +160,6 @@ class SoaBlock {
     iteration_bitmap = (~free_bitmap) & kBitmapInitState;
   }
 
-  // Invalidates the block so that it can be deleted safely. Returns true if
-  // the block was invalidated.
-  __DEV__ bool invalidate() {
-    auto old_free_bitmap = atomicExch(&free_bitmap, 0ULL);
-    if (old_free_bitmap == kBitmapInitState) {
-      return true;
-    } else {
-      // At least one object is still allocated. Rollback invalidation.
-      // This is dangerous because other allocations or deallocations could
-      // have occurred until now.
-      // Case 1: Rollback empties block. Retry rollback and deallocation.
-      //         TODO: There should be a loop here.
-      // Case 2: Rollback 
-      free_bitmap = old_free_bitmap;
-      return false;
-    }
-  }
-
   __DEV__ DeallocationState deallocate(int position) {
     unsigned long long int before;
     unsigned long long int mask = 1ULL << position;
@@ -402,7 +384,7 @@ class SoaAllocator {
             assert(success);
           } else if (slots_before_undo == N - 1) {
             // Block now empty.
-            if (block->invalidate()) {
+            if (invalidate_block<T>(block_idx)) {
               // Block is invalidated and no new allocations can be performed.
               bool success = active_[actual_type_id].deallocate<true>(block_idx);
               assert(success);
@@ -733,9 +715,42 @@ class SoaAllocator {
     }
   }
 
+  // Precondition: Block is active.
+  // Postcondition: Do not change active status.
   template<class T>
   __DEV__ bool invalidate_block(uint32_t block_idx) {
-    return get_block<T>(block_idx)->invalidate();
+    auto* block = get_block<T>(block_idx);
+
+    while (true) {
+      auto old_free_bitmap = atomicExch(&block->free_bitmap, 0ULL);
+      if (old_free_bitmap == SoaBlock<T, kNumBlockElements>::kBitmapInitState) {
+        return true;
+      } else if (old_free_bitmap != 0ULL) {
+        // block->free_bitmap = old_free_bitmap;
+
+        // free_bitmap now 0. We should deactivate the block here, but since
+        // the block deallocation procedure expects the invalid block to be
+        // active, we omit this and only deactivate it in the specical case
+        // descrived below.
+
+        // At least one bit was modified. Rollback invalidation.
+        auto before_rollback = atomicOr(&block->free_bitmap, old_free_bitmap);
+        if (before_rollback > 0ULL) {
+          // Another thread deallocated an object (set a bit). That thread is
+          // attempting to make the block active. For this to succeed, we have
+          // to deactivate the block here.
+          bool success = active_[TupleIndex<T, TupleType>::value].deallocate<true>(block_idx);
+          assert(success);
+        }
+
+        if ((before_rollback | old_free_bitmap) !=
+            SoaBlock<T, kNumBlockElements>::kBitmapInitState) {
+          break;
+        }  // else: Block emptied again. Try invalidating it again.
+      }
+    }
+
+    return false;
   }
 
   // The number of allocated slots of a type. (#blocks * blocksize)
