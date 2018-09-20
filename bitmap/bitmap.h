@@ -5,8 +5,9 @@
 #include <limits>
 #include <stdint.h>
 
-//#include <thrust/scan.h>
+#ifdef SCAN_CUB
 #include <cub/cub.cuh>
+#endif  // SCAN_CUB
 
 #define __DEV__ __device__
 
@@ -273,14 +274,17 @@ class Bitmap {
 
     ContainerT containers[NumContainers];
 
-    // Buffer for parallel enumeration (prefix sum).
+    // Buffers for parallel enumeration (prefix sum).
     // TODO: These buffers can be shared among all types.
+#ifdef CUB_SCAN
     // TODO: We probably do not need all these buffers.
     SizeT enumeration_base_buffer[NumContainers*kBitsize];
     SizeT enumeration_id_buffer[NumContainers*kBitsize];
-    SizeT enumeration_result_buffer[NumContainers*kBitsize];
     SizeT enumeration_cub_temp[3*NumContainers*kBitsize];
     SizeT enumeration_cub_output[NumContainers*kBitsize];
+#endif  // CUB_SCAN
+
+    SizeT enumeration_result_buffer[NumContainers*kBitsize];
     SizeT enumeration_result_size;
 
     Bitmap<SizeT, NumContainers, ContainerT> nested;
@@ -303,32 +307,20 @@ class Bitmap {
       nested.initialize(allocated);
     }
 
-    __DEV__ void atomic_add_scan_init() {
-      enumeration_result_size = 0;
+    void scan() {
+#ifdef SCAN_CUB
+      run_cub_scan();
+#else
+      run_atomic_add_scan();
+#endif  // CUB_SCAN
     }
 
-    __DEV__ void atomic_add_scan() {
-      SizeT* selected = nested.data_.enumeration_result_buffer;
+#ifdef SCAN_CUB
+    __DEV__ void set_result_size() {
       SizeT num_selected = nested.data_.enumeration_result_size;
-      //printf("num_selected=%i\n", (int) num_selected);
-
-      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
-           sid < num_selected; sid += blockDim.x * gridDim.x) {
-        SizeT container_id = selected[sid];
-        auto value = containers[container_id];
-        int num_bits = __popcll(value);
-
-        auto before = atomicAdd(reinterpret_cast<unsigned int*>(&enumeration_result_size),
-                                num_bits);
-
-        for (int i = 0; i < num_bits; ++i) {
-          int next_bit = __ffsll(value) - 1;
-          assert(next_bit >= 0);
-          enumeration_result_buffer[before+i] = container_id*kBitsize + next_bit;
-          //Advance to next bit.
-          value &= value - 1;
-        }
-      }      
+      // Base buffer contains prefix sum.
+      SizeT result_size = enumeration_cub_output[num_selected*kBitsize - 1];
+      enumeration_result_size = result_size;
     }
 
     // TODO: Run with num_selected threads, then we can remove the loop.
@@ -374,29 +366,6 @@ class Bitmap {
       }
     }
 
-    __DEV__ void set_result_size() {
-      SizeT num_selected = nested.data_.enumeration_result_size;
-      // Base buffer contains prefix sum.
-      SizeT result_size = enumeration_cub_output[num_selected*kBitsize - 1];
-      enumeration_result_size = result_size;
-    }
-
-    void scan() {
-      run_atomic_add_scan();
-      // Performance evaluation...
-      //run_cub_scan();
-    }
-
-    void run_atomic_add_scan() {
-      nested.scan();
-
-      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
-      kernel_atomic_add_scan_init<<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-      kernel_atomic_add_scan<<<num_selected/256+1, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-    }
-
     void run_cub_scan() {  
       nested.scan();
 
@@ -415,6 +384,45 @@ class Bitmap {
       kernel_set_result_size<<<1, 1>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
     }
+#else
+    __DEV__ void atomic_add_scan_init() {
+      enumeration_result_size = 0;
+    }
+
+    __DEV__ void atomic_add_scan() {
+      SizeT* selected = nested.data_.enumeration_result_buffer;
+      SizeT num_selected = nested.data_.enumeration_result_size;
+      //printf("num_selected=%i\n", (int) num_selected);
+
+      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
+           sid < num_selected; sid += blockDim.x * gridDim.x) {
+        SizeT container_id = selected[sid];
+        auto value = containers[container_id];
+        int num_bits = __popcll(value);
+
+        auto before = atomicAdd(reinterpret_cast<unsigned int*>(&enumeration_result_size),
+                                num_bits);
+
+        for (int i = 0; i < num_bits; ++i) {
+          int next_bit = __ffsll(value) - 1;
+          assert(next_bit >= 0);
+          enumeration_result_buffer[before+i] = container_id*kBitsize + next_bit;
+          //Advance to next bit.
+          value &= value - 1;
+        }
+      }      
+    }
+
+    void run_atomic_add_scan() {
+      nested.scan();
+
+      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
+      kernel_atomic_add_scan_init<<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+      kernel_atomic_add_scan<<<num_selected/256+1, 256>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
+#endif  // CUB_SCAN
   };
 
   template<SizeT NumContainers>
