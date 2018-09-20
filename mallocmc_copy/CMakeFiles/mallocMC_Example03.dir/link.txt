@@ -1,1 +1,0 @@
-/usr/bin/c++    -Wall -Wshadow -Wno-unknown-pragmas -Wextra -Wno-unused-parameter -Wno-unused-local-typedefs   CMakeFiles/mallocMC_Example03.dir/examples/mallocMC_Example03_generated_mallocMC_example03.cu.o  -o mallocMC_Example03 -rdynamic /usr/local/cuda/lib64/libcudart_static.a -lpthread -ldl -lrt 
