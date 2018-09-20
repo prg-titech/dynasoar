@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <tuple>
+#include <typeinfo>
 #include <type_traits>
 
 #include "bitmap/bitmap.h"
@@ -275,22 +276,37 @@ class SoaBlock {
   char data_[kStorageBytes];
 };
 
-// Get largest SOA block size among all tuple elements.
-// TODO: Assuming max. block size of 64.
 template<class Tuple>
-struct TupleMaxBlockSize;
+struct TupleTypeHelper;
 
 template<class T, class... Types>
-struct TupleMaxBlockSize<std::tuple<T, Types...>> {
-  static const size_t value =
-      sizeof(T) > TupleMaxBlockSize<std::tuple<Types...>>::value
+struct TupleTypeHelper<std::tuple<T, Types...>> {
+  // Get largest SOA block size among all tuple elements.
+  // The size of a block is chosen such that 64 objects of the smallest type
+  // can fit.
+  static const size_t kMaxSize =
+      sizeof(T) > TupleTypeHelper<std::tuple<Types...>>::kMaxSize
           ? sizeof(SoaBlock<T, /*N_Max=*/ 64>)
-          : TupleMaxBlockSize<std::tuple<Types...>>::value;
+          : TupleTypeHelper<std::tuple<Types...>>::kMaxSize;
+
+  // Run a functor for all types in the tuple.
+  template<template<class> typename F>
+  static void for_all() {
+    F<T> func;
+    func();
+    TupleTypeHelper<std::tuple<Types...>>::template for_all<F>();
+  }
 };
 
 template<class T>
-struct TupleMaxBlockSize<std::tuple<T>> {
-  static const size_t value = sizeof(SoaBlock<T, /*N_Max=*/ 64>);
+struct TupleTypeHelper<std::tuple<T>> {
+  static const size_t kMaxSize = sizeof(SoaBlock<T, /*N_Max=*/ 64>);
+
+  template<template<class> typename F>
+  static void for_all() {
+    F<T> func;
+    func();
+  }
 };
 
 template<uint32_t N_Objects, class... Types>
@@ -527,8 +543,8 @@ class SoaAllocator {
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
 
-    assert(((ptr_as_int & kBlockAddrBitmask) - data_as_int) % kBlockMaxSize == 0);
-    return ((ptr_as_int & kBlockAddrBitmask) - data_as_int) / kBlockMaxSize;
+    assert(((ptr_as_int & kBlockAddrBitmask) - data_as_int) % kBlockSizeBytes == 0);
+    return ((ptr_as_int & kBlockAddrBitmask) - data_as_int) / kBlockSizeBytes;
   }
 
   template<class T>
@@ -547,7 +563,7 @@ class SoaAllocator {
   __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
     assert(block_idx < N);
     return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
-        data_ + block_idx*kBlockMaxSize);
+        data_ + block_idx*kBlockSizeBytes);
   }
 
   template<class T>
@@ -651,6 +667,17 @@ class SoaAllocator {
   }
 
   template<typename T>
+  struct SoaTypeDbgPrinter {
+    void operator()() {
+      printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
+    }
+  };
+
+  static void DBG_print_stats() {
+    TupleTypeHelper<TupleType>::template for_all<SoaTypeDbgPrinter>();
+  }
+
+  template<typename T>
   __DEV__ bool is_block_allocated(uint32_t index) {
     return allocated_[TupleIndex<T, TupleType>::value][index];
   }
@@ -659,11 +686,11 @@ class SoaAllocator {
 
   static const int kNumTypes = std::tuple_size<TupleType>::value;
 
-  static const int kBlockMaxSize = TupleMaxBlockSize<TupleType>::value;
+  static const int kBlockSizeBytes = TupleTypeHelper<TupleType>::kMaxSize;
 
   static const uint32_t kN = N;
 
-  char data_[N*kBlockMaxSize];
+  char data_[N*kBlockSizeBytes];
 
   Bitmap<uint32_t, N> global_free_;
 

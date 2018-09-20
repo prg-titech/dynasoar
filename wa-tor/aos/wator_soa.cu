@@ -607,6 +607,8 @@ void print_stats() {
 }
 
 int main(int argc, char* arvg[]) {
+  SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell>::DBG_print_stats();
+  
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
 
   size_t heap_size;
