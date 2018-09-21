@@ -155,6 +155,7 @@ class Bitmap {
     return find_allocated_in_container(container, seed);
   }
 
+  // Initialize bitmap to all 0 or all 1.
   __DEV__ void initialize(bool allocated = false) {
     for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
          i < kNumContainers;
@@ -194,11 +195,11 @@ class Bitmap {
     return data_.enumeration_result_buffer[pos];
   }
 
-  // TODO: Should be private.
- public:
+  // Nested bitmap data structure.
   template<SizeT NumContainers, bool HasNested>
   struct BitmapData;
 
+  // Bitmap data structure with a nested bitmap.
   template<SizeT NumContainers>
   struct BitmapData<NumContainers, true> {
     using ThisClass = BitmapData<NumContainers, true>;
@@ -255,6 +256,7 @@ class Bitmap {
 #endif  // CUB_SCAN
   };
 
+  // Bitmap data structure without a nested bitmap.
   template<SizeT NumContainers>
   struct BitmapData<NumContainers, false> {
     static_assert(NumContainers == 1,
@@ -341,15 +343,19 @@ class Bitmap {
     return __ffsll(val) - 1;
   }
 
+  // The number of bits per container.
   static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
-  static const SizeT kNumContainers = N <= 64 ? 1 : N / kBitsize;
+  // The number of containers on this level.
+  static const SizeT kNumContainers = N <= kBitsize ? 1 : N / kBitsize;
 
+  // Indicates if this bitmap has a higher-level (nested) bitmap.
   static const bool kHasNested = kNumContainers > 1;
 
   static_assert(!kHasNested || N % kBitsize == 0,
                 "N must be of size (sizeof(ContainerT)*8)**D * x.");
 
+  // Nested bitmap structure.
   BitmapData<kNumContainers, kHasNested> data_;
 };
 
