@@ -26,6 +26,8 @@ template<typename SizeT, SizeT N, typename ContainerT = unsigned long long int>
 class Bitmap {
  public:
   static const SizeT kIndexError = std::numeric_limits<SizeT>::max();
+  static const ContainerT kZero = 0;
+  static const ContainerT kOne = 1;
 
   __DEV__ Bitmap() {}
 
@@ -42,7 +44,7 @@ class Bitmap {
     SizeT offset = pos % kBitsize;
 
     // Set bit to one.
-    ContainerT pos_mask = static_cast<ContainerT>(1) << offset;
+    ContainerT pos_mask = kOne << offset;
     ContainerT previous;
     bool success;
 
@@ -112,7 +114,7 @@ class Bitmap {
     SizeT offset = pos % kBitsize;
 
     // Set bit to one.
-    ContainerT pos_mask = static_cast<ContainerT>(1) << offset;
+    ContainerT pos_mask = kOne << offset;
     ContainerT previous;
     bool success;
 
@@ -160,10 +162,9 @@ class Bitmap {
       if (allocated) {
         if (i == kNumContainers - 1 && N % kBitsize > 0) {
           // Last container is only partially occupied.
-          data_.containers[i] =
-              (static_cast<ContainerT>(1) << (N % kBitsize)) - 1;
+          data_.containers[i] = (kOne << (N % kBitsize)) - 1;
         } else if (i < kNumContainers) {
-          data_.containers[i] = ~static_cast<ContainerT>(0);
+          data_.containers[i] = ~kZero;
         }
       } else {
         data_.containers[i] = 0;
@@ -177,8 +178,7 @@ class Bitmap {
 
   // Return true if index is allocated.
   __DEV__ bool operator[](SizeT index) const {
-    return data_.containers[index/kBitsize]
-        & (static_cast<ContainerT>(1) << (index % kBitsize));
+    return data_.containers[index/kBitsize] & (kOne << (index % kBitsize));
   }
 
   // Initiate scan operation (from the host side). This request is forwarded
@@ -285,7 +285,7 @@ class Bitmap {
     __DEV__ void trivial_scan() {
       SizeT current_size = 0;
       for (int i = 0; i < kBitsize; ++i) {
-        if (containers[0] & (static_cast<ContainerT>(1) << i)) {
+        if (containers[0] & (kOne << i)) {
           enumeration_result_buffer[current_size++] = i;
         }
       }
