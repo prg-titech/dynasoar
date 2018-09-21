@@ -15,9 +15,11 @@
 static const int kMaxRetry = 10000000;
 #define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
 #define INIT_RETRY int _retry_counter = 0;
+#define ASSERT_SUCCESS(expr) assert(expr);
 #else
 #define CONTINUE_RETRY (true)
 #define INIT_RETRY
+#define ASSERT_SUCCESS(expr) expr;
 #endif  // NDEBUG
 
 
@@ -57,8 +59,7 @@ class Bitmap {
 
     if (kHasNested && success && previous == 0) {
       // Allocated first bit, propagate to nested.
-      bool success2 = data_.nested_allocate<true>(container);
-      assert(success2);
+      ASSERT_SUCCESS(data_.nested_allocate<true>(container));
     }
 
     return success;
@@ -127,8 +128,7 @@ class Bitmap {
 
     if (kHasNested && success && __popcll(previous) == 1) {
       // Deallocated only bit, propagate to nested.
-      bool success2 = data_.nested_deallocate<true>(container);
-      assert(success2);
+      ASSERT_SUCCESS(data_.nested_deallocate<true>(container));
     }
 
     return success;
@@ -191,6 +191,7 @@ class Bitmap {
     return data_.enumeration_result_size;
   }
 
+  // Returns the index of the pos-th set bit.
   __DEV__ SizeT scan_get_index(SizeT pos) const {
     return data_.enumeration_result_buffer[pos];
   }
@@ -209,50 +210,50 @@ class Bitmap {
     ContainerT containers[NumContainers];
 
     // Buffers for parallel enumeration (prefix sum).
-    // TODO: These buffers can be shared among all types.
-#ifdef CUB_SCAN
-    // TODO: We probably do not need all these buffers.
-    SizeT enumeration_base_buffer[NumContainers*kBitsize];
-    SizeT enumeration_id_buffer[NumContainers*kBitsize];
-    SizeT enumeration_cub_temp[3*NumContainers*kBitsize];
-    SizeT enumeration_cub_output[NumContainers*kBitsize];
-#endif  // CUB_SCAN
-
     SizeT enumeration_result_buffer[NumContainers*kBitsize];
     SizeT enumeration_result_size;
 
+    // Containers that store the bits.
     Bitmap<SizeT, NumContainers, ContainerT> nested;
 
+    // Allocate a specific bit in the nested bitmap.
     template<bool Retry>
     __DEV__ bool nested_allocate(SizeT pos) {
       return nested.allocate<Retry>(pos);
     }
 
+    // Deallocate a specific bit in the nested bitmap.
     template<bool Retry>
     __DEV__ bool nested_deallocate(SizeT pos) {
       return nested.deallocate<Retry>(pos);
     }
 
+    // Find an allocated bit in the nested bitmap.
     __DEV__ SizeT nested_find_allocated_private(int seed) const {
       return nested.find_allocated_private(seed);
     }
 
+    // Initialize the nested bitmap.
     __DEV__ void nested_initialize(bool allocated) {
       nested.initialize(allocated);
     }
 
-    void scan() {
-#ifdef SCAN_CUB
-      run_cub_scan();
-#else
-      run_atomic_add_scan();
-#endif  // CUB_SCAN
-    }
-
 #ifdef SCAN_CUB
 #include "bitmap/scan_cub.inc"
+
+    // TODO: We probably do not need all these buffers.
+    SizeT enumeration_base_buffer[NumContainers*kBitsize];
+    SizeT enumeration_id_buffer[NumContainers*kBitsize];
+    SizeT enumeration_cub_temp[3*NumContainers*kBitsize];
+    SizeT enumeration_cub_output[NumContainers*kBitsize];
+
+    // Pre-processing step for parallel enumeration: Prefix sum (scan).
+    void scan() { run_cub_scan(); }
 #else
 #include "bitmap/scan_atomic.inc"
+
+    // Pre-processing step for parallel enumeration: Based on atomic ops.
+    void scan() { run_atomic_add_scan(); }
 #endif  // CUB_SCAN
   };
 
@@ -266,8 +267,10 @@ class Bitmap {
 
     static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
+    // Bitmaps without a nested bitmap have exactly one container.
     ContainerT containers[NumContainers];
 
+    // Buffers for parallel enumeration (prefix sum).
     SizeT enumeration_result_buffer[NumContainers*kBitsize];
     SizeT enumeration_result_size;
 
