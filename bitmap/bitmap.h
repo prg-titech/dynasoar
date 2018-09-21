@@ -5,11 +5,11 @@
 #include <limits>
 #include <stdint.h>
 
+#include "bitmap/util.h"
+
 #ifdef SCAN_CUB
 #include <cub/cub.cuh>
 #endif  // SCAN_CUB
-
-#define __DEV__ __device__
 
 #ifndef NDEBUG
 static const int kMaxRetry = 10000000;
@@ -20,75 +20,8 @@ static const int kMaxRetry = 10000000;
 #define INIT_RETRY
 #endif  // NDEBUG
 
-// Shift left, rotating.
-// Copied from: https://gist.github.com/pabigot/7550454
-template <typename T>
-__DEV__ T rotl (T v, unsigned int b)
-{
-  static_assert(std::is_integral<T>::value, "rotate of non-integral type");
-  static_assert(! std::is_signed<T>::value, "rotate of signed type");
-  constexpr unsigned int num_bits {std::numeric_limits<T>::digits};
-  static_assert(0 == (num_bits & (num_bits - 1)), "rotate value bit length not power of two");
-  constexpr unsigned int count_mask {num_bits - 1};
-  const unsigned int mb {b & count_mask};
-  using promoted_type = typename std::common_type<int, T>::type;
-  using unsigned_promoted_type = typename std::make_unsigned<promoted_type>::type;
-  return ((unsigned_promoted_type{v} << mb)
-          | (unsigned_promoted_type{v} >> (-mb & count_mask)));
-}
 
-// Seems like this is a scheduler warp ID and may change.
-__forceinline__ __device__ unsigned warp_id()
-{
-    unsigned ret; 
-    asm volatile ("mov.u32 %0, %warpid;" : "=r"(ret));
-    return ret;
-}
-
-// Compute scan result for a L0 bitmap with a single container.
-template<typename T>
-__global__ void kernel_trivial_scan(T* ptr) {
-  assert(blockDim.x*gridDim.x == 1);
-  ptr->trivial_scan();
-}
-
-template<typename T>
-__global__ void kernel_pre_scan(T* ptr) {
-  ptr->pre_scan();
-}
-
-template<typename T>
-__global__ void kernel_post_scan(T* ptr) {
-  ptr->post_scan();
-}
-
-template<typename T>
-__global__ void kernel_set_result_size(T* ptr) {
-  assert(blockDim.x*gridDim.x == 1);
-  ptr->set_result_size();
-}
-
-template<typename T>
-__global__ void kernel_atomic_add_scan_init(T* ptr) {
-  assert(blockDim.x*gridDim.x == 1);
-  ptr->atomic_add_scan_init();
-}
-
-template<typename T>
-__global__ void kernel_atomic_add_scan(T* ptr) {
-  ptr->atomic_add_scan();
-}
-
-template<typename T>
-T read_from_device(T* ptr) {
-  T host_storage;
-  cudaMemcpy(&host_storage, ptr, sizeof(T), cudaMemcpyDeviceToHost);
-  gpuErrchk(cudaDeviceSynchronize());
-  return host_storage;
-}
-
-
-// TODO: Only works with unsigned ContainerT types.
+// TODO: Only works with ContainerT = unsigned long long int.
 template<typename SizeT, SizeT N, typename ContainerT = unsigned long long int>
 class Bitmap {
  public:
@@ -190,7 +123,7 @@ class Bitmap {
       success = (previous & pos_mask) != 0;
     } while (Retry && !success && CONTINUE_RETRY);    // Retry until success
 
-    if (kHasNested && success && count_bits(previous) == 1) {
+    if (kHasNested && success && __popcll(previous) == 1) {
       // Deallocated only bit, propagate to nested.
       bool success2 = data_.nested_deallocate<true>(container);
       assert(success2);
@@ -250,9 +183,7 @@ class Bitmap {
 
   // Initiate scan operation (from the host side). This request is forwarded
   // to the next-level bitmap. Afterwards, scan continues here.
-  void scan() {
-    data_.scan();
-  }
+  void scan() { data_.scan(); }
 
   // May only be called after scan.
   __DEV__ SizeT scan_num_bits() const {
@@ -270,6 +201,8 @@ class Bitmap {
 
   template<SizeT NumContainers>
   struct BitmapData<NumContainers, true> {
+    using ThisClass = BitmapData<NumContainers, true>;
+
     static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
     ContainerT containers[NumContainers];
@@ -316,112 +249,9 @@ class Bitmap {
     }
 
 #ifdef SCAN_CUB
-    __DEV__ void set_result_size() {
-      SizeT num_selected = nested.data_.enumeration_result_size;
-      // Base buffer contains prefix sum.
-      SizeT result_size = enumeration_cub_output[num_selected*kBitsize - 1];
-      enumeration_result_size = result_size;
-    }
-
-    // TODO: Run with num_selected threads, then we can remove the loop.
-    __DEV__ void pre_scan() {
-      SizeT* selected = nested.data_.enumeration_result_buffer;
-      SizeT num_selected = nested.data_.enumeration_result_size;
-
-      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
-           sid < num_selected; sid += blockDim.x * gridDim.x) {
-        SizeT container_id = selected[sid];
-        auto value = containers[container_id];
-        for (int i = 0; i < kBitsize; ++i) {
-          // Write "1" if allocated, "0" otherwise.
-          bool bit_selected = value & (static_cast<ContainerT>(1) << i);
-          enumeration_base_buffer[sid*kBitsize + i] = bit_selected;
-          if (bit_selected) {
-            enumeration_id_buffer[sid*kBitsize + i] =
-                kBitsize*container_id + i;
-          }
-        }
-      }
-    }
-
-    // Run with num_selected threads.
-    // Assumption: enumeration_base_buffer contains exclusive prefix sum.
-    __DEV__ void post_scan() {
-      SizeT* selected = nested.data_.enumeration_result_buffer;
-      SizeT num_selected = nested.data_.enumeration_result_size;
-
-      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
-           sid < num_selected; sid += blockDim.x * gridDim.x) {
-        SizeT container_id = selected[sid];
-        auto value = containers[container_id];
-        for (int i = 0; i < kBitsize; ++i) {
-          // Write "1" if allocated, "0" otherwise.
-          bool bit_selected = value & (static_cast<ContainerT>(1) << i);
-          if (bit_selected) {
-            // Minus one because scan operation is inclusive.
-            enumeration_result_buffer[enumeration_cub_output[sid*kBitsize + i] - 1] =
-                enumeration_id_buffer[sid*kBitsize + i];
-          }
-        }
-      }
-    }
-
-    void run_cub_scan() {  
-      nested.scan();
-
-      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
-      kernel_pre_scan<<<num_selected/256+1, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-
-      size_t temp_size = 3*NumContainers*kBitsize;
-      cub::DeviceScan::InclusiveSum(enumeration_cub_temp,
-                                    temp_size,
-                                    enumeration_base_buffer,
-                                    enumeration_cub_output,
-                                    num_selected*kBitsize);
-      kernel_post_scan<<<num_selected/256+1, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-      kernel_set_result_size<<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-    }
+#include "bitmap/scan_cub.inc"
 #else
-    __DEV__ void atomic_add_scan_init() {
-      enumeration_result_size = 0;
-    }
-
-    __DEV__ void atomic_add_scan() {
-      SizeT* selected = nested.data_.enumeration_result_buffer;
-      SizeT num_selected = nested.data_.enumeration_result_size;
-      //printf("num_selected=%i\n", (int) num_selected);
-
-      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
-           sid < num_selected; sid += blockDim.x * gridDim.x) {
-        SizeT container_id = selected[sid];
-        auto value = containers[container_id];
-        int num_bits = __popcll(value);
-
-        auto before = atomicAdd(reinterpret_cast<unsigned int*>(&enumeration_result_size),
-                                num_bits);
-
-        for (int i = 0; i < num_bits; ++i) {
-          int next_bit = __ffsll(value) - 1;
-          assert(next_bit >= 0);
-          enumeration_result_buffer[before+i] = container_id*kBitsize + next_bit;
-          //Advance to next bit.
-          value &= value - 1;
-        }
-      }      
-    }
-
-    void run_atomic_add_scan() {
-      nested.scan();
-
-      SizeT num_selected = read_from_device<SizeT>(&nested.data_.enumeration_result_size);
-      kernel_atomic_add_scan_init<<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-      kernel_atomic_add_scan<<<num_selected/256+1, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-    }
+#include "bitmap/scan_atomic.inc"
 #endif  // CUB_SCAN
   };
 
@@ -429,6 +259,8 @@ class Bitmap {
   struct BitmapData<NumContainers, false> {
     static_assert(NumContainers == 1,
                   "L0 bitmap should have only one container.");
+
+    using ThisClass = BitmapData<NumContainers, false>;
 
     static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
@@ -464,7 +296,7 @@ class Bitmap {
 
     void scan() {
       // Does not perform a prefix scan but computes the result directly.
-      kernel_trivial_scan<<<1, 1>>>(this);
+      member_func_kernel<ThisClass, &ThisClass::trivial_scan><<<1, 1>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
     }
   };
@@ -507,11 +339,6 @@ class Bitmap {
 
   __DEV__ int find_allocated_bit_compact(ContainerT val) const {
     return __ffsll(val) - 1;
-  }
-
-  __DEV__ int count_bits(ContainerT val) const {
-    // TODO: Adapt for other data types.
-    return __popcll(val);
   }
 
   static const uint8_t kBitsize = 8*sizeof(ContainerT);
