@@ -59,4 +59,7 @@ struct TupleHelper<> {
 
 #define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
 
+#define TYPE_ELEMENT(tuple, index) typename TupleHelper<tuple...> \
+    ::Element<index, /*Dummy=*/ 0>::type
+
 #endif  // ALLOCATOR_TUPLE_HELPER_H

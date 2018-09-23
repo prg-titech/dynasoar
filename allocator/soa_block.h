@@ -4,17 +4,6 @@
 #include "allocator/configuration.h"
 #include "allocator/util.h"
 
-// Result of block allocation.
-struct BlockAllocationResult {
-  __device__ BlockAllocationResult(uint64_t allocation_mask_p,
-                                   bool block_full_p)
-      : allocation_mask(allocation_mask_p), block_full(block_full_p) {}
-
-  uint64_t allocation_mask;
-
-  // Set to true if this allocation request filled up the block entirely.
-  bool block_full;
-};
 
 enum DeallocationState : int8_t {
   kBlockNowEmpty,     // Deallocate block.
@@ -29,14 +18,28 @@ enum DeallocationState : int8_t {
 template<class T, int N_Max>
 class SoaBlock {
  public:
+  using BitmapT = unsigned long long int;
+
   static_assert(N_Max == 64, "Not implemented: Custom N_Max.");
 
   // N_T: Number of object slots.
   static const int N = T::kBlockSize;
 
   // Bitmap initializer: N_T bits set to 1.
-  static const unsigned long long int kBitmapInitState =
+  static const BitmapT kBitmapInitState =
       N == N_Max ? (~0ULL) : ((1ULL << N) - 1);
+
+  // Result of block allocation.
+  struct BlockAllocationResult {
+    __device__ BlockAllocationResult(BitmapT allocation_mask_p,
+                                     bool block_full_p)
+        : allocation_mask(allocation_mask_p), block_full(block_full_p) {}
+
+    BitmapT allocation_mask;
+
+    // Set to true if this allocation request filled up the block entirely.
+    bool block_full;
+  };
 
   // Initializes a new block.
   __DEV__ SoaBlock() {
@@ -67,8 +70,8 @@ class SoaBlock {
   }
 
   __DEV__ DeallocationState deallocate(int position) {
-    unsigned long long int before;
-    unsigned long long int mask = 1ULL << position;
+    BitmapT before;
+    BitmapT mask = 1ULL << position;
 
     do {
       // successful if: bit was "0" (allocated). Needed because we could be in
@@ -90,21 +93,21 @@ class SoaBlock {
   // reaching this function.
   __DEV__ BlockAllocationResult allocate(int bits_to_allocate) {
     // Allocation bits.
-    unsigned long long int selected_bits = 0;
+    BitmapT selected_bits = 0;
     // Set to true if this allocation filled up the block.
     bool filled_block = false, block_full;
     // Helper variables used inside the loop and in the loop condition.
-    unsigned long long int before_update, successful_alloc;
+    BitmapT before_update, successful_alloc;
 
     do {
       // Bit set to 1 if slot is free.
       unsigned int rotation_len = warp_id() % 64;
-      unsigned long long int updated_mask = rotl(free_bitmap, rotation_len);
+      BitmapT updated_mask = rotl(free_bitmap, rotation_len);
 
       // If there are not enough free slots, allocate as many as possible.
       int free_slots = __popcll(updated_mask);
       int allocation_size = min(free_slots, bits_to_allocate);
-      unsigned long long int newly_selected_bits = 0;
+      BitmapT newly_selected_bits = 0;
 
       // Generate bitmask for allocation
       for (int i = 0; i < allocation_size; ++i) {
@@ -151,21 +154,21 @@ class SoaBlock {
     return (free_bitmap & (1ULL << index)) == 0;
   }
 
-  // TODO: Should be private.
+ private:
+  template<uint32_t, class...> friend class SoaAllocator;
 
- public:
   // Dummy area that may be overridden by zero initialization.
   // Data section begins after kBlockDataSectionOffset bytes.
   // TODO: Do we need this on GPU?
   // TODO: Can this be replaced when using ROSE?
-  char initialization_header_[kBlockDataSectionOffset - 3*sizeof(unsigned long long int)];
+  char initialization_header_[kBlockDataSectionOffset - 3*sizeof(BitmapT)];
 
   // Bitmap of free slots.
-  unsigned long long int free_bitmap;
+  BitmapT free_bitmap;
 
   // A copy of ~free_bitmap. Set before the beginning of an iteration. Does
   // not contain dirty objects.
-  unsigned long long int iteration_bitmap;
+  BitmapT iteration_bitmap;
 
   // Padding to 8 bytes.
   uint8_t type_id;

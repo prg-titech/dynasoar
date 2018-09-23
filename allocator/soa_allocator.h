@@ -19,6 +19,8 @@
 template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
  private:
+  using BlockBitmapT = typename SoaBlock<TYPE_ELEMENT(Types, 0), 64>::BitmapT;
+
   static const uint8_t kObjectAddrBits = 6;
   static const uint32_t kNumBlockElements = 64;
   static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
@@ -59,14 +61,13 @@ class SoaAllocator {
 
       // Values to be calculated by the leader.
       uint32_t block_idx;
-      uint64_t allocation_bitmap;
+      BlockBitmapT allocation_bitmap;
       if (rank == leader) {
         assert(__popc(__activemask()) == 1);    // Only one thread executing.
 
         block_idx = find_active_block<T>();
         auto* block = get_block<T>(block_idx);
-        const auto allocation = allocate_in_block<T>(block,
-                                                     /*num=*/ __popc(active));
+        const auto allocation = block->allocate(__popc(active));
         allocation_bitmap = allocation.allocation_mask;
 
         if (allocation.block_full) {
@@ -80,13 +81,11 @@ class SoaAllocator {
           // from active bitmap and here. This is extremely unlikely!
           // But possible.
           // Undo allocation and update bitmaps accordingly.
-          unsigned long long int* free_bitmap = &block->free_bitmap;
+          BlockBitmapT* free_bitmap = &block->free_bitmap;
 
           // Note: Cannot be in invalidation here, because we are certain that
           // we allocated the bits that we are about to deallocate here.
-          auto before_undo = atomicOr(
-              free_bitmap,
-              static_cast<unsigned long long int>(allocation_bitmap));
+          auto before_undo = atomicOr(free_bitmap, allocation_bitmap);
           int slots_before_undo = __popcll(before_undo);
 
           // Cases to handle: block now active again or block empty now.
@@ -122,8 +121,7 @@ class SoaAllocator {
     obj->~T();
     const uint32_t block_idx = get_block_idx<T>(obj);
     const uint32_t obj_id = get_object_id<T>(obj);
-    const DeallocationState dealloc_state = deallocate_in_block<T>(block_idx,
-                                                                   obj_id);
+    const auto dealloc_state = get_block<T>(block_idx)->deallocate(obj_id);
 
     if (dealloc_state == kBlockNowActive) {
       ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
@@ -140,9 +138,7 @@ class SoaAllocator {
 
   template<int TypeIndex>
   __DEV__ void free_untyped(void* obj) {
-    auto* typed = static_cast<
-        typename TupleHelper<Types...>::Element<TypeIndex,
-                                                /*Dummy=*/ 0>::type*>(obj);
+    auto* typed = static_cast<TYPE_ELEMENT(Types, TypeIndex)*>(obj);
     free(typed);
   }
 
@@ -266,24 +262,8 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ BlockAllocationResult allocate_in_block(SoaBlock<T, kNumBlockElements>* block,
-                                                  int num_objects) {
-    // Only executed by one thread per warp.
-    return block->allocate(num_objects);
-  }
-
-  // Return value indicates if block was emptied or activated.
-  template<class T>
-  __DEV__ DeallocationState deallocate_in_block(uint32_t block_idx,
-                                                uint32_t obj_id) {
-    assert(block_idx < N);
-    auto* block = get_block<T>(block_idx);
-    return block->deallocate(obj_id);
-  }
-
-  template<class T>
   __DEV__ T* get_ptr_from_allocation(uint32_t block_idx, int rank,
-                                     uint64_t allocation) {
+                                     BlockBitmapT allocation) {
     assert(block_idx < N);
     assert(rank < 32);
 
