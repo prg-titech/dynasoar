@@ -37,6 +37,12 @@ class Cell {
   static const int kObjectSize = 49;
   static const uint8_t kBlockSize = 36;
 
+  using FieldTypes = std::tuple<
+      DevArray<Cell*, 4>,         // neighbors_
+      Agent*,                     // agent_
+      uint32_t,                   // random_state_
+      DevArray<bool, 5>>;         // neighbor_request_
+
  private:
   // left, top, right, bottom
   SoaField<DevArray<Cell*, 4>, 0, 0> neighbors_;
@@ -89,6 +95,13 @@ class Cell {
 };
 
 class Agent {
+ public:
+  using FieldTypes = std::tuple<
+      Cell*,            // position_
+      Cell*,            // new_position_
+      uint32_t,         // random_state_
+      uint8_t>;         // type_identifier_
+
  protected:
   SoaField<Cell*, 0, 0> position_;
   SoaField<Cell*, 1, 8> new_position_;
@@ -117,6 +130,10 @@ class Agent {
 };
 
 class Fish : public Agent {
+ public:
+  using FieldTypes = std::tuple<
+      uint32_t>;       // egg_timer_
+
  private:
   SoaField<uint32_t, 4, 24> egg_timer_;
 
@@ -134,6 +151,11 @@ class Fish : public Agent {
 };
 
 class Shark : public Agent {
+ public:
+  using FieldTypes = std::tuple<
+      uint32_t,        // energy_
+      uint32_t>;       // egg_timer_
+
  private:
   SoaField<uint32_t, 4, 24> energy_;
   SoaField<uint32_t, 5, 28> egg_timer_;
