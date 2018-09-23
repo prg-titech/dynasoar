@@ -71,7 +71,7 @@ class SoaAllocator {
 
         if (allocation.block_full) {
           // This request filled up the block entirely.
-          ASSERT_SUCCESS(active_[TYPE_INDEX(TupleType, T)].deallocate<true>(block_idx));
+          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
 
         uint8_t actual_type_id = block->type_id;
@@ -126,13 +126,13 @@ class SoaAllocator {
                                                                    obj_id);
 
     if (dealloc_state == kBlockNowActive) {
-      ASSERT_SUCCESS(active_[TYPE_INDEX(TupleType, T)].allocate<true>(block_idx));
+      ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
     } else if (dealloc_state == kBlockNowEmpty) {
       // Assume that block is empty.
       if (invalidate_block<T>(block_idx)) {
         // Block is invalidated and no new allocations can be performed.
-        ASSERT_SUCCESS(active_[TYPE_INDEX(TupleType, T)].deallocate<true>(block_idx));
-        ASSERT_SUCCESS(allocated_[TYPE_INDEX(TupleType, T)].deallocate<true>(block_idx));
+        ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
       }
     }
@@ -141,14 +141,15 @@ class SoaAllocator {
   template<int TypeIndex>
   __DEV__ void free_untyped(void* obj) {
     auto* typed = static_cast<
-        typename std::tuple_element<TypeIndex, TupleType>::type*>(obj);
+        typename TupleHelper<Types...>::Element<TypeIndex,
+                                                /*Dummy=*/ 0>::type*>(obj);
     free(typed);
   }
 
   // Should be invoked from host side.
   template<int W_MULT, class T, void(T::*func)()>
   void parallel_do(int num_blocks, int num_threads) {
-    allocated_[TYPE_INDEX(TupleType, T)].scan();
+    allocated_[TYPE_INDEX(Types..., T)].scan();
     kernel_parallel_do<W_MULT, T, func><<<num_blocks, num_threads>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
   }
@@ -156,7 +157,7 @@ class SoaAllocator {
   // This version assigns 64 threads to every block.
   template<int W_MULT, class T, void(T::*func)()>
   __DEV__ void parallel_do_cuda() {
-    const uint32_t N_alloc = allocated_[TYPE_INDEX(TupleType, T)].scan_num_bits();
+    const uint32_t N_alloc = allocated_[TYPE_INDEX(Types..., T)].scan_num_bits();
     const int num_objs = T::kBlockSize;
 
     // Round to multiple of 64.
@@ -165,7 +166,7 @@ class SoaAllocator {
     if (tid < num_threads) {
       for (int j = tid/num_objs; j < N_alloc; j += num_threads/num_objs) {
         // i is the index of in the scan array.
-        int block_idx = allocated_[TYPE_INDEX(TupleType, T)].scan_get_index(j);
+        int block_idx = allocated_[TYPE_INDEX(Types..., T)].scan_get_index(j);
 
         // TODO: Consider doing a scan over "allocated" bitmap.
         auto* block = get_block<T>(block_idx);
@@ -191,7 +192,7 @@ class SoaAllocator {
   __DEV__ void initialize_iteration() {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
          i += blockDim.x * gridDim.x) {
-      if (allocated_[TYPE_INDEX(TupleType, T)][i]) {
+      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
         // Initialize block.
         get_block<T>(i)->initialize_iteration();
       }
@@ -209,7 +210,7 @@ class SoaAllocator {
       // TODO: Tune number of retries.
       int retries = 5;   // retries=2 before
       do {
-        block_idx = active_[TYPE_INDEX(TupleType, T)]
+        block_idx = active_[TYPE_INDEX(Types..., T)]
             .template find_allocated<false>(retries);
       } while (block_idx == Bitmap<uint32_t, N>::kIndexError
                && --retries > 0);
@@ -219,8 +220,8 @@ class SoaAllocator {
         block_idx = global_free_.deallocate();
         assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
-        ASSERT_SUCCESS(allocated_[TYPE_INDEX(TupleType, T)].allocate<true>(block_idx));
-        ASSERT_SUCCESS(active_[TYPE_INDEX(TupleType, T)].allocate<true>(block_idx));
+        ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+        ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
       }
     } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
 
@@ -326,7 +327,7 @@ class SoaAllocator {
           // Another thread deallocated an object (set a bit). That thread is
           // attempting to make the block active. For this to succeed, we have
           // to deactivate the block here.
-          ASSERT_SUCCESS(active_[TYPE_INDEX(TupleType, T)].deallocate<true>(block_idx));
+          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
 
         if ((before_rollback | old_free_bitmap) !=
@@ -344,7 +345,7 @@ class SoaAllocator {
   __DEV__ uint32_t DBG_allocated_slots() {
     uint32_t counter = 0;
     for (int i = 0; i < N; ++i) {
-      if (allocated_[TYPE_INDEX(TupleType, T)][i]) {
+      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
         counter += get_block<T>(i)->DBG_num_bits();
       }
     }
@@ -356,7 +357,7 @@ class SoaAllocator {
   __DEV__ uint32_t DBG_used_slots() {
     uint32_t counter = 0;
     for (int i = 0; i < N; ++i) {
-      if (allocated_[TYPE_INDEX(TupleType, T)][i]) {
+      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
         counter += get_block<T>(i)->DBG_allocated_bits();
       }
     }
@@ -371,19 +372,17 @@ class SoaAllocator {
   };
 
   static void DBG_print_stats() {
-    TupleHelper<TupleType>::template for_all<SoaTypeDbgPrinter>();
+    TupleHelper<Types...>::template for_all<SoaTypeDbgPrinter>();
   }
 
   template<typename T>
   __DEV__ bool is_block_allocated(uint32_t index) {
-    return allocated_[TYPE_INDEX(TupleType, T)][index];
+    return allocated_[TYPE_INDEX(Types..., T)][index];
   }
-
-  using TupleType = std::tuple<Types...>;
 
   static const int kNumTypes = sizeof...(Types);
 
-  static const int kBlockSizeBytes = TupleHelper<TupleType>::kMaxSize;
+  static const int kBlockSizeBytes = TupleHelper<Types...>::kMaxSize;
 
   static const uint32_t kN = N;
 
