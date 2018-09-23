@@ -3,23 +3,6 @@
 
 #include "allocator/soa_block.h"
 
-// Get index of type within tuple.
-// Taken from:
-// https://stackoverflow.com/questions/18063451/get-index-of-a-tuple-elements-type
-template<class T, class Tuple>
-struct TupleIndex;
-
-template<class T, class... Types>
-struct TupleIndex<T, std::tuple<T, Types...>> {
-  static const std::size_t value = 0;
-};
-
-template<class T, class U, class... Types>
-struct TupleIndex<T, std::tuple<U, Types...>> {
-  static const std::size_t value =
-      1 + TupleIndex<T, std::tuple<Types...>>::value;
-};
-
 template<class Tuple>
 struct TupleHelper;
 
@@ -33,24 +16,39 @@ struct TupleHelper<std::tuple<T, Types...>> {
           ? sizeof(SoaBlock<T, /*N_Max=*/ 64>)
           : TupleHelper<std::tuple<Types...>>::kMaxSize;
 
-  // Run a functor for all types in the tuple.
+  // Runs a functor for all types in the tuple.
   template<template<class> typename F>
   static void for_all() {
     F<T> func;
     func();
     TupleHelper<std::tuple<Types...>>::template for_all<F>();
   }
+
+  // Returns the index of U within the tuple.
+  template<
+      typename U,
+      typename std::enable_if<std::is_same<U, T>::value, void*>::type = nullptr>
+  static constexpr int tuple_index() {
+    return 0;
+  }
+
+  template<
+      typename U,
+      typename std::enable_if<!std::is_same<U, T>::value, void*>::type = nullptr>
+  static constexpr int tuple_index() {
+    return TupleHelper<std::tuple<Types...>>::template tuple_index<U>() + 1;
+  }
+
 };
 
-template<class T>
-struct TupleHelper<std::tuple<T>> {
-  static const size_t kMaxSize = sizeof(SoaBlock<T, /*N_Max=*/ 64>);
+template<>
+struct TupleHelper<std::tuple<>> {
+  static const size_t kMaxSize = 0;
 
   template<template<class> typename F>
-  static void for_all() {
-    F<T> func;
-    func();
-  }
+  static void for_all() {}
 };
+
+#define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
 
 #endif  // ALLOCATOR_TUPLE_HELPER_H
