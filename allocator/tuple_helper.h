@@ -58,8 +58,15 @@ struct TupleHelper<T, Types...> {
         ::template Element<Index - 1, Dummy>::type;
   };
 
-  template<int Dummy>
-  struct Element<0, Dummy> { using type = T; };
+  // Size of smallest block among all types checked so far.
+  static constexpr int min_block_bytes(int block_size);
+
+  // Types with smallest block size.
+  using min_block_type = typename std::conditional<
+      (min_block_bytes(64) <
+          typename TupleHelper<Types...>::min_block_bytes(64)),
+      /*T=*/ T,
+      /*F=*/ typename TupleHelper<Types...>::min_block_type(64)>::type;
 };
 
 template<>
@@ -68,6 +75,12 @@ struct TupleHelper<> {
 
   template<template<class> typename F>
   static void for_all() {}
+
+  static constexpr int min_block_bytes(int block_size) {
+    return std::numeric_limits<int>::max();
+  }
+
+  using first_type = void;
 };
 
 template<class C>
@@ -78,6 +91,9 @@ struct SoaClassHelper {
   // The number of SOA fields in C, including fields of the superclass.
   static const int kNumFields =
       kNumFieldThisClass + SoaClassHelper<typename C::BaseClass>::kNumFields;
+
+  // Determine the size of the data segment.
+  static constexpr int data_segment_size(int block_size);
 
   static void DBG_print_stats();
 };
@@ -96,14 +112,14 @@ struct SoaFieldHelper {
   using type = typename std::tuple_element<Index, typename C::FieldTypes>::type;
   static const int kAlignment = ObjectAlignment<type>::value;
 
-  __DEV_HOST__ static int offset(int block_size) {
-    auto offset = SoaFieldHelper<C, Index - 1>::offset(block_size)
-        + SoaFieldHelper<C, Index - 1>::size(block_size);
-    auto padded_offset = ((offset + kAlignment - 1) / kAlignment) * kAlignment;
-    return padded_offset;
+  static constexpr int offset(int block_size) {
+    // constexprs may not contain statements.... ugh.
+    return ((SoaFieldHelper<C, Index - 1>::offset(block_size)
+             + SoaFieldHelper<C, Index - 1>::size(block_size)
+        + kAlignment - 1) / kAlignment) * kAlignment;
   }
 
-  __DEV_HOST__ static int size(int block_size) {
+  static constexpr int size(int block_size) {
     return sizeof(type) * block_size;
   }
 
@@ -120,13 +136,13 @@ struct SoaFieldHelper<C, -1> {
       typename C::BaseClass,
       SoaClassHelper<typename C::BaseClass>::kNumFieldThisClass - 1>;
 
-  __DEV_HOST__ static int offset(int block_size) {
+  static constexpr int offset(int block_size) {
     // Fields in superclass.
     return BaseLastFieldHelper::offset(block_size)
         + BaseLastFieldHelper::size(block_size);
   }
 
-  __DEV_HOST__ static int size(int block_size) {
+  static constexpr int size(int block_size) {
     return 0;
   }
 
@@ -137,13 +153,9 @@ struct SoaFieldHelper<C, -1> {
 
 template<>
 struct SoaFieldHelper<void, -1> {
-  __DEV_HOST__ static int offset(int block_size) {
-    return 0;
-  }
+  static constexpr int offset(int block_size) { return 0; }
 
-  __DEV_HOST__ static int size(int block_size) {
-    return 0;
-  }
+  static constexpr int size(int block_size) { return 0; }
 
   static void DBG_print_stats() {}
 };
@@ -151,6 +163,18 @@ struct SoaFieldHelper<void, -1> {
 template<class C>
 void SoaClassHelper<C>::DBG_print_stats() {
   SoaFieldHelper<C, kNumFieldThisClass - 1>::DBG_print_stats();
+}
+
+template<class C>
+constexpr int SoaClassHelper<C>::data_segment_size(int block_size) {
+  return SoaFieldHelper<C, kNumFieldThisClass>::offset()
+      + SoaFieldHelper<C, kNumFieldThisClass>::size();
+}
+
+template<typename T, class... Types>
+constexpr int TupleHelper<T, Types...>::min_block_bytes(int block_size) {
+  return std::min(TupleHelper<Types...>::min_block_bytes(block_size),
+                  SoaClassHelper<T>::data_segment_size(block_size));
 }
 
 #define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
