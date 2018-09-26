@@ -26,17 +26,17 @@ class Cell {
 
  private:
   // left, top, right, bottom
-  SoaField<DevArray<Cell*, 4>, 0, 0> neighbors_;
+  SoaField<Cell, DevArray<Cell*, 4>, 0, 0> neighbors_;
   __device__ Cell*& arr_neighbors(size_t index) {
     return ((DevArray<Cell*, 4>) neighbors_)[index];
   }
 
-  SoaField<Agent*, 1, 32> agent_;
+  SoaField<Cell, Agent*, 1, 32> agent_;
 
-  SoaField<uint32_t, 2, 40> random_state_;
+  SoaField<Cell, uint32_t, 2, 40> random_state_;
 
   // left, top, right, bottom, self
-  SoaField<DevArray<bool, 5>, 3, 44> neighbor_request_;
+  SoaField<Cell, DevArray<bool, 5>, 3, 44> neighbor_request_;
   __device__ bool& arr_neighbor_request(size_t index) {
     return ((DevArray<bool, 5>) neighbor_request_)[index];
   }
@@ -86,10 +86,10 @@ class Agent {
   using BaseClass = void;
 
  protected:
-  SoaField<Cell*, 0, 0> position_;
-  SoaField<Cell*, 1, 8> new_position_;
-  SoaField<uint32_t, 2, 16> random_state_;
-  SoaField<uint8_t, 3, 20> type_identifier_;    // Custom alignment
+  SoaField<Agent, Cell*, 0, 0> position_;
+  SoaField<Agent, Cell*, 1, 8> new_position_;
+  SoaField<Agent, uint32_t, 2, 16> random_state_;
+  SoaField<Agent, uint8_t, 3, 20> type_identifier_;    // Custom alignment
 
  public:
   static const int kObjectSize = 24;
@@ -120,7 +120,7 @@ class Fish : public Agent {
   using BaseClass = Agent;
 
  private:
-  SoaField<uint32_t, 4, 24> egg_timer_;
+  SoaField<Fish, uint32_t, 4, 24> egg_timer_;
 
  public:
   static const int kObjectSize = 28;
@@ -144,8 +144,8 @@ class Shark : public Agent {
   using BaseClass = Shark;
 
  private:
-  SoaField<uint32_t, 4, 24> energy_;
-  SoaField<uint32_t, 5, 28> egg_timer_;
+  SoaField<Shark, uint32_t, 4, 24> energy_;
+  SoaField<Shark, uint32_t, 5, 28> egg_timer_;
 
  public:
   static const int kObjectSize = 32;

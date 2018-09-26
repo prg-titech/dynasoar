@@ -58,22 +58,41 @@ struct TupleHelper<> {
   static void for_all() {}
 };
 
+template<class C>
+struct SoaClassHelper {
+
+};
+
+
 // Get offset of SOA array within block.
 template<class C, int Index>
-struct SoaClassHelper {
+struct SoaFieldHelper {
+  using type = std::tuple_element<Index, typename C::FieldTypes>;
+
   __DEV__ static int offset(int block_size) {
-    auto offset = SoaClassHelper<C, Index - 1>::offset()
-        + SoaClassHelper<C, Index - 1>::size(block_size);
-    auto type_size = sizeof(SoaClassHelper<C, Index>::type);
-    auto padded_offset = ((offset + type_size - 1) / type_size) * type_size;
+    auto offset = SoaFieldHelper<C, Index - 1>::offset()
+        + SoaFieldHelper<C, Index - 1>::size(block_size);
+    auto padded_offset = ((offset + sizeof(type) - 1) / sizeof(type)) * sizeof(type);
     return padded_offset;
   }
 
   __DEV__ static int size(int block_size) {
-    return sizeof(SoaClassHelper<C, Index>::type) * block_size;
+    return sizeof(type) * block_size;
   }
 };
 
+template<class C>
+struct SoaFieldHelper<C, 0> {
+  using type = std::tuple_element<0, typename C::FieldTypes>;
+
+  __DEV__ static int offset(int block_size) {
+    return 0;
+  }
+
+  __DEV__ static int size(int block_size) {
+    return sizeof(type) * block_size;
+  }
+};
 
 #define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
 
