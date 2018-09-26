@@ -1,5 +1,11 @@
 // Textual header for inclusion in bitmap.h.
 
+// TODO: We probably do not need all these buffers.
+SizeT enumeration_base_buffer[NumContainers*kBitsize];
+SizeT enumeration_id_buffer[NumContainers*kBitsize];
+SizeT enumeration_cub_temp[3*NumContainers*kBitsize];
+SizeT enumeration_cub_output[NumContainers*kBitsize];
+    
 __DEV__ void set_result_size() {
   SizeT num_selected = nested.data_.enumeration_result_size;
   // Base buffer contains prefix sum.

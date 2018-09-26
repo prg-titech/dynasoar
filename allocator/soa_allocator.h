@@ -195,8 +195,75 @@ class SoaAllocator {
     }
   }
 
-  // TODO: Should be private.
- public:
+  // The number of allocated slots of a type. (#blocks * blocksize)
+  template<class T>
+  __DEV__ uint32_t DBG_allocated_slots() {
+    uint32_t counter = 0;
+    for (int i = 0; i < N; ++i) {
+      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
+        counter += get_block<T>(i)->DBG_num_bits();
+      }
+    }
+    return counter;
+  }
+
+  // The number of actually used slots of a type. (#blocks * blocksize)
+  template<class T>
+  __DEV__ uint32_t DBG_used_slots() {
+    uint32_t counter = 0;
+    for (int i = 0; i < N; ++i) {
+      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
+        counter += get_block<T>(i)->DBG_allocated_bits();
+      }
+    }
+    return counter;
+  }
+
+  template<typename T>
+  struct SoaTypeDbgPrinter {
+    void operator()() {
+      printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
+    }
+  };
+
+  static void DBG_print_stats() {
+    TupleHelper<Types...>::template for_all<SoaTypeDbgPrinter>();
+  }
+
+  template<typename T>
+  __DEV__ bool is_block_allocated(uint32_t index) {
+    return allocated_[TYPE_INDEX(Types..., T)][index];
+  }
+
+  template<class T>
+  __DEV__ uint32_t get_block_idx(T* ptr) {
+    uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
+    uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
+
+    assert(((ptr_as_int & kBlockAddrBitmask) - data_as_int) % kBlockSizeBytes == 0);
+    return ((ptr_as_int & kBlockAddrBitmask) - data_as_int) / kBlockSizeBytes;
+  }
+
+  template<class T>
+  __DEV__ uint32_t get_object_id(T* ptr) {
+    uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
+    return ptr_as_int & kObjectAddrBitmask; 
+  }
+
+  template<class T>
+  __DEV__ T* get_object(SoaBlock<T, kNumBlockElements>* block, uint32_t obj_id) {
+    assert(obj_id < 64);
+    return block->make_pointer(obj_id);
+  }
+
+  template<class T>
+  __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
+    assert(block_idx < N);
+    return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
+        data_ + block_idx*kBlockSizeBytes);
+  }
+
+ private:
   template<class T>
   __DEV__ uint32_t find_active_block() {
     uint32_t block_idx;
@@ -231,34 +298,6 @@ class SoaAllocator {
           % kNumBlockElements == 0,
         "Internal error: SOA block not aligned to 64 bytes.");
     new(get_block<T>(block_idx)) SoaBlock<T, kNumBlockElements>();
-  }
-
-  template<class T>
-  __DEV__ uint32_t get_block_idx(T* ptr) {
-    uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
-    uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
-
-    assert(((ptr_as_int & kBlockAddrBitmask) - data_as_int) % kBlockSizeBytes == 0);
-    return ((ptr_as_int & kBlockAddrBitmask) - data_as_int) / kBlockSizeBytes;
-  }
-
-  template<class T>
-  __DEV__ uint32_t get_object_id(T* ptr) {
-    uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
-    return ptr_as_int & kObjectAddrBitmask; 
-  }
-
-  template<class T>
-  __DEV__ T* get_object(SoaBlock<T, kNumBlockElements>* block, uint32_t obj_id) {
-    assert(obj_id < 64);
-    return block->make_pointer(obj_id);
-  }
-
-  template<class T>
-  __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
-    assert(block_idx < N);
-    return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
-        data_ + block_idx*kBlockSizeBytes);
   }
 
   template<class T>
@@ -320,51 +359,9 @@ class SoaAllocator {
     return false;
   }
 
-  // The number of allocated slots of a type. (#blocks * blocksize)
-  template<class T>
-  __DEV__ uint32_t DBG_allocated_slots() {
-    uint32_t counter = 0;
-    for (int i = 0; i < N; ++i) {
-      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
-        counter += get_block<T>(i)->DBG_num_bits();
-      }
-    }
-    return counter;
-  }
-
-  // The number of actually used slots of a type. (#blocks * blocksize)
-  template<class T>
-  __DEV__ uint32_t DBG_used_slots() {
-    uint32_t counter = 0;
-    for (int i = 0; i < N; ++i) {
-      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
-        counter += get_block<T>(i)->DBG_allocated_bits();
-      }
-    }
-    return counter;
-  }
-
-  template<typename T>
-  struct SoaTypeDbgPrinter {
-    void operator()() {
-      printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
-    }
-  };
-
-  static void DBG_print_stats() {
-    TupleHelper<Types...>::template for_all<SoaTypeDbgPrinter>();
-  }
-
-  template<typename T>
-  __DEV__ bool is_block_allocated(uint32_t index) {
-    return allocated_[TYPE_INDEX(Types..., T)][index];
-  }
-
   static const int kNumTypes = sizeof...(Types);
 
   static const int kBlockSizeBytes = TupleHelper<Types...>::kMaxSize;
-
-  static const uint32_t kN = N;
 
   char data_[N*kBlockSizeBytes];
 
@@ -373,6 +370,9 @@ class SoaAllocator {
   Bitmap<uint32_t, N> allocated_[kNumTypes];
 
   Bitmap<uint32_t, N> active_[kNumTypes];
+
+ public:
+  static const uint32_t kN = N;
 };
 
 #endif  // ALLOCATOR_SOA_ALLOCATOR_H

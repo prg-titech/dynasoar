@@ -31,35 +31,43 @@ class Bitmap {
   static const ContainerT kZero = 0;
   static const ContainerT kOne = 1;
 
+  struct BitPosition {
+    __DEV__ BitPosition(SizeT index) : container_index(index / kBitsize),
+                                       offset(index % kBitsize) {
+      assert(index != kIndexError);
+      assert(index < N);
+    }
+
+    SizeT container_index;
+    SizeT offset;
+  };
+
   __DEV__ Bitmap() {}
 
   // Delete copy constructor.
   __DEV__ Bitmap(const Bitmap&) = delete;
 
-  // Allocate specific position, i.e., set bit to 1. Return value indicates
+  // Allocate specific index, i.e., set bit to 1. Return value indicates
   // success. If Retry, then continue retrying until successful update.
   template<bool Retry = false>
-  __DEV__ bool allocate(SizeT pos) {
-    assert(pos != kIndexError);
-    assert(pos < N);
-    SizeT container = pos / kBitsize;
-    SizeT offset = pos % kBitsize;
+  __DEV__ bool allocate(SizeT index) {
+    BitPosition pos(index);
 
     // Set bit to one.
-    ContainerT pos_mask = kOne << offset;
+    ContainerT pos_mask = kOne << pos.offset;
     ContainerT previous;
     bool success;
 
     INIT_RETRY;
 
     do {
-      previous = atomicOr(data_.containers + container, pos_mask);
+      previous = atomicOr(data_.containers + pos.container_index, pos_mask);
       success = (previous & pos_mask) == 0;
     } while (Retry && !success && CONTINUE_RETRY);    // Retry until success
 
     if (kHasNested && success && previous == 0) {
       // Allocated first bit, propagate to nested.
-      ASSERT_SUCCESS(data_.nested_allocate<true>(container));
+      ASSERT_SUCCESS(data_.nested_allocate<true>(pos.container_index));
     }
 
     return success;
@@ -105,30 +113,27 @@ class Bitmap {
     return index;
   }
 
-  // Deallocate specific position, i.e., set bit to 0. Return value indicates
+  // Deallocate specific index, i.e., set bit to 0. Return value indicates
   // success. If Retry, then continue retrying until successful update.
   template<bool Retry = false>
-  __DEV__ bool deallocate(SizeT pos) {
-    assert(pos != kIndexError);
-    assert(pos < N);
-    SizeT container = pos / kBitsize;
-    SizeT offset = pos % kBitsize;
+  __DEV__ bool deallocate(SizeT index) {
+    BitPosition pos(index);
 
-    // Set bit to one.
-    ContainerT pos_mask = kOne << offset;
+    // Set bit to zero.
+    ContainerT pos_mask = kOne << pos.offset;
     ContainerT previous;
     bool success;
 
     INIT_RETRY;
 
     do {
-      previous = atomicAnd(data_.containers + container, ~pos_mask);
+      previous = atomicAnd(data_.containers + pos.container_index, ~pos_mask);
       success = (previous & pos_mask) != 0;
     } while (Retry && !success && CONTINUE_RETRY);    // Retry until success
 
     if (kHasNested && success && __popcll(previous) == 1) {
       // Deallocated only bit, propagate to nested.
-      ASSERT_SUCCESS(data_.nested_deallocate<true>(container));
+      ASSERT_SUCCESS(data_.nested_deallocate<true>(pos.container_index));
     }
 
     return success;
@@ -239,19 +244,11 @@ class Bitmap {
     }
 
 #ifdef SCAN_CUB
-#include "bitmap/scan_cub.inc"
-
-    // TODO: We probably do not need all these buffers.
-    SizeT enumeration_base_buffer[NumContainers*kBitsize];
-    SizeT enumeration_id_buffer[NumContainers*kBitsize];
-    SizeT enumeration_cub_temp[3*NumContainers*kBitsize];
-    SizeT enumeration_cub_output[NumContainers*kBitsize];
-
+    #include "bitmap/scan_cub.inc"
     // Pre-processing step for parallel enumeration: Prefix sum (scan).
     void scan() { run_cub_scan(); }
 #else
-#include "bitmap/scan_atomic.inc"
-
+    #include "bitmap/scan_atomic.inc"
     // Pre-processing step for parallel enumeration: Based on atomic ops.
     void scan() { run_atomic_add_scan(); }
 #endif  // CUB_SCAN
