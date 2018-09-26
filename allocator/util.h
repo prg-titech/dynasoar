@@ -1,6 +1,8 @@
 #ifndef ALLOCATOR_SOA_UTIL_H
 #define ALLOCATOR_SOA_UTIL_H
 
+#include "util/util.h"
+
 __forceinline__ __device__ unsigned lane_id()
 {
     unsigned ret; 

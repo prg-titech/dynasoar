@@ -5,7 +5,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#include "wa-tor/aos/wator_soa.h"
+#include "wa-tor/soa/wator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4

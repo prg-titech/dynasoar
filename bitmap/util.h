@@ -1,7 +1,7 @@
 #ifndef BITMAP_UTIL_H
 #define BITMAP_UTIL_H
 
-#define __DEV__ __device__
+#include "util/util.h"
 
 // Shift left, rotating.
 // Copied from: https://gist.github.com/pabigot/7550454
