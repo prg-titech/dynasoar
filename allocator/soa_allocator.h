@@ -223,6 +223,7 @@ class SoaAllocator {
   struct SoaTypeDbgPrinter {
     void operator()() {
       printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
+      SoaClassHelper<T>::DBG_print_stats();
     }
   };
 

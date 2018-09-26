@@ -2,7 +2,6 @@
 #define WA_TOR_SOA_WATOR_H
 
 #include "allocator/soa_allocator.h"
-#include "wa-tor/soa/array.h"
 
 static const int kBlockSize = 64;
 
@@ -17,18 +16,18 @@ class Cell {
   static const uint8_t kBlockSize = 36;
 
   using FieldTypes = std::tuple<
-      DevArray<Cell*, 4>,         // neighbors_
+      DeviceArray<Cell*, 4>,         // neighbors_
       Agent*,                     // agent_
       uint32_t,                   // random_state_
-      DevArray<bool, 5>>;         // neighbor_request_
+      DeviceArray<bool, 5>>;         // neighbor_request_
 
   using BaseClass = void;
 
  private:
   // left, top, right, bottom
-  SoaField<Cell, DevArray<Cell*, 4>, 0, 0> neighbors_;
+  SoaField<Cell, DeviceArray<Cell*, 4>, 0, 0> neighbors_;
   __device__ Cell*& arr_neighbors(size_t index) {
-    return ((DevArray<Cell*, 4>) neighbors_)[index];
+    return ((DeviceArray<Cell*, 4>) neighbors_)[index];
   }
 
   SoaField<Cell, Agent*, 1, 32> agent_;
@@ -36,9 +35,9 @@ class Cell {
   SoaField<Cell, uint32_t, 2, 40> random_state_;
 
   // left, top, right, bottom, self
-  SoaField<Cell, DevArray<bool, 5>, 3, 44> neighbor_request_;
+  SoaField<Cell, DeviceArray<bool, 5>, 3, 44> neighbor_request_;
   __device__ bool& arr_neighbor_request(size_t index) {
-    return ((DevArray<bool, 5>) neighbor_request_)[index];
+    return ((DeviceArray<bool, 5>) neighbor_request_)[index];
   }
 
  public:
@@ -141,7 +140,7 @@ class Shark : public Agent {
       uint32_t,        // energy_
       uint32_t>;       // egg_timer_
 
-  using BaseClass = Shark;
+  using BaseClass = Agent;
 
  private:
   SoaField<Shark, uint32_t, 4, 24> energy_;
