@@ -22,6 +22,8 @@ class Cell {
       uint32_t,                   // random_state_
       DevArray<bool, 5>>;         // neighbor_request_
 
+  using BaseClass = void;
+
  private:
   // left, top, right, bottom
   SoaField<DevArray<Cell*, 4>, 0, 0> neighbors_;
@@ -81,6 +83,8 @@ class Agent {
       uint32_t,         // random_state_
       uint8_t>;         // type_identifier_
 
+  using BaseClass = void;
+
  protected:
   SoaField<Cell*, 0, 0> position_;
   SoaField<Cell*, 1, 8> new_position_;
@@ -113,6 +117,8 @@ class Fish : public Agent {
   using FieldTypes = std::tuple<
       uint32_t>;       // egg_timer_
 
+  using BaseClass = Agent;
+
  private:
   SoaField<uint32_t, 4, 24> egg_timer_;
 
@@ -134,6 +140,8 @@ class Shark : public Agent {
   using FieldTypes = std::tuple<
       uint32_t,        // energy_
       uint32_t>;       // egg_timer_
+
+  using BaseClass = Shark;
 
  private:
   SoaField<uint32_t, 4, 24> energy_;

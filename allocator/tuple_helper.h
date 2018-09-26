@@ -39,6 +39,7 @@ struct TupleHelper<T, Types...> {
     return TupleHelper<Types...>::template tuple_index<U>() + 1;
   }
 
+  // Get type by index.
   template<int Index, int Dummy>
   struct Element {
     using type = typename TupleHelper<Types...>
@@ -56,6 +57,23 @@ struct TupleHelper<> {
   template<template<class> typename F>
   static void for_all() {}
 };
+
+// Get offset of SOA array within block.
+template<class C, int Index>
+struct SoaClassHelper {
+  __DEV__ static int offset(int block_size) {
+    auto offset = SoaClassHelper<C, Index - 1>::offset()
+        + SoaClassHelper<C, Index - 1>::size(block_size);
+    auto type_size = sizeof(SoaClassHelper<C, Index>::type);
+    auto padded_offset = ((offset + type_size - 1) / type_size) * type_size;
+    return padded_offset;
+  }
+
+  __DEV__ static int size(int block_size) {
+    return sizeof(SoaClassHelper<C, Index>::type) * block_size;
+  }
+};
+
 
 #define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
 
