@@ -71,23 +71,14 @@ struct TupleHelper<> {
 };
 
 template<class C>
-struct SoaClassHelper {
+struct SoaClassUtil {
   static const int kNumFieldThisClass =
       std::tuple_size<typename C::FieldTypes>::value;
-
-  // The number of SOA fields in C, including fields of the superclass.
-  static const int kNumFields =
-      kNumFieldThisClass + SoaClassHelper<typename C::BaseClass>::kNumFields;
-
-  static void DBG_print_stats();
 };
 
 template<>
-struct SoaClassHelper<void> {
+struct SoaClassUtil<void> {
   static const int kNumFieldThisClass = 0;
-  static const int kNumFields = 0;
-
-  static void DBG_print_stats() {}
 };
 
 // Get offset of SOA array within block.
@@ -133,7 +124,7 @@ template<class C>
 struct SoaFieldHelper<C, -1> {
   using BaseLastFieldHelper = SoaFieldHelper<
       typename C::BaseClass,
-      SoaClassHelper<typename C::BaseClass>::kNumFieldThisClass - 1>;
+      SoaClassUtil<typename C::BaseClass>::kNumFieldThisClass - 1>;
 
   static constexpr int offset(int block_size) {
     // Fields in superclass.
@@ -176,9 +167,37 @@ struct SoaFieldHelper<void, -1> {
 };
 
 template<class C>
-void SoaClassHelper<C>::DBG_print_stats() {
-  SoaFieldHelper<C, kNumFieldThisClass - 1>::DBG_print_stats();
-}
+struct SoaClassHelper {
+  static const int kNumFieldThisClass = SoaClassUtil<C>::kNumFieldThisClass;
+
+  // The number of SOA fields in C, including fields of the superclass.
+  static const int kNumFields =
+      kNumFieldThisClass + SoaClassHelper<typename C::BaseClass>::kNumFields;
+
+  template<int BlockSize>
+  struct BlockConfig {
+    using LastFieldHelper = SoaFieldHelper<C, kNumFieldThisClass - 1>;
+
+    static const int kDataSegmentSize =
+        LastFieldHelper::template BlockConfig<BlockSize>::kOffset
+        + LastFieldHelper::template BlockConfig<BlockSize>::kSize;
+  };
+
+  static void DBG_print_stats() {
+    printf("Class %s: data_segment_size(1) = %i, data_segment_size(64) = %i\n",
+           typeid(C).name(), BlockConfig<1>::kDataSegmentSize,
+           BlockConfig<64>::kDataSegmentSize);
+    SoaFieldHelper<C, kNumFieldThisClass - 1>::DBG_print_stats();
+  }
+};
+
+template<>
+struct SoaClassHelper<void> {
+  static const int kNumFieldThisClass = 0;
+  static const int kNumFields = 0;
+
+  static void DBG_print_stats() {}
+};
 
 #define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
 
