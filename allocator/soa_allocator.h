@@ -229,6 +229,8 @@ class SoaAllocator {
 
   static void DBG_print_stats() {
     TupleHelper<Types...>::template for_all<SoaTypeDbgPrinter>();
+    //printf("Smallest block type: %s at %i bytes.\n",
+    //       typeid(TupleHelper2<Types...>::min_block_type).name(), 0);
   }
 
   template<typename T>
