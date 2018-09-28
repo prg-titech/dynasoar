@@ -199,13 +199,17 @@ struct TupleHelper<T, Types...> {
   static const int kThisClass64BlockSize =
       SoaClassHelper<T>::template BlockConfig<64>::kDataSegmentSize;
 
+  static const bool kIsThisClassMinBlock =
+      kThisClass64BlockSize <= TupleHelper<Types...>::k64BlockMinSize
+      && !T::kIsAbstract;
+
   // Size of smallest block with 64 elements among all types.
-  static const int k64BlockMinSize = 
-      kThisClass64BlockSize < TupleHelper<Types...>::k64BlockMinSize
+  // Ignore abstract classes.
+  static const int k64BlockMinSize = kIsThisClassMinBlock
       ? kThisClass64BlockSize : TupleHelper<Types...>::k64BlockMinSize;
 
   using Type64BlockSizeMin = typename std::conditional<
-      (kThisClass64BlockSize < TupleHelper<Types...>::kThisClass64BlockSize),
+      kIsThisClassMinBlock,
       /*T=*/ T,
       /*F=*/ typename TupleHelper<Types...>::Type64BlockSizeMin>::type;
 };
@@ -227,14 +231,20 @@ struct SoaBlockSizeCalculator {
   static const int kThisSizeBlockBytes =
       SoaClassHelper<T>::template BlockConfig<MaxSize>::kDataSegmentSize;
 
-  static const int value =
+  static const int kBytes =
       kThisSizeBlockBytes <= BlockBytes ? kThisSizeBlockBytes
-      : SoaBlockSizeCalculator<T, MaxSize - 1, BlockBytes>::value;
+      : SoaBlockSizeCalculator<T, MaxSize - 1, BlockBytes>::kBytes;
+
+  static const int kSize =
+      kThisSizeBlockBytes <= BlockBytes ? MaxSize
+      : SoaBlockSizeCalculator<T, MaxSize - 1, BlockBytes>::kSize;
 };
 
 template<class T, int BlockBytes>
 struct SoaBlockSizeCalculator<T, 0, BlockBytes> {
-  static const int value = std::numeric_limits<int>::max();
+  static const int kBytes = std::numeric_limits<int>::max();
+
+  static const int kSize = -1;
 };
 
 #define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()

@@ -223,6 +223,12 @@ class SoaAllocator {
   struct SoaTypeDbgPrinter {
     void operator()() {
       printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
+      printf("blocksize(%s) = %i\n", typeid(T).name(),
+             SoaBlockSizeCalculator<T, 64, TupleHelper<Types...>
+                 ::k64BlockMinSize>::kSize);
+      printf("blockbytes(%s) = %i\n", typeid(T).name(),
+             SoaBlockSizeCalculator<T, 64, TupleHelper<Types...>
+                 ::k64BlockMinSize>::kBytes);
       SoaClassHelper<T>::DBG_print_stats();
     }
   };
