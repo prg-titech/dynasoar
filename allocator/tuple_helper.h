@@ -15,6 +15,7 @@ struct ObjectAlignment<DeviceArray<T, N>> {
   static const int value = sizeof(T);
 };
 
+// Helper functions and fields that are used in other classes in this file.
 template<class C>
 struct SoaClassUtil {
   static const int kNumFieldThisClass =
@@ -26,7 +27,7 @@ struct SoaClassUtil<void> {
   static const int kNumFieldThisClass = 0;
 };
 
-// Get offset of SOA array within block.
+// Helpers for SOA field "Index" in class C.
 template<class C, int Index>
 struct SoaFieldHelper {
   using type = typename std::tuple_element<Index, typename C::FieldTypes>::type;
@@ -111,6 +112,7 @@ struct SoaFieldHelper<void, -1> {
   static void DBG_print_stats() {}
 };
 
+// Helpers for SOA class C.
 template<class C>
 struct SoaClassHelper {
   static const int kNumFieldThisClass = SoaClassUtil<C>::kNumFieldThisClass;
@@ -129,10 +131,12 @@ struct SoaClassHelper {
   };
 
   static void DBG_print_stats() {
+    printf("----------------------------------------------------------\n");
     printf("Class %s: data_segment_size(1) = %i, data_segment_size(64) = %i\n",
            typeid(C).name(), BlockConfig<1>::kDataSegmentSize,
            BlockConfig<64>::kDataSegmentSize);
     SoaFieldHelper<C, kNumFieldThisClass - 1>::DBG_print_stats();
+    printf("----------------------------------------------------------\n");
   }
 };
 
@@ -144,6 +148,7 @@ struct SoaClassHelper<void> {
   static void DBG_print_stats() {}
 };
 
+// Helpers for multiple SOA classes "Types".
 template<class... Types>
 struct TupleHelper;
 
@@ -215,6 +220,21 @@ struct TupleHelper<> {
   static const int kThisClass64BlockSize = std::numeric_limits<int>::max();
   static const int k64BlockMinSize = kThisClass64BlockSize;
   using Type64BlockSizeMin = void;
+};
+
+template<class T, int MaxSize, int BlockBytes>
+struct SoaBlockSizeCalculator {
+  static const int kThisSizeBlockBytes =
+      SoaClassHelper<T>::template BlockConfig<MaxSize>::kDataSegmentSize;
+
+  static const int value =
+      kThisSizeBlockBytes <= BlockBytes ? kThisSizeBlockBytes
+      : SoaBlockSizeCalculator<T, MaxSize - 1, BlockBytes>::value;
+};
+
+template<class T, int BlockBytes>
+struct SoaBlockSizeCalculator<T, 0, BlockBytes> {
+  static const int value = std::numeric_limits<int>::max();
 };
 
 #define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()

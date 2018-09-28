@@ -22,6 +22,7 @@ class Cell {
       DeviceArray<bool, 5>>;         // neighbor_request_
 
   using BaseClass = void;
+  static const bool kIsAbstract = false;
 
  private:
   // left, top, right, bottom
@@ -83,6 +84,7 @@ class Agent {
       uint8_t>;         // type_identifier_
 
   using BaseClass = void;
+  static const bool kIsAbstract = true;
 
  protected:
   SoaField<Agent, Cell*, 0, 0> position_;
@@ -117,6 +119,7 @@ class Fish : public Agent {
       uint32_t>;       // egg_timer_
 
   using BaseClass = Agent;
+  static const bool kIsAbstract = false;
 
  private:
   SoaField<Fish, uint32_t, 4, 24> egg_timer_;
@@ -141,6 +144,7 @@ class Shark : public Agent {
       uint32_t>;       // egg_timer_
 
   using BaseClass = Agent;
+  static const bool kIsAbstract = false;
 
  private:
   SoaField<Shark, uint32_t, 4, 24> energy_;
