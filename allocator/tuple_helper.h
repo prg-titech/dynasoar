@@ -195,8 +195,9 @@ struct TupleHelper<T, Types...> {
       SoaClassHelper<T>::template BlockConfig<64>::kDataSegmentSize;
 
   // Size of smallest block with 64 elements among all types.
-  static const int k64BlockMinSize = std::min(
-      kThisClass64BlockSize, TupleHelper<Types...>::k64BlockMinSize);
+  static const int k64BlockMinSize = 
+      kThisClass64BlockSize < TupleHelper<Types...>::k64BlockMinSize
+      ? kThisClass64BlockSize : TupleHelper<Types...>::k64BlockMinSize;
 
   using Type64BlockSizeMin = typename std::conditional<
       (kThisClass64BlockSize < TupleHelper<Types...>::kThisClass64BlockSize),
