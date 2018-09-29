@@ -8,11 +8,15 @@ template<class C>
 struct SoaClassUtil {
   static const int kNumFieldThisClass =
       std::tuple_size<typename C::FieldTypes>::value;
+
+  static const int kNumFields =
+      SoaClassUtil<typename C::BaseClass>::kNumFields + kNumFieldThisClass;
 };
 
 template<>
 struct SoaClassUtil<void> {
   static const int kNumFieldThisClass = 0;
+  static const int kNumFields = 0;
 };
 
 // Helpers for SOA field "Index" in class C.

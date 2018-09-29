@@ -16,7 +16,8 @@ class SoaField {
     // Base address of the pointer, i.e., without the offset of the SoaField
     // type.
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this)
-        - sizeof(SoaField<C, Field>)*Field;
+        - sizeof(SoaField<C, Field>)
+            * (Field + SoaClassUtil<typename C::BaseClass>::kNumFields);
     // Block size (N_T), i.e., number of object slots in this block.
     uint8_t block_size = ptr_base >> 48;  // Truncated.
     // Object slot ID.
