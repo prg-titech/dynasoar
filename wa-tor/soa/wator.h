@@ -2,18 +2,21 @@
 #define WA_TOR_SOA_WATOR_H
 
 #include "allocator/soa_allocator.h"
-
-static const int kBlockSize = 64;
+#include "allocator/soa_base.h"
 
 namespace wa_tor {
 
+// Pre-declare all classes.
 class Agent;
+class Cell;
+class Fish;
+class Shark;
 
-class Cell {
+using AllocatorT = SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell>;
+
+class Cell : public SoaBase<AllocatorT> {
  public:
   static const uint8_t kTypeId = 3;
-  static const int kObjectSize = 49;
-  static const uint8_t kBlockSize = 36;
 
   using FieldTypes = std::tuple<
       DeviceArray<Cell*, 4>,         // neighbors_
@@ -26,17 +29,17 @@ class Cell {
 
  private:
   // left, top, right, bottom
-  SoaField<Cell, DeviceArray<Cell*, 4>, 0, 0> neighbors_;
+  SoaField<Cell, 0> neighbors_;
   __device__ Cell*& arr_neighbors(size_t index) {
     return ((DeviceArray<Cell*, 4>) neighbors_)[index];
   }
 
-  SoaField<Cell, Agent*, 1, 32> agent_;
+  SoaField<Cell, 1> agent_;
 
-  SoaField<Cell, uint32_t, 2, 40> random_state_;
+  SoaField<Cell, 2> random_state_;
 
   // left, top, right, bottom, self
-  SoaField<Cell, DeviceArray<bool, 5>, 3, 44> neighbor_request_;
+  SoaField<Cell, 3> neighbor_request_;
   __device__ bool& arr_neighbor_request(size_t index) {
     return ((DeviceArray<bool, 5>) neighbor_request_)[index];
   }
@@ -75,7 +78,7 @@ class Cell {
   __device__ bool request_random_neighbor(uint32_t* random_state);
 };
 
-class Agent {
+class Agent : public SoaBase<AllocatorT> {
  public:
   using FieldTypes = std::tuple<
       Cell*,            // position_
@@ -87,15 +90,12 @@ class Agent {
   static const bool kIsAbstract = true;
 
  protected:
-  SoaField<Agent, Cell*, 0, 0> position_;
-  SoaField<Agent, Cell*, 1, 8> new_position_;
-  SoaField<Agent, uint32_t, 2, 16> random_state_;
-  SoaField<Agent, uint8_t, 3, 20> type_identifier_;    // Custom alignment
+  SoaField<Agent, 0> position_;
+  SoaField<Agent, 1> new_position_;
+  SoaField<Agent, 2> random_state_;
+  SoaField<Agent, 3> type_identifier_;    // Custom alignment
 
  public:
-  static const int kObjectSize = 24;
-  static const uint8_t kBlockSize = 64;   // Never appears.
-
   // Type ID must correspond to variadic template.
   static const uint8_t kTypeId = 0;
 
@@ -122,12 +122,9 @@ class Fish : public Agent {
   static const bool kIsAbstract = false;
 
  private:
-  SoaField<Fish, uint32_t, 4, 24> egg_timer_;
+  SoaField<Fish, 0> egg_timer_;
 
  public:
-  static const int kObjectSize = 28;
-  static const uint8_t kBlockSize = 64;
-
   static const uint8_t kTypeId = 1;
 
   __device__ Fish(uint32_t random_state);
@@ -147,12 +144,10 @@ class Shark : public Agent {
   static const bool kIsAbstract = false;
 
  private:
-  SoaField<Shark, uint32_t, 4, 24> energy_;
-  SoaField<Shark, uint32_t, 5, 28> egg_timer_;
+  SoaField<Shark, 0> energy_;
+  SoaField<Shark, 1> egg_timer_;
 
  public:
-  static const int kObjectSize = 32;
-  static const uint8_t kBlockSize = 56;
   static const uint8_t kTypeId = 2;
 
   __device__ Shark(uint32_t random_state);

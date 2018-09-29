@@ -19,8 +19,6 @@
 template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
  private:
-  using BlockBitmapT = typename SoaBlock<TYPE_ELEMENT(Types, 0), 64>::BitmapT;
-
   static const uint8_t kObjectAddrBits = 6;
   static const uint32_t kNumBlockElements = 64;
   static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
@@ -31,6 +29,24 @@ class SoaAllocator {
 
   static_assert(N_Objects % kNumBlockElements == 0,
                 "N_Objects Must be divisible by BlockSize.");
+
+  // TODO: Should be private.
+ public:
+  template<typename T>
+  struct BlockHelper {
+    static const int kSize =
+        SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
+            ::kPadded64BlockMinSize>::kSize;
+
+    static const int kBytes =
+        SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
+            ::kPadded64BlockMinSize>::kBytes;
+
+    using BlockType = SoaBlock<T, kSize, 64>;
+  };
+
+  using BlockBitmapT = typename BlockHelper<
+      typename TupleHelper<Types...>::NonAbstractType>::BlockType::BitmapT;
 
  public:
   __DEV__ void initialize() {
@@ -154,7 +170,7 @@ class SoaAllocator {
   template<int W_MULT, class T, void(T::*func)()>
   __DEV__ void parallel_do_cuda() {
     const uint32_t N_alloc = allocated_[TYPE_INDEX(Types..., T)].scan_num_bits();
-    const int num_objs = T::kBlockSize;
+    const int num_objs = BlockHelper<T>::kSize;
 
     // Round to multiple of 64.
     int num_threads = ((blockDim.x * gridDim.x)/num_objs)*num_objs;
@@ -223,12 +239,11 @@ class SoaAllocator {
   struct SoaTypeDbgPrinter {
     void operator()() {
       printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
-      printf("blocksize(%s) = %i\n", typeid(T).name(),
-             SoaBlockSizeCalculator<T, 64, TupleHelper<Types...>
-                 ::k64BlockMinSize>::kSize);
-      printf("blockbytes(%s) = %i\n", typeid(T).name(),
-             SoaBlockSizeCalculator<T, 64, TupleHelper<Types...>
-                 ::k64BlockMinSize>::kBytes);
+      printf("block size(%s) = %i\n", typeid(T).name(), BlockHelper<T>::kSize);
+      printf("data segment bytes(%s) = %i\n", typeid(T).name(),
+             BlockHelper<T>::kBytes);
+      printf("block bytes(%s) = %lu\n", typeid(T).name(),
+             sizeof(typename BlockHelper<T>::BlockType));
       SoaClassHelper<T>::DBG_print_stats();
     }
   };
@@ -238,7 +253,8 @@ class SoaAllocator {
     TupleHelper<Types...>::template for_all<SoaTypeDbgPrinter>();
     printf("Smallest block type: %s at %i bytes.\n",
            typeid(typename TupleHelper<Types...>::Type64BlockSizeMin).name(),
-           TupleHelper<Types...>::k64BlockMinSize);
+           TupleHelper<Types...>::kPadded64BlockMinSize);
+    printf("Block size bytes: %i\n", kBlockSizeBytes);
     printf("----------------------------------------------------------\n");
   }
 
@@ -263,15 +279,15 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ T* get_object(SoaBlock<T, kNumBlockElements>* block, uint32_t obj_id) {
+  __DEV__ T* get_object(typename BlockHelper<T>::BlockType* block, uint32_t obj_id) {
     assert(obj_id < 64);
     return block->make_pointer(obj_id);
   }
 
   template<class T>
-  __DEV__ SoaBlock<T, kNumBlockElements>* get_block(uint32_t block_idx) {
+  __DEV__ typename BlockHelper<T>::BlockType* get_block(uint32_t block_idx) {
     assert(block_idx < N);
-    return reinterpret_cast<SoaBlock<T, kNumBlockElements>*>(
+    return reinterpret_cast<typename BlockHelper<T>::BlockType*>(
         data_ + block_idx*kBlockSizeBytes);
   }
 
@@ -306,10 +322,10 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ void initialize_block(uint32_t block_idx) {
-    static_assert(sizeof(SoaBlock<T, kNumBlockElements>)
+    static_assert(sizeof(typename BlockHelper<T>::BlockType)
           % kNumBlockElements == 0,
         "Internal error: SOA block not aligned to 64 bytes.");
-    new(get_block<T>(block_idx)) SoaBlock<T, kNumBlockElements>();
+    new(get_block<T>(block_idx)) typename BlockHelper<T>::BlockType();
   }
 
   template<class T>
@@ -342,7 +358,7 @@ class SoaAllocator {
 
     while (true) {
       auto old_free_bitmap = atomicExch(&block->free_bitmap, 0ULL);
-      if (old_free_bitmap == SoaBlock<T, kNumBlockElements>::kBitmapInitState) {
+      if (old_free_bitmap == BlockHelper<T>::BlockType::kBitmapInitState) {
         return true;
       } else if (old_free_bitmap != 0ULL) {
         // block->free_bitmap = old_free_bitmap;
@@ -362,7 +378,7 @@ class SoaAllocator {
         }
 
         if ((before_rollback | old_free_bitmap) !=
-            SoaBlock<T, kNumBlockElements>::kBitmapInitState) {
+            BlockHelper<T>::BlockType::kBitmapInitState) {
           break;
         }  // else: Block emptied again. Try invalidating it again.
       }
@@ -373,7 +389,8 @@ class SoaAllocator {
 
   static const int kNumTypes = sizeof...(Types);
 
-  static const int kBlockSizeBytes = TupleHelper<Types...>::kMaxSize;
+  static const int kBlockSizeBytes = sizeof(typename BlockHelper<
+      typename TupleHelper<Types...>::NonAbstractType>::BlockType);
 
   char data_[N*kBlockSizeBytes];
 

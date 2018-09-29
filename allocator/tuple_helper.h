@@ -2,151 +2,7 @@
 #define ALLOCATOR_TUPLE_HELPER_H
 
 #include "allocator/soa_block.h"
-#include "allocator/util.h"
-
-// Determine to which byte boundary objects should be aligned.
-template<typename T>
-struct ObjectAlignment {
-  static const int value = sizeof(T);
-};
-
-template<typename T, size_t N>
-struct ObjectAlignment<DeviceArray<T, N>> {
-  static const int value = sizeof(T);
-};
-
-// Helper functions and fields that are used in other classes in this file.
-template<class C>
-struct SoaClassUtil {
-  static const int kNumFieldThisClass =
-      std::tuple_size<typename C::FieldTypes>::value;
-};
-
-template<>
-struct SoaClassUtil<void> {
-  static const int kNumFieldThisClass = 0;
-};
-
-// Helpers for SOA field "Index" in class C.
-template<class C, int Index>
-struct SoaFieldHelper {
-  using type = typename std::tuple_element<Index, typename C::FieldTypes>::type;
-  static const int kAlignment = ObjectAlignment<type>::value;
-
-  static constexpr int offset(int block_size) {
-    // constexprs may not contain statements.... ugh.
-    return ((SoaFieldHelper<C, Index - 1>::offset(block_size)
-             + SoaFieldHelper<C, Index - 1>::size(block_size)
-        + kAlignment - 1) / kAlignment) * kAlignment;
-  }
-
-  static constexpr int size(int block_size) {
-    return sizeof(type) * block_size;
-  }
-
-  // It is difficult to call constexpr functions and use their value in the
-  // same class, so we provide a second implementation here based on templates.
-  template<int BlockSize>
-  struct BlockConfig {
-    using PrevConfig = typename SoaFieldHelper<C, Index - 1>
-        ::template BlockConfig<BlockSize>;
-
-    static const int kOffset =
-        ((PrevConfig::kOffset + PrevConfig::kSize
-        + kAlignment - 1) / kAlignment) * kAlignment;
-
-    static const int kSize = sizeof(type) * BlockSize;
-  };
-
-  static void DBG_print_stats() {
-    printf("%s[%i]: type = %s, offset = %i, size = %i\n",
-           typeid(C).name(), Index, typeid(type).name(),
-           BlockConfig<1>::kOffset, BlockConfig<1>::kSize);
-    SoaFieldHelper<C, Index - 1>::DBG_print_stats();
-  }
-};
-
-template<class C>
-struct SoaFieldHelper<C, -1> {
-  using BaseLastFieldHelper = SoaFieldHelper<
-      typename C::BaseClass,
-      SoaClassUtil<typename C::BaseClass>::kNumFieldThisClass - 1>;
-
-  static constexpr int offset(int block_size) {
-    // Fields in superclass.
-    return BaseLastFieldHelper::offset(block_size)
-        + BaseLastFieldHelper::size(block_size);
-  }
-
-  static constexpr int size(int block_size) {
-    return 0;
-  }
-
-  template<int BlockSize>
-  struct BlockConfig {
-    static const int kOffset =
-        BaseLastFieldHelper::template BlockConfig<BlockSize>::kOffset
-        + BaseLastFieldHelper::template BlockConfig<BlockSize>::kSize;
-
-    static const int kSize = 0;
-  };
-
-  static void DBG_print_stats() {
-    BaseLastFieldHelper::DBG_print_stats();
-  }
-};
-
-template<>
-struct SoaFieldHelper<void, -1> {
-  static constexpr int offset(int block_size) { return 0; }
-
-  static constexpr int size(int block_size) { return 0; }
-
-  template<int BlockSize>
-  struct BlockConfig {
-    static const int kOffset = 0;
-
-    static const int kSize = 0;
-  };
-
-  static void DBG_print_stats() {}
-};
-
-// Helpers for SOA class C.
-template<class C>
-struct SoaClassHelper {
-  static const int kNumFieldThisClass = SoaClassUtil<C>::kNumFieldThisClass;
-
-  // The number of SOA fields in C, including fields of the superclass.
-  static const int kNumFields =
-      kNumFieldThisClass + SoaClassHelper<typename C::BaseClass>::kNumFields;
-
-  template<int BlockSize>
-  struct BlockConfig {
-    using LastFieldHelper = SoaFieldHelper<C, kNumFieldThisClass - 1>;
-
-    static const int kDataSegmentSize =
-        LastFieldHelper::template BlockConfig<BlockSize>::kOffset
-        + LastFieldHelper::template BlockConfig<BlockSize>::kSize;
-  };
-
-  static void DBG_print_stats() {
-    printf("----------------------------------------------------------\n");
-    printf("Class %s: data_segment_size(1) = %i, data_segment_size(64) = %i\n",
-           typeid(C).name(), BlockConfig<1>::kDataSegmentSize,
-           BlockConfig<64>::kDataSegmentSize);
-    SoaFieldHelper<C, kNumFieldThisClass - 1>::DBG_print_stats();
-    printf("----------------------------------------------------------\n");
-  }
-};
-
-template<>
-struct SoaClassHelper<void> {
-  static const int kNumFieldThisClass = 0;
-  static const int kNumFields = 0;
-
-  static void DBG_print_stats() {}
-};
+#include "allocator/soa_helper.h"
 
 // Helpers for multiple SOA classes "Types".
 template<class... Types>
@@ -154,13 +10,11 @@ struct TupleHelper;
 
 template<class T, class... Types>
 struct TupleHelper<T, Types...> {
-  // Get largest SOA block size among all tuple elements.
-  // The size of a block is chosen such that 64 objects of the smallest type
-  // can fit.
-  static const size_t kMaxSize =
-      sizeof(T) > TupleHelper<Types...>::kMaxSize
-          ? sizeof(SoaBlock<T, /*N_Max=*/ 64>)
-          : TupleHelper<Types...>::kMaxSize;
+  // The first non-abstract type.
+  using NonAbstractType = typename std::conditional<
+      !T::kIsAbstract,
+      /*T=*/ T,
+      /*F=*/ typename TupleHelper<Types...>::NonAbstractType>::type;
 
   // Runs a functor for all types in the tuple.
   template<template<class> typename F>
@@ -208,6 +62,10 @@ struct TupleHelper<T, Types...> {
   static const int k64BlockMinSize = kIsThisClassMinBlock
       ? kThisClass64BlockSize : TupleHelper<Types...>::k64BlockMinSize;
 
+  // Smallest block size, padded to multiple of 64 bytes.
+  static const int kPadded64BlockMinSize =
+      ((k64BlockMinSize + 64 - 1) / 64) * 64;
+
   using Type64BlockSizeMin = typename std::conditional<
       kIsThisClassMinBlock,
       /*T=*/ T,
@@ -216,7 +74,7 @@ struct TupleHelper<T, Types...> {
 
 template<>
 struct TupleHelper<> {
-  static const size_t kMaxSize = 0;
+  using NonAbstractType = void;
 
   template<template<class> typename F>
   static void for_all() {}

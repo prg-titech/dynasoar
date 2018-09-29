@@ -6,15 +6,17 @@
 // Wrapper type for fields of SOA-structured classes. This class contains the
 // logic for calculating the data location of a field from an object
 // identifier.
-template<typename C, typename T, int Field, int Offset>
+template<typename C, int Field>
 class SoaField {
  private:
+  using T = typename SoaFieldHelper<C, Field>::type;
+
   // Calculate data pointer from address.
   __DEV__ T* data_ptr() const {
     // Base address of the pointer, i.e., without the offset of the SoaField
     // type.
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this)
-        - sizeof(SoaField<C, T, Field, Offset>)*Field;
+        - sizeof(SoaField<C, Field>)*Field;
     // Block size (N_T), i.e., number of object slots in this block.
     uint8_t block_size = ptr_base >> 48;  // Truncated.
     // Object slot ID.
@@ -25,7 +27,8 @@ class SoaField {
     assert(obj_id < block_size);
     // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(
-        block_base + kBlockDataSectionOffset + block_size*Offset);
+        block_base + kBlockDataSectionOffset
+        + block_size*SoaFieldHelper<C, Field>::kOffset);
     return soa_array + obj_id;
   }
 

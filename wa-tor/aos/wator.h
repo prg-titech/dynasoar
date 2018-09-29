@@ -13,8 +13,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 
 namespace wa_tor {
 
-class Agent;
-
 class Cell {
  private:
   // left, top, right, bottom

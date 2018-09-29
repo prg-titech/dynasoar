@@ -23,9 +23,9 @@
 
 namespace wa_tor {
 
-__device__ SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell> memory_allocator;
+__device__ AllocatorT memory_allocator;
 // Host side pointer.
-decltype(memory_allocator)* allocator_handle;
+AllocatorT* allocator_handle;
 
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
@@ -450,10 +450,10 @@ __global__ void reset_shark_array() {
 __global__ void find_cells_soa() {
   assert(gridDim.x * blockDim.x == 1);
   uint32_t num_cells = 0;
-  for (int i = 0; i < decltype(memory_allocator)::kN; ++i) {
+  for (int i = 0; i < AllocatorT::kN; ++i) {
     if (memory_allocator.is_block_allocated<Cell>(i)) {
       auto* block = memory_allocator.get_block<Cell>(i);
-      for (int j = 0; j < Cell::kBlockSize; ++j) {
+      for (int j = 0; j < AllocatorT::BlockHelper<Cell>::kSize; ++j) {
         if (block->is_slot_allocated(j)) {
           cells[num_cells++] = block->make_pointer(j);
         }
@@ -476,32 +476,6 @@ void generate_shark_array() {
   find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
-
-/*
-__global__ void fish_prepare() {
-  memory_allocator.parallel_do<16, Fish, &Fish::prepare>();
-}
-
-__global__ void fish_update() {
-  memory_allocator.parallel_do<16, Fish, &Fish::update>();
-}
-
-__global__ void shark_prepare() {
-  memory_allocator.parallel_do<16, Shark, &Shark::prepare>();
-}
-
-__global__ void shark_update() {
-  memory_allocator.parallel_do<16, Shark, &Shark::update>();
-}
-
-__global__ void cell_prepare() {
-  memory_allocator.parallel_do<16, Cell, &Cell::prepare>();
-}
-
-__global__ void cell_decide() {
-  memory_allocator.parallel_do<16, Cell, &Cell::decide>();
-}
-*/
 
 void generate_shark_fish_arrays() {
   initialize_iteration<Fish><<<128, 128>>>();
@@ -607,7 +581,7 @@ void print_stats() {
 }
 
 int main(int argc, char* arvg[]) {
-  SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell>::DBG_print_stats();
+  AllocatorT::DBG_print_stats();
   
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
 

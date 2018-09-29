@@ -2,6 +2,7 @@
 #define ALLOCATOR_SOA_BLOCK_H
 
 #include "allocator/configuration.h"
+#include "allocator/soa_helper.h"
 #include "allocator/util.h"
 
 
@@ -15,15 +16,13 @@ enum DeallocationState : int8_t {
 // T: Base type of the block.
 // N_Max: Maximum number of objects per block (regardless of type). Currently
 //        fixed at 64.
-template<class T, int N_Max>
+// N: Maximum number of objects in a block of type T.
+template<class T, int N, int N_Max>
 class SoaBlock {
  public:
   using BitmapT = unsigned long long int;
 
   static_assert(N_Max == 64, "Not implemented: Custom N_Max.");
-
-  // N_T: Number of object slots.
-  static const int N = T::kBlockSize;
 
   // Bitmap initializer: N_T bits set to 1.
   static const BitmapT kBitmapInitState =
@@ -173,7 +172,9 @@ class SoaBlock {
   // Padding to 8 bytes.
   uint8_t type_id;
 
-  static const int kRawStorageBytes = N*T::kObjectSize;
+  // Size of data segment.
+  static const int kRawStorageBytes =
+      SoaClassHelper<T>::template BlockConfig<N>::kDataSegmentSize;
 
   // Object size must be multiple of 64 bytes.
   static const int kStorageBytes = ((kRawStorageBytes + N_Max - 1) / N_Max) * N_Max;
