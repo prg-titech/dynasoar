@@ -183,8 +183,7 @@ __device__ void Cell::set_neighbors(Cell* left, Cell* top,
   arr_neighbors(3) = bottom;
 }
 
-__device__ Agent::Agent(uint32_t random_state, uint8_t type_identifier)
-    : random_state_(random_state), type_identifier_(type_identifier) {
+__device__ Agent::Agent(uint32_t random_state) : random_state_(random_state) {
   assert(random_state != 0);
 }
 
@@ -207,14 +206,8 @@ __device__ void Agent::set_position(Cell* cell) {
   position_ = cell;
 }
 
-// TODO: Verify that RTTI (dynamic_cast) does not work in device code.
-__device__ uint8_t Agent::type_identifier() const {
-  return type_identifier_;
-}
-
 __device__ Fish::Fish(uint32_t random_state)
-    : Agent(random_state, kTypeId), 
-      egg_timer_(random_state % SPAWN_THRESHOLD) {
+    : Agent(random_state), egg_timer_(random_state % SPAWN_THRESHOLD) {
   assert(random_state != 0);
 }
 
@@ -248,7 +241,7 @@ __device__ void Fish::update() {
 
 
 __device__ Shark::Shark(uint32_t random_state)
-    : Agent(random_state, kTypeId), energy_(ENERGY_START),
+    : Agent(random_state), energy_(ENERGY_START),
       egg_timer_(random_state % SPAWN_THRESHOLD) {
   assert(random_state_ != 0);
 }

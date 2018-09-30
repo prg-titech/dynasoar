@@ -16,8 +16,6 @@ using AllocatorT = SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell>;
 
 class Cell : public SoaBase<AllocatorT> {
  public:
-  static const uint8_t kTypeId = 3;
-
   using FieldTypes = std::tuple<
       DeviceArray<Cell*, 4>,         // neighbors_
       Agent*,                        // agent_
@@ -83,8 +81,7 @@ class Agent : public SoaBase<AllocatorT> {
   using FieldTypes = std::tuple<
       Cell*,            // position_
       Cell*,            // new_position_
-      uint32_t,         // random_state_
-      uint8_t>;         // type_identifier_
+      uint32_t>;        // random_state_
 
   using BaseClass = void;
   static const bool kIsAbstract = true;
@@ -93,13 +90,9 @@ class Agent : public SoaBase<AllocatorT> {
   SoaField<Agent, 0> position_;
   SoaField<Agent, 1> new_position_;
   SoaField<Agent, 2> random_state_;
-  SoaField<Agent, 3> type_identifier_;    // Custom alignment
 
  public:
-  // Type ID must correspond to variadic template.
-  static const uint8_t kTypeId = 0;
-
-  __device__ Agent(uint32_t random_state, uint8_t type_identifier);
+  __device__ Agent(uint32_t random_state);
 
   __device__ Cell* position() const;
 
@@ -108,9 +101,6 @@ class Agent : public SoaBase<AllocatorT> {
   __device__ void set_new_position(Cell* new_pos);
 
   __device__ void set_position(Cell* cell);
-
-  // TODO: Verify that RTTI (dynamic_cast) does not work in device code.
-  __device__ uint8_t type_identifier() const;
 };
 
 class Fish : public Agent {
@@ -125,8 +115,6 @@ class Fish : public Agent {
   SoaField<Fish, 0> egg_timer_;
 
  public:
-  static const uint8_t kTypeId = 1;
-
   __device__ Fish(uint32_t random_state);
 
   __device__ void prepare();
@@ -148,8 +136,6 @@ class Shark : public Agent {
   SoaField<Shark, 1> egg_timer_;
 
  public:
-  static const uint8_t kTypeId = 2;
-
   __device__ Shark(uint32_t random_state);
 
   __device__ void prepare();
