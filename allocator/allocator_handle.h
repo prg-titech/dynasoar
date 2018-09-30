@@ -6,6 +6,11 @@ __global__ void init_allocator_kernel(AllocatorT* allocator) {
   allocator->initialize();
 }
 
+template<typename AllocatorT, typename T>
+__global__ void init_iteration(AllocatorT* allocator) {
+  allocator->template initialize_iteration<T>();
+}
+
 template<typename AllocatorT>
 class AllocatorHandle {
  public:
@@ -19,10 +24,16 @@ class AllocatorHandle {
     gpuErrchk(cudaDeviceSynchronize());
   }
 
+  ~AllocatorHandle() {
+    cudaFree(allocator_);
+  }
+
   AllocatorT* device_pointer() { return allocator_; }
 
   template<int W_MULT, class T, void(T::*func)()>
   void parallel_do(int num_blocks, int num_threads) {
+    init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
     allocator_->parallel_do<W_MULT, T, func>(num_blocks, num_threads);
   }
 
