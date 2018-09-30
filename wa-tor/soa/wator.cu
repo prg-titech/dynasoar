@@ -4,6 +4,7 @@
 #include <inttypes.h>
 
 #include "wa-tor/soa/wator.h"
+#include "allocator/allocator_handle.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
@@ -21,27 +22,28 @@
 
 namespace wa_tor {
 
-__device__ AllocatorT memory_allocator;
+__device__ AllocatorT* device_allocator;
+
 // Host side pointer.
-AllocatorT* allocator_handle;
+AllocatorHandle<AllocatorT>* allocator_handle;
 
 template<typename T, typename... Args>
 __device__ T* allocate(Args... args) {
-  return memory_allocator.make_new<T>(args...);
+  return device_allocator->make_new<T>(args...);
 }
 
 template<typename T>
 __device__ void deallocate(T* ptr) {
-  memory_allocator.free<T>(ptr);
+  device_allocator->free<T>(ptr);
 }
 
   template<int TypeIndex>
   __device__ void deallocate_untyped(void* ptr) {
-    memory_allocator.free_untyped<TypeIndex>(ptr);
+    device_allocator->free_untyped<TypeIndex>(ptr);
   }
 
 __device__ void initialize_allocator() {
-  memory_allocator.initialize();
+  device_allocator->initialize();
 }
 
 __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
@@ -375,10 +377,10 @@ __global__ void print_checksum() {
     chksum += *(fish[i]->position()->random_state()) % 601;
   }
 
-  uint32_t fish_use = memory_allocator.DBG_used_slots<Fish>();
-  uint32_t fish_num = memory_allocator.DBG_allocated_slots<Fish>();
-  uint32_t shark_use = memory_allocator.DBG_used_slots<Shark>();
-  uint32_t shark_num = memory_allocator.DBG_allocated_slots<Shark>();
+  uint32_t fish_use = device_allocator->DBG_used_slots<Fish>();
+  uint32_t fish_num = device_allocator->DBG_allocated_slots<Fish>();
+  uint32_t shark_use = device_allocator->DBG_used_slots<Shark>();
+  uint32_t shark_num = device_allocator->DBG_allocated_slots<Shark>();
 
   printf("%" PRIu64, chksum);
   printf(",%u,%u,%u,%u\n",
@@ -429,7 +431,7 @@ void generate_shark_array() {
 
 template<typename T>
 __global__ void initialize_iteration() {
-  memory_allocator.initialize_iteration<T>();
+  device_allocator->initialize_iteration<T>();
 }
 
 void generate_shark_fish_arrays() {
@@ -473,17 +475,12 @@ void step() {
       NUM_BLOCKS, THREADS_PER_BLOCK);
 }
 
-__global__ void init_memory_system() {
-  initialize_allocator();
-}
-
 void initialize() {
-  allocator_handle = nullptr;
-  cudaGetSymbolAddress((void**) &allocator_handle, memory_allocator);
-  assert(allocator_handle != nullptr);
-
-  init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  // Create new allocator.
+  allocator_handle = new AllocatorHandle<AllocatorT>();
+  AllocatorT* dev_ptr = allocator_handle->device_pointer();
+  cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
+                     cudaMemcpyHostToDevice);
 
   create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
