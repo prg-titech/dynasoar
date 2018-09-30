@@ -39,6 +39,17 @@ struct TupleHelper<T, Types...> {
     return TupleHelper<Types...>::template tuple_index<U>() + 1;
   }
 
+  template<typename U, int Dummy>
+  struct TupleIndex {
+    static const int value =
+        TupleHelper<Types...>::template TupleIndex<U, Dummy>::value + 1;
+  };
+
+  template<int Dummy>
+  struct TupleIndex<T, Dummy>{
+    static const int value = 0;
+  };
+
   // Get type by index.
   template<int Index, int Dummy>
   struct Element {
@@ -105,7 +116,11 @@ struct SoaBlockSizeCalculator<T, 0, BlockBytes> {
   static const int kSize = -1;
 };
 
-#define TYPE_INDEX(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
+#define TYPE_INDEX_VAR(tuple, type) TupleHelper<tuple>::template tuple_index<type>()
+
+#define TYPE_INDEX(tuple, type) (TupleHelper<tuple>::template TupleIndex<type, 0>::value)
+
+#define TYPE_ID(allocatort, type) allocatort::TypeId<type>::value
 
 #define TYPE_ELEMENT(tuple, index) typename TupleHelper<tuple...> \
     ::Element<index, /*Dummy=*/ 0>::type

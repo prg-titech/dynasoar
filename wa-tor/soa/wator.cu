@@ -107,11 +107,11 @@ __device__ void Cell::enter(Agent* agent) {
 }
 
 __device__ bool Cell::has_fish() const {
-  return agent_ != nullptr && get_type() == Fish::kTypeId;
+  return agent_ != nullptr && agent_->get_type() == TYPE_ID(AllocatorT, Fish);
 }
 
 __device__ bool Cell::has_shark() const {
-  return agent_ != nullptr && get_type() == Shark::kTypeId;
+  return agent_ != nullptr && agent_->get_type() == TYPE_ID(AllocatorT, Shark);
 }
 
 __device__ bool Cell::is_free() const {
@@ -298,9 +298,9 @@ __device__ void Shark::update() {
 
 __device__ void Cell::kill() {
   assert(agent_ != nullptr);
-  if (get_type() == 1) {
+  if (agent_->get_type() == 1) {
     deallocate_untyped<1>(agent_);
-  } else if (get_type() == 2) {
+  } else if (agent_->get_type() == 2) {
     deallocate_untyped<2>(agent_);
   } else {
     // Unknown type.
