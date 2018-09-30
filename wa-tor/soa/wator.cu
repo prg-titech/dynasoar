@@ -409,34 +409,8 @@ __global__ void find_sharks() {
   }
 }
 
-template<typename T>
-__global__ void initialize_iteration() {
-  memory_allocator.initialize_iteration<T>();
-}
-
-__global__ void reset_fish_array() {
-  num_fish = 0;
-}
-
-__global__ void reset_shark_array() {
-  num_sharks = 0;
-}
-
-__global__ void find_cells_soa() {
-  assert(gridDim.x * blockDim.x == 1);
-  uint32_t num_cells = 0;
-  for (int i = 0; i < AllocatorT::kN; ++i) {
-    if (memory_allocator.is_block_allocated<Cell>(i)) {
-      auto* block = memory_allocator.get_block<Cell>(i);
-      for (int j = 0; j < AllocatorT::BlockHelper<Cell>::kSize; ++j) {
-        if (block->is_slot_allocated(j)) {
-          cells[num_cells++] = block->make_pointer(j);
-        }
-      }
-    }
-  }
-}
-
+__global__ void reset_fish_array() { num_fish = 0; }
+__global__ void reset_shark_array() { num_sharks = 0; }
 
 void generate_fish_array() {
   reset_fish_array<<<1, 1>>>();
@@ -450,6 +424,12 @@ void generate_shark_array() {
   gpuErrchk(cudaDeviceSynchronize());
   find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
+}
+
+
+template<typename T>
+__global__ void initialize_iteration() {
+  memory_allocator.initialize_iteration<T>();
 }
 
 void generate_shark_fish_arrays() {
@@ -466,7 +446,6 @@ void generate_shark_fish_arrays() {
 
 void step() {
   // --- FISH ---
-  //generate_fish_array();
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
 
@@ -475,15 +454,12 @@ void step() {
 
   allocator_handle->parallel_do<16, Cell, &Cell::decide>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
-  //initialize_iteration<Fish><<<128, 128>>>();
-  //gpuErrchk(cudaDeviceSynchronize());
 
   allocator_handle->parallel_do<16, Fish, &Fish::update>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
 
 
   // --- SHARKS ---
-  //generate_shark_array();
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
 
@@ -492,8 +468,6 @@ void step() {
 
   allocator_handle->parallel_do<16, Cell, &Cell::decide>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
-  //initialize_iteration<Shark><<<128, 128>>>();
-  //gpuErrchk(cudaDeviceSynchronize());
 
   allocator_handle->parallel_do<16, Shark, &Shark::update>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
@@ -549,7 +523,6 @@ int h_num_sharks = 0;
 void print_stats() {
   generate_fish_array();
   generate_shark_array();
-  //printf("FISH: %i,SHARKS: %i,", h_num_fish, h_num_sharks);
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
   printf("           ");
@@ -559,28 +532,16 @@ int main(int argc, char* arvg[]) {
   AllocatorT::DBG_print_stats();
   
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
-
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
   //printf("CUDA heap size: %lu\n", heap_size);
 
   initialize();
 
-  // To ensure cells are accessed properly (SOA).
-  find_cells_soa<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  //printf("Computing...");
-
-int total_time = 0;
+  int total_time = 0;
   for (int i = 0; i < 500; ++i) {
-    if (i%50==0) {
-      //render();
-    }
- generate_shark_fish_arrays();
-    // Printing: RUNNING TIME, NUM_FISH, NUM_SHARKS, CHKSUM, FISH_USE, FISH_ALLOC, SHARK_USE, SHARK_ALLOC
     auto time_before = std::chrono::system_clock::now();
-//    generate_shark_fish_arrays();
+    generate_shark_fish_arrays();
     step();
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -588,8 +549,8 @@ int total_time = 0;
     total_time += time_running;
   }
 
-    printf("%i,%i,", GRID_SIZE_Y, total_time);
-    print_stats();
+  printf("%i,%i,", GRID_SIZE_Y, total_time);
+  print_stats();
   return 0;
 }
 
