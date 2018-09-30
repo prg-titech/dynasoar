@@ -28,9 +28,6 @@ class Cell : public SoaBase<AllocatorT> {
  private:
   // left, top, right, bottom
   SoaField<Cell, 0> neighbors_;
-  __device__ Cell*& arr_neighbors(size_t index) {
-    return ((DeviceArray<Cell*, 4>) neighbors_)[index];
-  }
 
   SoaField<Cell, 1> agent_;
 
@@ -38,9 +35,6 @@ class Cell : public SoaBase<AllocatorT> {
 
   // left, top, right, bottom, self
   SoaField<Cell, 3> neighbor_request_;
-  __device__ bool& arr_neighbor_request(size_t index) {
-    return ((DeviceArray<bool, 5>) neighbor_request_)[index];
-  }
 
  public:
   __device__ Cell(uint32_t random_state);

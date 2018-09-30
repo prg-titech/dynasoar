@@ -1,6 +1,8 @@
 #ifndef UTIL_UTIL_H
 #define UTIL_UTIL_H
 
+#include <type_traits>
+
 #define __DEV__ __device__
 #define __DEV_HOST__ __device__ __host__
 
@@ -21,9 +23,18 @@ class DeviceArray {
   T data[N];
 
  public:
+  using BaseType = T;
+
   __device__ T& operator[](size_t pos) {
     return data[pos];
   }
 };
+
+// Check if type is a device array.
+template<typename>
+struct is_device_array : std::false_type {};
+
+template<typename T, size_t N>
+struct is_device_array<DeviceArray<T, N>> : std::true_type {};
 
 #endif  // UTIL_UTIL_H

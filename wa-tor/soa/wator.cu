@@ -71,7 +71,7 @@ __device__ Agent* Cell::agent() const {
 }
 
 __device__ void Cell::decide() {
-  if (arr_neighbor_request(4)) {
+  if (neighbor_request_[4]) {
     // This cell has priority.
     agent_->set_new_position(this);
   } else {
@@ -79,14 +79,14 @@ __device__ void Cell::decide() {
     uint8_t num_candidates = 0;
 
     for (int i = 0; i < 4; ++i) {
-      if (arr_neighbor_request(i)) {
+      if (neighbor_request_[i]) {
         candidates[num_candidates++] = i;
       }
     }
 
     if (num_candidates > 0) {
       uint32_t selected_index = random_number(&random_state_, num_candidates);
-      arr_neighbors(candidates[selected_index])->agent()->set_new_position(this);
+      neighbors_[candidates[selected_index]]->agent()->set_new_position(this);
     }
   }
 }
@@ -125,7 +125,7 @@ __device__ void Cell::leave() {
 
 __device__ void Cell::prepare() {
   for (int i = 0; i < 5; ++i) {
-    arr_neighbor_request(i) = false;
+    neighbor_request_[i] = false;
   }
 }
 
@@ -138,14 +138,14 @@ __device__ void Cell::request_random_fish_neighbor() {
   if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
     // No fish found. Look for free cell.
     if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-      arr_neighbor_request(4) = true;
+      neighbor_request_[4] = true;
     }
   }
 }
 
 __device__ void Cell::request_random_free_neighbor() {
   if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-    arr_neighbor_request(4) = true;
+    neighbor_request_[4] = true;
   }
 }
 
@@ -155,7 +155,7 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
   uint8_t num_candidates = 0;
 
   for (int i = 0; i < 4; ++i) {
-    if ((arr_neighbors(i)->*predicate)()) {
+    if ((neighbors_[i]->*predicate)()) {
       candidates[num_candidates++] = i;
     }
   }
@@ -166,10 +166,10 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
     uint32_t selected_index = random_number(random_state, num_candidates);
     uint8_t selected = candidates[selected_index];
     uint8_t neighbor_index = (selected + 2) % 4;
-    arr_neighbors(selected)->arr_neighbor_request(neighbor_index) = true;
+    neighbors_[selected]->neighbor_request_[neighbor_index] = true;
 
     // Check correctness of neighbor calculation.
-    assert(arr_neighbors(selected)->arr_neighbors(neighbor_index) == this);
+    assert(neighbors_[selected]->neighbors_[neighbor_index] == this);
 
     return true;
   }
@@ -177,10 +177,10 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
 
 __device__ void Cell::set_neighbors(Cell* left, Cell* top,
                                     Cell* right, Cell* bottom) {
-  arr_neighbors(0) = left;
-  arr_neighbors(1) = top;
-  arr_neighbors(2) = right;
-  arr_neighbors(3) = bottom;
+  neighbors_[0] = left;
+  neighbors_[1] = top;
+  neighbors_[2] = right;
+  neighbors_[3] = bottom;
 }
 
 __device__ Agent::Agent(uint32_t random_state) : random_state_(random_state) {
