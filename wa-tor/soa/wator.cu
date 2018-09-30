@@ -1,5 +1,3 @@
-#define NDEBUG
-
 #include <chrono>
 #include <stdio.h>
 #include <assert.h>
@@ -49,7 +47,6 @@ __device__ void initialize_allocator() {
 __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
   // Advance and return random state.
   // Source: https://en.wikipedia.org/wiki/Lehmer_random_number_generator
-  assert(*state != 0);
   *state = static_cast<uint32_t>(
       static_cast<uint64_t>(*state) * 1103515245u + 12345) % 2147483648u;
   return ((*state) >> 7) % max;
@@ -58,7 +55,6 @@ __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
 __device__ uint32_t random_number(uint32_t* state) {
   // Advance and return random state.
   // Source: https://en.wikipedia.org/wiki/Lehmer_random_number_generator
-  assert(*state != 0);
   *state = static_cast<uint32_t>(
       static_cast<uint64_t>(*state) * 1103515245u + 12345) % 2147483648u;
   return ((*state) >> 7);
