@@ -44,9 +44,19 @@ class SoaField {
 
   // Custom address-of operator.
   __DEV__ T* operator&() { return data_ptr(); }
+  __DEV__ T* operator&() const { return data_ptr(); }
 
   // Support member function calls.
   __DEV__ T operator->() { return *data_ptr(); }
+  __DEV__ T operator->() const { return *data_ptr(); }
+
+  // Dereference type in case of pointer type.
+  __DEV__ typename std::remove_pointer<T>::type& operator*() {
+    return **data_ptr();
+  }
+  __DEV__ typename std::remove_pointer<T>::type& operator*() const {
+    return **data_ptr();
+  }
 
   // Assignment operator.
   __DEV__ T& operator=(const T& value) {

@@ -20,8 +20,8 @@ class Cell : public SoaBase<AllocatorT> {
 
   using FieldTypes = std::tuple<
       DeviceArray<Cell*, 4>,         // neighbors_
-      Agent*,                     // agent_
-      uint32_t,                   // random_state_
+      Agent*,                        // agent_
+      uint32_t,                      // random_state_
       DeviceArray<bool, 5>>;         // neighbor_request_
 
   using BaseClass = void;

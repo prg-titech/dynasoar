@@ -17,7 +17,7 @@ enum DeallocationState : int8_t {
 // N_Max: Maximum number of objects per block (regardless of type). Currently
 //        fixed at 64.
 // N: Maximum number of objects in a block of type T.
-template<class T, int N, int N_Max>
+template<class T, int TypeId, int N, int N_Max>
 class SoaBlock {
  public:
   using BitmapT = unsigned long long int;
@@ -43,7 +43,7 @@ class SoaBlock {
   // Initializes a new block.
   __DEV__ SoaBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % N_Max == 0);   // Alignment.
-    type_id = T::kTypeId;
+    type_id = TypeId;
     __threadfence();  // Initialize bitmap after type_id is visible.
     free_bitmap = kBitmapInitState;
     assert(__popcll(free_bitmap) == N);
@@ -54,7 +54,7 @@ class SoaBlock {
     uintptr_t ptr_as_int = index;
     uintptr_t block_size = N;
     ptr_as_int |= block_size << 48;
-    uintptr_t type_id = T::kTypeId;
+    uintptr_t type_id = TypeId;
     ptr_as_int |= type_id << 56;
     uintptr_t block_ptr = reinterpret_cast<uintptr_t>(this);
     assert(block_ptr < (1ULL << 49));   // Only 48 bits used in address space.

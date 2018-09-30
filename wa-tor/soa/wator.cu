@@ -75,7 +75,6 @@ __device__ Agent* Cell::agent() const {
 }
 
 __device__ void Cell::decide() {
-  // TODO: Not sure why manual type cast is necessary.
   if (arr_neighbor_request(4)) {
     // This cell has priority.
     agent_->set_new_position(this);
@@ -112,13 +111,11 @@ __device__ void Cell::enter(Agent* agent) {
 }
 
 __device__ bool Cell::has_fish() const {
-  // TODO: Not sure why typecast is necessary.
-  return agent_ != nullptr && ((Agent*)agent_)->type_identifier() == Fish::kTypeId;
+  return agent_ != nullptr && agent_->type_identifier() == Fish::kTypeId;
 }
 
 __device__ bool Cell::has_shark() const {
-  // TODO: Not sure why typecast is necessary.
-  return agent_ != nullptr && ((Agent*)agent_)->type_identifier() == Shark::kTypeId;
+  return agent_ != nullptr && agent_->type_identifier() == Shark::kTypeId;
 }
 
 __device__ bool Cell::is_free() const {
@@ -141,6 +138,7 @@ __device__ uint32_t* Cell::random_state() {
 }
 
 __device__ void Cell::request_random_fish_neighbor() {
+  agent_->random_state();
   if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
     // No fish found. Look for free cell.
     if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {

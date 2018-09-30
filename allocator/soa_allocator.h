@@ -42,13 +42,19 @@ class SoaAllocator {
         SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
             ::kPadded64BlockMinSize>::kBytes;
 
-    using BlockType = SoaBlock<T, kSize, 64>;
+    using BlockType = SoaBlock<T, TYPE_INDEX(Types..., T), kSize, 64>;
   };
 
   using BlockBitmapT = typename BlockHelper<
       typename TupleHelper<Types...>::NonAbstractType>::BlockType::BitmapT;
 
  public:
+  __DEV__ static uint8_t get_type(void* ptr) {
+    auto ptr_base = reinterpret_cast<uintptr_t>(ptr);
+    uint8_t type_id = ptr_base >> 56;  // Truncated.
+    return type_id;
+  }
+
   __DEV__ void initialize() {
     // Check alignment of data storage buffer.
     assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
@@ -92,7 +98,7 @@ class SoaAllocator {
         }
 
         uint8_t actual_type_id = block->type_id;
-        if (actual_type_id != T::kTypeId) {
+        if (actual_type_id != TYPE_INDEX(Types..., T)) {
           // Block deallocated and initialized for a new type between lookup
           // from active bitmap and here. This is extremely unlikely!
           // But possible.
