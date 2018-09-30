@@ -22,9 +22,6 @@ class Cell : public SoaBase<AllocatorT> {
       uint32_t,                      // random_state_
       DeviceArray<bool, 5>>;         // neighbor_request_
 
-  using BaseClass = void;
-  static const bool kIsAbstract = false;
-
  private:
   // left, top, right, bottom
   SoaField<Cell, 0> neighbors_;
@@ -77,7 +74,6 @@ class Agent : public SoaBase<AllocatorT> {
       Cell*,            // new_position_
       uint32_t>;        // random_state_
 
-  using BaseClass = void;
   static const bool kIsAbstract = true;
 
  protected:

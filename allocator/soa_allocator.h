@@ -146,7 +146,7 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ void free(T* obj) {
+  __DEV__ void free_typed(T* obj) {
     obj->~T();
     const uint32_t block_idx = get_block_idx<T>(obj);
     const uint32_t obj_id = get_object_id<T>(obj);
@@ -165,6 +165,56 @@ class SoaAllocator {
     }
   }
 
+  // Helper data structure for freeing objects whose types are subtypes of the
+  // declared type. BaseClass is the declared type.
+  template<typename BaseClass>
+  struct FreeHelper {
+    // Iterating over all types T in the allocator.
+    template<typename T>
+    struct InnerHelper {
+      // T is a subclass of BaseClass. Check if same type.
+      template<bool Check, int Dummy>
+      struct ClassSelector {
+        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
+                                 BaseClass* obj) {
+          if (obj->get_type() == TYPE_INDEX(Types..., T)) {
+            allocator->free_typed(static_cast<T*>(obj));
+            return false;  // No need to check other types.
+          } else {
+            return true;   // true means "continue processing".
+          }
+        }
+      };
+
+      // T is not a subclass of BaseClass. Skip.
+      template<int Dummy>
+      struct ClassSelector<false, Dummy> {
+        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
+                                 BaseClass* obj) {
+          return true;
+        }
+      };
+
+      __DEV__ bool operator()(SoaAllocator<N_Objects, Types...>* allocator,
+                              BaseClass* obj) {
+        return ClassSelector<std::is_base_of<BaseClass, T>::value, 0>::call(
+            allocator, obj);
+      }
+    };
+  };
+
+  template<class T>
+  __DEV__ void free(T* obj) {
+    uint8_t type_id = obj->get_type();
+    if (type_id == TYPE_INDEX(Types..., T)) {
+      free_typed(obj);
+    } else {
+      ASSERT_SUCCESS(TupleHelper<Types...>
+          ::template dev_for_all<FreeHelper<T>::InnerHelper>(this, obj));
+    }
+  }
+
+  // Free object by type ID instead of type.
   template<int TypeIndex>
   __DEV__ void free_untyped(void* obj) {
     auto* typed = static_cast<TYPE_ELEMENT(Types, TypeIndex)*>(obj);
@@ -250,7 +300,7 @@ class SoaAllocator {
 
   template<typename T>
   struct SoaTypeDbgPrinter {
-    void operator()() {
+    bool operator()() {
       printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
       printf("block size(%s) = %i\n", typeid(T).name(), BlockHelper<T>::kSize);
       printf("data segment bytes(%s) = %i\n", typeid(T).name(),
@@ -258,6 +308,7 @@ class SoaAllocator {
       printf("block bytes(%s) = %lu\n", typeid(T).name(),
              sizeof(typename BlockHelper<T>::BlockType));
       SoaClassHelper<T>::DBG_print_stats();
+      return true;  // true means "continue processing".
     }
   };
 

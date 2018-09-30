@@ -291,14 +291,7 @@ __device__ void Shark::update() {
 
 __device__ void Cell::kill() {
   assert(agent_ != nullptr);
-  if (agent_->get_type() == 1) {
-    deallocate_untyped<1>(agent_);
-  } else if (agent_->get_type() == 2) {
-    deallocate_untyped<2>(agent_);
-  } else {
-    // Unknown type.
-    assert(false);
-  }
+  deallocate<Agent>(agent_);
   agent_ = nullptr;
 }
 

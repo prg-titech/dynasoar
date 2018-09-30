@@ -17,11 +17,25 @@ struct TupleHelper<T, Types...> {
       /*F=*/ typename TupleHelper<Types...>::NonAbstractType>::type;
 
   // Runs a functor for all types in the tuple.
-  template<template<class> typename F>
-  static void for_all() {
+  // Returns true if terminated early (without iterating over all types).
+  template<template<class> typename F, typename... Args>
+  static bool for_all(Args... args) {
     F<T> func;
-    func();
-    TupleHelper<Types...>::template for_all<F>();
+    if (func(args...)) {  // If F returns false, stop enumerating.
+      return TupleHelper<Types...>::template for_all<F>(args...);
+    } else {
+      return true;
+    }
+  }
+
+  template<template<class> typename F, typename... Args>
+  __DEV__ static bool dev_for_all(Args... args) {
+    F<T> func;
+    if (func(args...)) {  // If F returns false, stop enumerating.
+      return TupleHelper<Types...>::template dev_for_all<F>(args...);
+    } else {
+      return true;
+    }
   }
 
   // Returns the index of U within the tuple.
@@ -87,8 +101,11 @@ template<>
 struct TupleHelper<> {
   using NonAbstractType = void;
 
-  template<template<class> typename F>
-  static void for_all() {}
+  template<template<class> typename F, typename... Args>
+  static bool for_all(Args... args) { return false; }
+
+  template<template<class> typename F, typename... Args>
+  __DEV__ static bool dev_for_all(Args... args) { return false; }
 
   static const int kThisClass64BlockSize = std::numeric_limits<int>::max();
   static const int k64BlockMinSize = kThisClass64BlockSize;
