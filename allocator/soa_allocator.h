@@ -49,7 +49,7 @@ class SoaAllocator {
       typename TupleHelper<Types...>::NonAbstractType>::BlockType::BitmapT;
 
  public:
-  __DEV__ static uint8_t get_type(void* ptr) {
+  __DEV__ static uint8_t get_type(const void* ptr) {
     auto ptr_base = reinterpret_cast<uintptr_t>(ptr);
     uint8_t type_id = ptr_base >> 56;  // Truncated.
     return type_id;

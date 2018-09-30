@@ -9,9 +9,7 @@ class SoaBase {
   using BaseClass = void;
   static const bool kIsAbstract = false;
 
-  __DEV__ uint8_t get_type() {
-    return AllocatorT::get_type(this);
-  }
+  __DEV__ uint8_t get_type() const { return AllocatorT::get_type(this); }
 };
 
 #endif  // ALLOCATOR_SOA_BASE_H

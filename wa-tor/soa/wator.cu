@@ -111,11 +111,11 @@ __device__ void Cell::enter(Agent* agent) {
 }
 
 __device__ bool Cell::has_fish() const {
-  return agent_ != nullptr && agent_->type_identifier() == Fish::kTypeId;
+  return agent_ != nullptr && get_type() == Fish::kTypeId;
 }
 
 __device__ bool Cell::has_shark() const {
-  return agent_ != nullptr && agent_->type_identifier() == Shark::kTypeId;
+  return agent_ != nullptr && get_type() == Shark::kTypeId;
 }
 
 __device__ bool Cell::is_free() const {
@@ -223,7 +223,6 @@ __device__ Fish::Fish(uint32_t random_state)
 }
 
 __device__ void Fish::prepare() {
-  assert(type_identifier() == kTypeId);
   egg_timer_++;
   // Fallback: Stay on current cell.
   new_position_ = position_;
@@ -233,7 +232,6 @@ __device__ void Fish::prepare() {
 }
 
 __device__ void Fish::update() {
-  assert(type_identifier() == kTypeId);
   Cell* old_position = position_;
 
   if (old_position != new_position_) {
@@ -260,7 +258,6 @@ __device__ Shark::Shark(uint32_t random_state)
 }
 
 __device__ void Shark::prepare() {
-  assert(type_identifier() == kTypeId);
   egg_timer_++;
   energy_--;
 
@@ -275,8 +272,6 @@ __device__ void Shark::prepare() {
 }
 
 __device__ void Shark::update() {
-  assert(type_identifier() == kTypeId);
-
   if (OPTION_SHARK_DIE && energy_ == 0) {
     position_->kill();
   } else {
@@ -307,9 +302,9 @@ __device__ void Shark::update() {
 
 __device__ void Cell::kill() {
   assert(agent_ != nullptr);
-  if (agent_->type_identifier() == 1) {
+  if (get_type() == 1) {
     deallocate_untyped<1>(agent_);
-  } else if (agent_->type_identifier() == 2) {
+  } else if (get_type() == 2) {
     deallocate_untyped<2>(agent_);
   } else {
     // Unknown type.
@@ -548,7 +543,7 @@ __global__ void fill_gui_map() {
 
   if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
     if (cells[tid]->agent() != nullptr) {
-      d_gui_map[tid] = cells[tid]->agent()->type_identifier();
+      d_gui_map[tid] = cells[tid]->agent()->get_type();
     } else {
       d_gui_map[tid] = 0;
     }
