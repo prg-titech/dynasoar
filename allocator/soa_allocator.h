@@ -60,7 +60,7 @@ class SoaAllocator {
     return type_id;
   }
 
-  __DEV__ SoaAllocator() {
+  __DEV__ SoaAllocator(char* data_buffer) : data_(data_buffer) {
     // Check alignment of data storage buffer.
     assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
 
@@ -261,6 +261,7 @@ class SoaAllocator {
            typeid(typename TupleHelper<Types...>::Type64BlockSizeMin).name(),
            TupleHelper<Types...>::kPadded64BlockMinSize);
     printf("Block size bytes: %i\n", kBlockSizeBytes);
+    printf("Data buffer size (MB): %f\n", kDataBufferSize/1024.0/1024.0);
     printf("----------------------------------------------------------\n");
   }
 
@@ -456,15 +457,18 @@ class SoaAllocator {
   static const int kBlockSizeBytes = sizeof(typename BlockHelper<
       typename TupleHelper<Types...>::NonAbstractType>::BlockType);
 
-  char data_[N*kBlockSizeBytes];
-
   Bitmap<uint32_t, N> global_free_;
 
   Bitmap<uint32_t, N> allocated_[kNumTypes];
 
   Bitmap<uint32_t, N> active_[kNumTypes];
 
+  char* data_;
+
   static const uint32_t kN = N;
+
+ public:
+  static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
 };
 
 #endif  // ALLOCATOR_SOA_ALLOCATOR_H

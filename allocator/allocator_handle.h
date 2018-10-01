@@ -2,8 +2,9 @@
 #define ALLOCATOR_ALLOCATOR_HANDLE_H
 
 template<typename AllocatorT>
-__global__ void init_allocator_kernel(AllocatorT* allocator) {
-  new(allocator) AllocatorT();
+__global__ void init_allocator_kernel(AllocatorT* allocator,
+                                      char* data_buffer) {
+  new(allocator) AllocatorT(data_buffer);
 }
 
 template<typename AllocatorT, typename T>
@@ -20,12 +21,16 @@ class AllocatorHandle {
     cudaMalloc(&allocator_, sizeof(AllocatorT));
     assert(allocator_ != nullptr);
 
-    init_allocator_kernel<<<256, 256>>>(allocator_);
+    cudaMalloc(&data_buffer_, AllocatorT::kDataBufferSize);
+    assert(data_buffer_ != nullptr);
+
+    init_allocator_kernel<<<256, 256>>>(allocator_, data_buffer_);
     gpuErrchk(cudaDeviceSynchronize());
   }
 
   ~AllocatorHandle() {
     cudaFree(allocator_);
+    cudaFree(data_buffer_);
   }
 
   AllocatorT* device_pointer() { return allocator_; }
@@ -39,6 +44,7 @@ class AllocatorHandle {
 
  private:
   AllocatorT* allocator_ = nullptr;
+  char* data_buffer_ = nullptr;
 };
 
 #endif  // ALLOCATOR_ALLOCATOR_HANDLE_H

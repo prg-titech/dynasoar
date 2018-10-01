@@ -480,7 +480,7 @@ void print_stats() {
 int main(int argc, char* arvg[]) {
   AllocatorT::DBG_print_stats();
   
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 256*1024*1024);
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 2*1024U*1024*1024);
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
   //printf("CUDA heap size: %lu\n", heap_size);
