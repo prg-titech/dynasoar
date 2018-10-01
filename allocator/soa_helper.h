@@ -3,6 +3,17 @@
 
 #include "allocator/util.h"
 
+// Determine to which byte boundary objects should be aligned.
+template<typename T>
+struct ObjectAlignment {
+  static const int value = sizeof(T)
+};
+
+template<typename T, size_t N>
+struct ObjectAlignment<DeviceArray<T, N>> {
+  static const int value = sizeof(T);
+};
+
 // Helper functions and fields that are used in other classes in this file.
 template<class C>
 struct SoaClassUtil {
@@ -29,6 +40,11 @@ struct SoaFieldHelper {
   static const int kOffset = PrevHelper::kOffsetWithField;
   // End-offset of this field.
   static const int kOffsetWithField = kOffset + sizeof(type);
+  // Required alignment of SOA array.
+  static const int kAlignment = ObjectAlignment<type>::value;
+
+  static_assert(SoaFieldHelper<C, Index - 1>::kAlignment % kAlignment == 0,
+                "Fields in class must be sorted by size.");
 
   static void DBG_print_stats() {
     printf("%s[%i]: type = %s, offset = %i, size = %lu\n",
@@ -48,6 +64,7 @@ struct SoaFieldHelper<C, -1> {
   static const int kOffset =
       ((BaseLastFieldHelper::kOffsetWithField + 8 - 1) / 8) * 8;
   static const int kOffsetWithField = kOffset;
+  static const int kAlignment = SoaFieldHelper<C, 0>::kAlignment;
 
   static void DBG_print_stats() {
     BaseLastFieldHelper::DBG_print_stats();

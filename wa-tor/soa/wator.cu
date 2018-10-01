@@ -4,6 +4,7 @@
 #include <inttypes.h>
 
 #include "wa-tor/soa/wator.h"
+#include "allocator/allocator_handle.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
@@ -21,28 +22,11 @@
 
 namespace wa_tor {
 
-__device__ AllocatorT memory_allocator;
+__device__ AllocatorT* device_allocator;
+
 // Host side pointer.
-AllocatorT* allocator_handle;
+AllocatorHandle<AllocatorT>* allocator_handle;
 
-template<typename T, typename... Args>
-__device__ T* allocate(Args... args) {
-  return memory_allocator.make_new<T>(args...);
-}
-
-template<typename T>
-__device__ void deallocate(T* ptr) {
-  memory_allocator.free<T>(ptr);
-}
-
-  template<int TypeIndex>
-  __device__ void deallocate_untyped(void* ptr) {
-    memory_allocator.free_untyped<TypeIndex>(ptr);
-  }
-
-__device__ void initialize_allocator() {
-  memory_allocator.initialize();
-}
 
 __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
   // Advance and return random state.
@@ -66,9 +50,7 @@ __device__ Cell::Cell(uint32_t random_state) : random_state_(random_state),
   prepare();
 }
 
-__device__ Agent* Cell::agent() const {
-  return agent_;
-}
+__device__ Agent* Cell::agent() const { return agent_; }
 
 __device__ void Cell::decide() {
   if (neighbor_request_[4]) {
@@ -114,9 +96,7 @@ __device__ bool Cell::has_shark() const {
   return agent_ != nullptr && agent_->get_type() == TYPE_ID(AllocatorT, Shark);
 }
 
-__device__ bool Cell::is_free() const {
-  return agent_ == nullptr;
-}
+__device__ bool Cell::is_free() const { return agent_ == nullptr; }
 
 __device__ void Cell::leave() {
   assert(agent_ != nullptr);
@@ -124,14 +104,10 @@ __device__ void Cell::leave() {
 }
 
 __device__ void Cell::prepare() {
-  for (int i = 0; i < 5; ++i) {
-    neighbor_request_[i] = false;
-  }
+  for (int i = 0; i < 5; ++i) { neighbor_request_[i] = false; }
 }
 
-__device__ uint32_t* Cell::random_state() {
-  return &random_state_;
-}
+__device__ uint32_t* Cell::random_state() { return &random_state_; }
 
 __device__ void Cell::request_random_fish_neighbor() {
   agent_->random_state();
@@ -187,9 +163,7 @@ __device__ Agent::Agent(uint32_t random_state) : random_state_(random_state) {
   assert(random_state != 0);
 }
 
-__device__ uint32_t* Agent::random_state() {
-  return &random_state_;
-}
+__device__ uint32_t* Agent::random_state() { return &random_state_; }
 
 __device__ void Agent::set_new_position(Cell* new_pos) {
   // Check for race condition. (This is not bullet proof.)
@@ -231,7 +205,7 @@ __device__ void Fish::update() {
       uint32_t new_random_state = random_number(&random_state_) + 401;
       new_random_state = new_random_state != 0 ? new_random_state
                                                : random_state_;
-      auto* new_fish = allocate<Fish>(new_random_state);
+      auto* new_fish = device_allocator->make_new<Fish>(new_random_state);
       assert(new_fish != nullptr);
       old_position->enter(new_fish);
       egg_timer_ = (uint32_t) 0;
@@ -280,7 +254,7 @@ __device__ void Shark::update() {
         uint32_t new_random_state = random_number(&random_state_) + 601;
         new_random_state = new_random_state != 0 ? new_random_state
                                                  : random_state_;
-        auto* new_shark = allocate<Shark>(new_random_state);
+        auto* new_shark = device_allocator->make_new<Shark>(new_random_state);
         assert(new_shark != nullptr);
         old_position->enter(new_shark);
         egg_timer_ = 0;
@@ -291,7 +265,7 @@ __device__ void Shark::update() {
 
 __device__ void Cell::kill() {
   assert(agent_ != nullptr);
-  deallocate<Agent>(agent_);
+  device_allocator->free<Agent>(agent_);
   agent_ = nullptr;
 }
 
@@ -311,7 +285,8 @@ __global__ void create_cells() {
     uint32_t init_state_int = *reinterpret_cast<uint32_t*>(&init_state);
 
     // Cell* new_cell = new Cell(init_state_int);
-    Cell* new_cell = allocate<Cell>(601*x*x*y + init_state_int);
+    Cell* new_cell = device_allocator->make_new<Cell>(
+        601*x*x*y + init_state_int);
     assert(new_cell != nullptr);
     cells[tid] = new_cell;
   }
@@ -339,11 +314,13 @@ __global__ void setup_cells() {
     // Initialize with random agent.
     uint32_t agent_type = random_number(cells[tid]->random_state(), 4);
     if (agent_type == 0) {
-      auto* agent = allocate<Fish>(*(cells[tid]->random_state()));
+      auto* agent = device_allocator->make_new<Fish>(
+          *(cells[tid]->random_state()));
       assert(agent != nullptr);
       cells[tid]->enter(agent);
     } else if (agent_type == 1) {
-      auto* agent = allocate<Shark>(*(cells[tid]->random_state()));
+      auto* agent = device_allocator->make_new<Shark>(
+          *(cells[tid]->random_state()));
       assert(agent != nullptr);
       cells[tid]->enter(agent);
     } else {
@@ -375,10 +352,10 @@ __global__ void print_checksum() {
     chksum += *(fish[i]->position()->random_state()) % 601;
   }
 
-  uint32_t fish_use = memory_allocator.DBG_used_slots<Fish>();
-  uint32_t fish_num = memory_allocator.DBG_allocated_slots<Fish>();
-  uint32_t shark_use = memory_allocator.DBG_used_slots<Shark>();
-  uint32_t shark_num = memory_allocator.DBG_allocated_slots<Shark>();
+  uint32_t fish_use = device_allocator->DBG_used_slots<Fish>();
+  uint32_t fish_num = device_allocator->DBG_allocated_slots<Fish>();
+  uint32_t shark_use = device_allocator->DBG_used_slots<Shark>();
+  uint32_t shark_num = device_allocator->DBG_allocated_slots<Shark>();
 
   printf("%" PRIu64, chksum);
   printf(",%u,%u,%u,%u\n",
@@ -426,24 +403,6 @@ void generate_shark_array() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-
-template<typename T>
-__global__ void initialize_iteration() {
-  memory_allocator.initialize_iteration<T>();
-}
-
-void generate_shark_fish_arrays() {
-  initialize_iteration<Fish><<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  initialize_iteration<Shark><<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  // TODO: only do this once.
-  initialize_iteration<Cell><<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
-
 void step() {
   // --- FISH ---
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
@@ -457,7 +416,6 @@ void step() {
 
   allocator_handle->parallel_do<16, Fish, &Fish::update>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
-
 
   // --- SHARKS ---
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
@@ -473,17 +431,12 @@ void step() {
       NUM_BLOCKS, THREADS_PER_BLOCK);
 }
 
-__global__ void init_memory_system() {
-  initialize_allocator();
-}
-
 void initialize() {
-  allocator_handle = nullptr;
-  cudaGetSymbolAddress((void**) &allocator_handle, memory_allocator);
-  assert(allocator_handle != nullptr);
-
-  init_memory_system<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  // Create new allocator.
+  allocator_handle = new AllocatorHandle<AllocatorT>();
+  AllocatorT* dev_ptr = allocator_handle->device_pointer();
+  cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
+                     cudaMemcpyHostToDevice);
 
   create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -516,10 +469,6 @@ void update_gui_map() {
 }
 
 
-int h_num_fish = 0;
-int h_num_sharks = 0;
-
-
 void print_stats() {
   generate_fish_array();
   generate_shark_array();
@@ -541,7 +490,6 @@ int main(int argc, char* arvg[]) {
   int total_time = 0;
   for (int i = 0; i < 500; ++i) {
     auto time_before = std::chrono::system_clock::now();
-    generate_shark_fish_arrays();
     step();
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
