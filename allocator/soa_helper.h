@@ -6,7 +6,7 @@
 // Determine to which byte boundary objects should be aligned.
 template<typename T>
 struct ObjectAlignment {
-  static const int value = sizeof(T)
+  static const int value = sizeof(T);
 };
 
 template<typename T, size_t N>

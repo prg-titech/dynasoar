@@ -3,7 +3,7 @@
 
 template<typename AllocatorT>
 __global__ void init_allocator_kernel(AllocatorT* allocator) {
-  allocator->initialize();
+  new(allocator) AllocatorT();
 }
 
 template<typename AllocatorT, typename T>

@@ -30,8 +30,6 @@ class SoaAllocator {
   static_assert(N_Objects % kNumBlockElements == 0,
                 "N_Objects Must be divisible by BlockSize.");
 
-  // TODO: Should be private.
- public:
   template<typename T>
   struct BlockHelper {
     static const int kSize =
@@ -62,7 +60,7 @@ class SoaAllocator {
     return type_id;
   }
 
-  __DEV__ void initialize() {
+  __DEV__ SoaAllocator() {
     // Check alignment of data storage buffer.
     assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
 
@@ -72,6 +70,8 @@ class SoaAllocator {
       active_[i].initialize(false);
     }
   }
+
+  __DEV__ SoaAllocator(const SoaAllocator<N_Objects, Types...>&) = delete;
 
   // Try to allocate everything in the same block.
   template<class T, typename... Args>
@@ -144,64 +144,6 @@ class SoaAllocator {
 
     return new(result) T(args...);
   }
-
-  template<class T>
-  __DEV__ void free_typed(T* obj) {
-    obj->~T();
-    const uint32_t block_idx = get_block_idx<T>(obj);
-    const uint32_t obj_id = get_object_id<T>(obj);
-    const auto dealloc_state = get_block<T>(block_idx)->deallocate(obj_id);
-
-    if (dealloc_state == kBlockNowActive) {
-      ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
-    } else if (dealloc_state == kBlockNowEmpty) {
-      // Assume that block is empty.
-      if (invalidate_block<T>(block_idx)) {
-        // Block is invalidated and no new allocations can be performed.
-        ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
-      }
-    }
-  }
-
-  // Helper data structure for freeing objects whose types are subtypes of the
-  // declared type. BaseClass is the declared type.
-  template<typename BaseClass>
-  struct FreeHelper {
-    // Iterating over all types T in the allocator.
-    template<typename T>
-    struct InnerHelper {
-      // T is a subclass of BaseClass. Check if same type.
-      template<bool Check, int Dummy>
-      struct ClassSelector {
-        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
-                                 BaseClass* obj) {
-          if (obj->get_type() == TYPE_INDEX(Types..., T)) {
-            allocator->free_typed(static_cast<T*>(obj));
-            return false;  // No need to check other types.
-          } else {
-            return true;   // true means "continue processing".
-          }
-        }
-      };
-
-      // T is not a subclass of BaseClass. Skip.
-      template<int Dummy>
-      struct ClassSelector<false, Dummy> {
-        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
-                                 BaseClass* obj) {
-          return true;
-        }
-      };
-
-      __DEV__ bool operator()(SoaAllocator<N_Objects, Types...>* allocator,
-                              BaseClass* obj) {
-        return ClassSelector<std::is_base_of<BaseClass, T>::value, 0>::call(
-            allocator, obj);
-      }
-    };
-  };
 
   template<class T>
   __DEV__ void free(T* obj) {
@@ -322,6 +264,65 @@ class SoaAllocator {
     printf("----------------------------------------------------------\n");
   }
 
+ private:
+  template<class T>
+  __DEV__ void free_typed(T* obj) {
+    obj->~T();
+    const uint32_t block_idx = get_block_idx<T>(obj);
+    const uint32_t obj_id = get_object_id<T>(obj);
+    const auto dealloc_state = get_block<T>(block_idx)->deallocate(obj_id);
+
+    if (dealloc_state == kBlockNowActive) {
+      ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+    } else if (dealloc_state == kBlockNowEmpty) {
+      // Assume that block is empty.
+      if (invalidate_block<T>(block_idx)) {
+        // Block is invalidated and no new allocations can be performed.
+        ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
+      }
+    }
+  }
+
+  // Helper data structure for freeing objects whose types are subtypes of the
+  // declared type. BaseClass is the declared type.
+  template<typename BaseClass>
+  struct FreeHelper {
+    // Iterating over all types T in the allocator.
+    template<typename T>
+    struct InnerHelper {
+      // T is a subclass of BaseClass. Check if same type.
+      template<bool Check, int Dummy>
+      struct ClassSelector {
+        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
+                                 BaseClass* obj) {
+          if (obj->get_type() == TYPE_INDEX(Types..., T)) {
+            allocator->free_typed(static_cast<T*>(obj));
+            return false;  // No need to check other types.
+          } else {
+            return true;   // true means "continue processing".
+          }
+        }
+      };
+
+      // T is not a subclass of BaseClass. Skip.
+      template<int Dummy>
+      struct ClassSelector<false, Dummy> {
+        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
+                                 BaseClass* obj) {
+          return true;
+        }
+      };
+
+      __DEV__ bool operator()(SoaAllocator<N_Objects, Types...>* allocator,
+                              BaseClass* obj) {
+        return ClassSelector<std::is_base_of<BaseClass, T>::value, 0>::call(
+            allocator, obj);
+      }
+    };
+  };
+
   template<typename T>
   __DEV__ bool is_block_allocated(uint32_t index) {
     return allocated_[TYPE_INDEX(Types..., T)][index];
@@ -355,7 +356,6 @@ class SoaAllocator {
         data_ + block_idx*kBlockSizeBytes);
   }
 
- private:
   template<class T>
   __DEV__ uint32_t find_active_block() {
     uint32_t block_idx;
@@ -464,7 +464,6 @@ class SoaAllocator {
 
   Bitmap<uint32_t, N> active_[kNumTypes];
 
- public:
   static const uint32_t kN = N;
 };
 
