@@ -41,6 +41,8 @@ class SoaAllocator {
             ::kPadded64BlockMinSize>::kBytes;
 
     using BlockType = SoaBlock<T, TYPE_INDEX(Types..., T), kSize, 64>;
+
+    static const int kLeq50Threshold = BlockType::kLeq50Threshold;
   };
 
   using BlockBitmapT = typename BlockHelper<
@@ -68,6 +70,7 @@ class SoaAllocator {
     for (int i = 0; i < kNumTypes; ++i) {
       allocated_[i].initialize(false);
       active_[i].initialize(false);
+      leq_50_[i].initialize(false);
     }
   }
 
@@ -98,14 +101,22 @@ class SoaAllocator {
         auto* block = get_block<T>(block_idx);
         const auto allocation = block->allocate(__popc(active));
         allocation_bitmap = allocation.allocation_mask;
+        int num_allocated = __popcll(allocation_bitmap);
 
-        if (allocation.block_full) {
+        if (allocation.state == kBlockNowFull || allocation.state == kBlockNowFullAndGt50) {
           // This request filled up the block entirely.
           ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
 
+        if (allocation.state == kBlockNowGt50 || allocation.state == kBlockNowFullAndGt50) {
+          // Block now more than 50% full.
+          printf("make_new: DEALLOC: %i\n", (int) block_idx);
+          ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        }
+
         uint8_t actual_type_id = block->type_id;
         if (actual_type_id != TYPE_INDEX(Types..., T)) {
+          assert(false);
           // Block deallocated and initialized for a new type between lookup
           // from active bitmap and here. This is extremely unlikely!
           // But possible.
@@ -117,6 +128,11 @@ class SoaAllocator {
           auto before_undo = atomicOr(free_bitmap, allocation_bitmap);
           int slots_before_undo = __popcll(before_undo);
 
+          if (N - slots_before_undo > BlockHelper<T>::kLeq50Threshold
+              && N - slots_before_undo - num_allocated <= BlockHelper<T>::kLeq50Threshold) {
+            ASSERT_SUCCESS(leq_50_[actual_type_id].allocate<true>(block_idx));
+          }
+
           // Cases to handle: block now active again or block empty now.
           if (slots_before_undo == 0) {
             // Block became active. (Was full.)
@@ -126,6 +142,7 @@ class SoaAllocator {
             if (invalidate_block<T>(block_idx)) {
               // Block is invalidated and no new allocations can be performed.
               ASSERT_SUCCESS(active_[actual_type_id].deallocate<true>(block_idx));
+              ASSERT_SUCCESS(leq_50_[actual_type_id].deallocate<true>(block_idx));
               ASSERT_SUCCESS(allocated_[actual_type_id].deallocate<true>(block_idx));
               ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
             }
@@ -277,11 +294,20 @@ class SoaAllocator {
       ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
     } else if (dealloc_state == kBlockNowEmpty) {
       // Assume that block is empty.
+      // TODO: Special case if N == 2 or N == 1 for leq_50_.
       if (invalidate_block<T>(block_idx)) {
         // Block is invalidated and no new allocations can be performed.
+        printf("free_typed: DEALLOC: %i\n", (int) block_idx);
         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
+      }
+    } else if (dealloc_state == kBlockNowLeq50Full) {
+      printf("free_typed: ALLOC: %i\n", (int) block_idx);
+      bool res = (leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+      if(!res) {
+        printf("alloc FAILED %i: %i\n", (int) (TYPE_INDEX(Types..., T)), (int) block_idx);
       }
     }
   }
@@ -374,9 +400,12 @@ class SoaAllocator {
       if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
         // TODO: May be out of memory here.
         block_idx = global_free_.deallocate();
+        printf("INIT: %i\n", (int) block_idx);
         assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
         ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+        printf("find_active_block: ALLOC: %i\n", (int) block_idx);
+        ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
       }
     } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
@@ -426,19 +455,26 @@ class SoaAllocator {
       if (old_free_bitmap == BlockHelper<T>::BlockType::kBitmapInitState) {
         return true;
       } else if (old_free_bitmap != 0ULL) {
+        assert(false);
         // block->free_bitmap = old_free_bitmap;
 
         // free_bitmap now 0. We should deactivate the block here, but since
         // the block deallocation procedure expects the invalid block to be
         // active, we omit this and only deactivate it in the specical case
-        // descrived below.
+        // described below.
 
         // At least one bit was modified. Rollback invalidation.
         auto before_rollback = atomicOr(&block->free_bitmap, old_free_bitmap);
         if (before_rollback > 0ULL) {
-          // Another thread deallocated an object (set a bit). That thread is
-          // attempting to make the block active. For this to succeed, we have
-          // to deactivate the block here.
+          if (N - __popcll(old_free_bitmap) > BlockHelper<T>::kLeq50Threshold
+              && N - __popcll(before_rollback) <= BlockHelper<T>::kLeq50Threshold) {
+            // Some thread is trying to set the bit in the leq_50 bitmap.
+            ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+          }
+
+          // At least 1 other thread deallocated an object (set a bit). That
+          // thread is attempting to make the block active. For this to
+          // succeed, we have to deactivate the block here.
           ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
 
@@ -462,6 +498,9 @@ class SoaAllocator {
   Bitmap<uint32_t, N> allocated_[kNumTypes];
 
   Bitmap<uint32_t, N> active_[kNumTypes];
+
+  // Bit set if block is <= 50% full and active.
+  Bitmap<uint32_t, N> leq_50_[kNumTypes];
 
   char* data_;
 

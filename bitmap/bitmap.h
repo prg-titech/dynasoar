@@ -87,6 +87,7 @@ class Bitmap {
 
     assert(!Retry || index != kIndexError);
     assert(index == kIndexError || index < N);
+
     return index;
   }
 
@@ -173,7 +174,7 @@ class Bitmap {
           data_.containers[i] = ~kZero;
         }
       } else {
-        data_.containers[i] = 0;
+        data_.containers[i] = static_cast<ContainerT>(0);
       }
     }
 
@@ -316,9 +317,9 @@ class Bitmap {
     }
   }
 
-  __DEV__ int find_first_bit(ContainerT val) const {
+  __DEV__ int find_first_bit(ContainerT val, int seed) const {
     // TODO: Adapt for other data types.
-    return __ffsll(val);
+    return __ffsll(val) - 1;
   }
 
   __DEV__ int find_allocated_bit(ContainerT val, int seed) const {
