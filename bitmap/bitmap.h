@@ -161,6 +161,18 @@ class Bitmap {
     return find_allocated_in_container(container, seed);
   }
 
+  // Copy other bitmap.
+  __DEV__ void initialize(const Bitmap<SizeT, N, ContainerT>& other) {
+    for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
+         i < kNumContainers;
+         i += blockDim.x*gridDim.x) {
+      data_.containers[i] = other.data_.containers[i];
+    }
+
+    if (kHasNested) {
+      data_.nested_initialize(other);
+    }
+  }
   // Initialize bitmap to all 0 or all 1.
   __DEV__ void initialize(bool allocated = false) {
     for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -239,6 +251,10 @@ class Bitmap {
       return nested.find_allocated_private(seed);
     }
 
+    __DEV__ void nested_initialize(Bitmap<SizeT, N, ContainerT>& other) {
+      nested.initialize(other.data_.nested);
+    }
+
     // Initialize the nested bitmap.
     __DEV__ void nested_initialize(bool allocated) {
       nested.initialize(allocated);
@@ -281,6 +297,10 @@ class Bitmap {
     __DEV__ SizeT nested_find_allocated_private(int seed) const {
       assert(false);
       return kIndexError;
+    }
+
+    __DEV__ void nested_initialize(Bitmap<SizeT, N, ContainerT>& other) {
+      assert(false);
     }
 
     __DEV__ void nested_initialize(bool allocated) { assert(false); }

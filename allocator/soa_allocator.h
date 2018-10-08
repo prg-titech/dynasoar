@@ -71,6 +71,7 @@ class SoaAllocator {
       allocated_[i].initialize(false);
       active_[i].initialize(false);
       leq_50_[i].initialize(false);
+      num_leq_50_[i] = 0;
     }
   }
 
@@ -119,6 +120,7 @@ class SoaAllocator {
           if (N - slots_before_undo > BlockHelper<T>::kLeq50Threshold
               && N - slots_before_undo - num_allocated <= BlockHelper<T>::kLeq50Threshold) {
             ASSERT_SUCCESS(leq_50_[actual_type_id].allocate<true>(block_idx));
+            atomicAdd(&num_leq_50_[actual_type_id], 1);
           }
 
           // Cases to handle: block now active again or block empty now.
@@ -131,6 +133,7 @@ class SoaAllocator {
               // Block is invalidated and no new allocations can be performed.
               ASSERT_SUCCESS(active_[actual_type_id].deallocate<true>(block_idx));
               ASSERT_SUCCESS(leq_50_[actual_type_id].deallocate<true>(block_idx));
+              atomicSub(&num_leq_50_[actual_type_id], 1);
               ASSERT_SUCCESS(allocated_[actual_type_id].deallocate<true>(block_idx));
               ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
             }
@@ -329,6 +332,7 @@ class SoaAllocator {
         if (prev_full <= BlockHelper<T>::kLeq50Threshold
             && prev_full + num_successful_alloc > BlockHelper<T>::kLeq50Threshold) {
           ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+          atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
         }
       }
 
@@ -356,11 +360,13 @@ class SoaAllocator {
         // Block is invalidated and no new allocations can be performed.
         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
         ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
       }
     } else if (dealloc_state == kBlockNowLeq50Full) {
       ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+      atomicAdd(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
     }
   }
 
@@ -456,6 +462,7 @@ class SoaAllocator {
         initialize_block<T>(block_idx);
         ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
         ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+        atomicAdd(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
       }
     } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
@@ -519,6 +526,7 @@ class SoaAllocator {
               && N - __popcll(before_rollback) <= BlockHelper<T>::kLeq50Threshold) {
             // Some thread is trying to set the bit in the leq_50 bitmap.
             ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+            atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
           }
 
           // At least 1 other thread deallocated an object (set a bit). That
@@ -550,6 +558,7 @@ class SoaAllocator {
 
   // Bit set if block is <= 50% full and active.
   Bitmap<uint32_t, N> leq_50_[kNumTypes];
+  unsigned int num_leq_50_[kNumTypes];
 
   char* data_;
 
