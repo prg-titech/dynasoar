@@ -323,15 +323,15 @@ class SoaAllocator {
             && prev_full + num_successful_alloc > BlockHelper<T>::kLeq50Threshold) {
           ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
-
-        if (block_full) {
-          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        }
       }
 
       // Stop loop if no more free bits available in this block or all
       // requested allocations completed successfully.
     } while (alloc_size > 0 && !block_full);
+
+    if (block_full && __popcll(selected_bits) > 0) {
+      ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+    }
 
     // At most one thread should indicate that the block filled up.
     return selected_bits;
