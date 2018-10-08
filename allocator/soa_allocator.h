@@ -280,6 +280,7 @@ class SoaAllocator {
     BlockBitmapT selected_bits = 0;
     // Set to true if block is full.
     bool block_full;
+    bool filled_block = false;
 
     do {
       // Bit set to 1 if slot is free.
@@ -323,13 +324,15 @@ class SoaAllocator {
             && prev_full + num_successful_alloc > BlockHelper<T>::kLeq50Threshold) {
           ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
+
+        if (block_full) { filled_block = true; }
       }
 
       // Stop loop if no more free bits available in this block or all
       // requested allocations completed successfully.
     } while (alloc_size > 0 && !block_full);
 
-    if (block_full && __popcll(selected_bits) > 0) {
+    if (filled_block) {
       ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
     }
 
