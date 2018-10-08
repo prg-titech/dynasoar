@@ -99,14 +99,8 @@ class SoaAllocator {
 
         block_idx = find_active_block<T>();
         auto* block = get_block<T>(block_idx);
-        const auto allocation = block->template allocate(this, __popc(active), block_idx);
-        allocation_bitmap = allocation.allocation_mask;
+        auto allocation_bitmap = allocate_in_block<T>(__popc(active), block_idx);
         int num_allocated = __popcll(allocation_bitmap);
-
-        if (allocation.state == kBlockNowFull) {
-          // This request filled up the block entirely.
-          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        }
 
         uint8_t actual_type_id = block->type_id;
         if (actual_type_id != TYPE_INDEX(Types..., T)) {
@@ -275,8 +269,74 @@ class SoaAllocator {
     printf("----------------------------------------------------------\n");
   }
 
-  // TODO: Should be private.
- public:
+ private:
+  // Only executed by one thread per warp. Request are already aggregated when
+  // reaching this function.
+  template<typename T>
+  __DEV__ BlockBitmapT allocate_in_block(int bits_to_allocate, uint32_t block_idx) {
+    // Allocation bits.
+    BlockBitmapT selected_bits = 0;
+    // Set to true if block is full.
+    bool block_full;
+    // Pointer to block.
+    auto* block = get_block<T>(block_idx);
+
+    do {
+      // Bit set to 1 if slot is free.
+      unsigned int rotation_len = warp_id() % 64;
+      // TODO: Can we use return value from atomic update in second iteration?
+      BlockBitmapT updated_mask = rotl(block->free_bitmap, rotation_len);
+
+      // If there are not enough free slots, allocate as many as possible.
+      int free_slots = __popcll(updated_mask);
+      int allocation_size = min(free_slots, bits_to_allocate);
+      BlockBitmapT newly_selected_bits = 0;
+
+      // Generate bitmask for allocation
+      for (int i = 0; i < allocation_size; ++i) {
+        int next_bit_pos = __ffsll(updated_mask) - 1;
+        assert(next_bit_pos >= 0);
+        assert(((1ULL << next_bit_pos) & updated_mask) > 0);
+        // Clear bit at position `next_bit_pos` in updated mask.
+        updated_mask &= updated_mask - 1;
+        // Save location of selected bit.
+        int next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
+        newly_selected_bits |= 1ULL << next_bit_pos_unrot;
+      }
+
+      assert(__popcll(newly_selected_bits) == allocation_size);
+      // Count the number of bits that were selected but already set to false
+      // by another thread.
+      BlockBitmapT before_update = atomicAnd(&block->free_bitmap, ~newly_selected_bits);
+      BlockBitmapT successful_alloc = newly_selected_bits & before_update;
+      block_full = (before_update & ~successful_alloc) == 0;
+
+      if (successful_alloc > 0ULL) {
+        // At least one slot allocated.
+        int num_successful_alloc = __popcll(successful_alloc);
+        bits_to_allocate -= num_successful_alloc;
+        selected_bits |= successful_alloc;
+
+        // Check if more than 50% full now.
+        int prev_full = N - __popcll(before_update);
+        if (prev_full <= kLeq50Threshold
+            && prev_full + num_successful_alloc > kLeq50Threshold) {
+          ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        }
+
+        if (block_full) {
+          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        }
+      }
+
+      // Stop loop if no more free bits available in this block or all
+      // requested allocations completed successfully.
+    } while (bits_to_allocate > 0 && !block_full);
+
+    // At most one thread should indicate that the block filled up.
+    return selected_bits;
+  }
+
   template<class T>
   __DEV__ void free_typed(T* obj) {
     obj->~T();

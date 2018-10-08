@@ -13,13 +13,6 @@ enum DeallocationState : int8_t {
   kRegularDealloc      // Nothing to do.
 };
 
-enum AllocationState : int8_t {
-  kNoOp,                 // Nothing changed.
-  kRegularAlloc,
-//  kBlockNowGt50,         // More than 50% full.
-  kBlockNowFull         // Deactivate block.
-//  kBlockNowFullAndGt50   // Full annd more than 50%.
-};
 
 // A SOA block containing objects.
 // T: Base type of the block.
@@ -99,73 +92,6 @@ class SoaBlock {
     } else {
       return kRegularDealloc;
     }
-  }
-
-  // Only executed by one thread per warp. Request are already aggregated when
-  // reaching this function.
-  template<typename AllocatorT>
-  __DEV__ BlockAllocationResult allocate(AllocatorT* allocator, int bits_to_allocate, uint32_t block_idx) {
-    // Allocation bits.
-    BitmapT selected_bits = 0;
-    // Set to true if block is full.
-    bool block_full;
-    // State of allocation result.
-    AllocationState state = kNoOp;
-
-    do {
-      // Bit set to 1 if slot is free.
-      unsigned int rotation_len = warp_id() % 64;
-      BitmapT updated_mask = rotl(free_bitmap, rotation_len);
-
-      // If there are not enough free slots, allocate as many as possible.
-      int free_slots = __popcll(updated_mask);
-      int allocation_size = min(free_slots, bits_to_allocate);
-      BitmapT newly_selected_bits = 0;
-
-      // Generate bitmask for allocation
-      for (int i = 0; i < allocation_size; ++i) {
-        int next_bit_pos = __ffsll(updated_mask) - 1;
-        assert(next_bit_pos >= 0);
-        assert(((1ULL << next_bit_pos) & updated_mask) > 0);
-        // Clear bit at position `next_bit_pos` in updated mask.
-        updated_mask &= updated_mask - 1;
-        // Save location of selected bit.
-        int next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
-        newly_selected_bits |= 1ULL << next_bit_pos_unrot;
-      }
-
-      assert(__popcll(newly_selected_bits) == allocation_size);
-      // Count the number of bits that were selected but already set to false
-      // by another thread.
-      BitmapT before_update = atomicAnd(&free_bitmap, ~newly_selected_bits);
-      BitmapT successful_alloc = newly_selected_bits & before_update;
-      block_full = (before_update & ~successful_alloc) == 0;
-
-      if (successful_alloc > 0ULL) {
-        // At least one slot allocated.
-        int num_successful_alloc = __popcll(successful_alloc);
-        bits_to_allocate -= num_successful_alloc;
-        selected_bits |= successful_alloc;
-
-        // First allocation.
-        if (state == kNoOp) state = kRegularAlloc;
-
-        // Check if more than 50% full now.
-        int prev_full = N - __popcll(before_update);
-        if (prev_full <= kLeq50Threshold
-            && prev_full + num_successful_alloc > kLeq50Threshold) {
-          ASSERT_SUCCESS(allocator->leq_50_[TypeId].deallocate<true>(block_idx));
-        }
-
-        if (block_full && state == kRegularAlloc) state = kBlockNowFull;
-      }
-
-      // Stop loop if no more free bits available in this block or all
-      // requested allocations completed successfully.
-    } while (bits_to_allocate > 0 && !block_full);
-
-    // At most one thread should indicate that the block filled up.
-    return BlockAllocationResult(selected_bits, state);
   }
 
   __DEV__ int DBG_num_bits() {
