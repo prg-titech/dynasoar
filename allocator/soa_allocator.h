@@ -100,7 +100,7 @@ class SoaAllocator {
         block_idx = find_active_block<T>();
         auto* block = get_block<T>(block_idx);
         BlockBitmapT* free_bitmap = &block->free_bitmap;
-        auto allocation_bitmap = allocate_in_block<T>(
+        allocation_bitmap = allocate_in_block<T>(
             free_bitmap, __popc(active), block_idx);
         int num_allocated = __popcll(allocation_bitmap);
 
@@ -323,15 +323,15 @@ class SoaAllocator {
             && prev_full + num_successful_alloc > BlockHelper<T>::kLeq50Threshold) {
           ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
+
+        if (block_full) {
+          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+        }
       }
 
       // Stop loop if no more free bits available in this block or all
       // requested allocations completed successfully.
     } while (alloc_size > 0 && !block_full);
-
-    if (block_full && __popcll(selected_bits) > 0) {
-      ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-    }
 
     // At most one thread should indicate that the block filled up.
     return selected_bits;
