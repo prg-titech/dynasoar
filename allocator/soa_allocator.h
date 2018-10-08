@@ -99,24 +99,17 @@ class SoaAllocator {
 
         block_idx = find_active_block<T>();
         auto* block = get_block<T>(block_idx);
-        const auto allocation = block->allocate(__popc(active));
+        const auto allocation = block->template allocate(this, __popc(active), block_idx);
         allocation_bitmap = allocation.allocation_mask;
         int num_allocated = __popcll(allocation_bitmap);
 
-        if (allocation.state == kBlockNowFull || allocation.state == kBlockNowFullAndGt50) {
+        if (allocation.state == kBlockNowFull) {
           // This request filled up the block entirely.
           ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         }
 
-        if (allocation.state == kBlockNowGt50 || allocation.state == kBlockNowFullAndGt50) {
-          // Block now more than 50% full.
-          printf("make_new: DEALLOC: %i\n", (int) block_idx);
-          ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        }
-
         uint8_t actual_type_id = block->type_id;
         if (actual_type_id != TYPE_INDEX(Types..., T)) {
-          assert(false);
           // Block deallocated and initialized for a new type between lookup
           // from active bitmap and here. This is extremely unlikely!
           // But possible.
@@ -282,7 +275,8 @@ class SoaAllocator {
     printf("----------------------------------------------------------\n");
   }
 
- private:
+  // TODO: Should be private.
+ public:
   template<class T>
   __DEV__ void free_typed(T* obj) {
     obj->~T();
@@ -297,18 +291,13 @@ class SoaAllocator {
       // TODO: Special case if N == 2 or N == 1 for leq_50_.
       if (invalidate_block<T>(block_idx)) {
         // Block is invalidated and no new allocations can be performed.
-        printf("free_typed: DEALLOC: %i\n", (int) block_idx);
         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
         ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
       }
     } else if (dealloc_state == kBlockNowLeq50Full) {
-      printf("free_typed: ALLOC: %i\n", (int) block_idx);
-      bool res = (leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
-      if(!res) {
-        printf("alloc FAILED %i: %i\n", (int) (TYPE_INDEX(Types..., T)), (int) block_idx);
-      }
+      ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
     }
   }
 
@@ -400,11 +389,9 @@ class SoaAllocator {
       if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
         // TODO: May be out of memory here.
         block_idx = global_free_.deallocate();
-        printf("INIT: %i\n", (int) block_idx);
         assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
         ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
-        printf("find_active_block: ALLOC: %i\n", (int) block_idx);
         ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
       }
@@ -455,7 +442,6 @@ class SoaAllocator {
       if (old_free_bitmap == BlockHelper<T>::BlockType::kBitmapInitState) {
         return true;
       } else if (old_free_bitmap != 0ULL) {
-        assert(false);
         // block->free_bitmap = old_free_bitmap;
 
         // free_bitmap now 0. We should deactivate the block here, but since

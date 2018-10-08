@@ -16,9 +16,9 @@ enum DeallocationState : int8_t {
 enum AllocationState : int8_t {
   kNoOp,                 // Nothing changed.
   kRegularAlloc,
-  kBlockNowGt50,         // More than 50% full.
-  kBlockNowFull,         // Deactivate block.
-  kBlockNowFullAndGt50   // Full annd more than 50%.
+//  kBlockNowGt50,         // More than 50% full.
+  kBlockNowFull         // Deactivate block.
+//  kBlockNowFullAndGt50   // Full annd more than 50%.
 };
 
 // A SOA block containing objects.
@@ -103,7 +103,8 @@ class SoaBlock {
 
   // Only executed by one thread per warp. Request are already aggregated when
   // reaching this function.
-  __DEV__ BlockAllocationResult allocate(int bits_to_allocate) {
+  template<typename AllocatorT>
+  __DEV__ BlockAllocationResult allocate(AllocatorT* allocator, int bits_to_allocate, uint32_t block_idx) {
     // Allocation bits.
     BitmapT selected_bits = 0;
     // Set to true if block is full.
@@ -149,29 +150,14 @@ class SoaBlock {
         // First allocation.
         if (state == kNoOp) state = kRegularAlloc;
 
-        if (state != kBlockNowGt50) {
-          assert(state != kBlockNowFull);
-          assert(state != kBlockNowFullAndGt50);
-
-          // Check if more than 50% full now.
-          int prev_full = N - __popcll(before_update);
-          if (prev_full <= kLeq50Threshold
-              && prev_full + num_successful_alloc > kLeq50Threshold) {
-            state = kBlockNowGt50;
-          }
+        // Check if more than 50% full now.
+        int prev_full = N - __popcll(before_update);
+        if (prev_full <= kLeq50Threshold
+            && prev_full + num_successful_alloc > kLeq50Threshold) {
+          ASSERT_SUCCESS(allocator->leq_50_[TypeId].deallocate<true>(block_idx));
         }
 
-        if (block_full) {
-          if (state == kRegularAlloc) state = kBlockNowFull;
-#ifdef NDEBUG
-          else /*if (state == kBlockNowGt50)*/ state = kBlockNowFullAndGt50;
-#else
-          else if (state == kBlockNowGt50) {
-            state = kBlockNowFullAndGt50;
-          }
-          else assert(false);
-#endif  // NDEBUG
-        }
+        if (block_full && state == kRegularAlloc) state = kBlockNowFull;
       }
 
       // Stop loop if no more free bits available in this block or all
