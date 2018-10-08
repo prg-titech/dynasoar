@@ -274,18 +274,20 @@ class SoaAllocator {
   // Only executed by one thread per warp. Request are already aggregated when
   // reaching this function.
   template<typename T>
-  __DEV__ BlockBitmapT allocate_in_block(BlockBitmapT* free_bitmap,
+  __DEV__ BlockBitmapT allocate_in_block(BlockBitmapT* free_bitmap_ptr,
                                          int alloc_size, uint32_t block_idx) {
     // Allocation bits.
     BlockBitmapT selected_bits = 0;
     // Set to true if block is full.
     bool block_full;
 
+    BlockBitmapT free_bitmap = *free_bitmap_ptr;
+
     do {
       // Bit set to 1 if slot is free.
       unsigned int rotation_len = warp_id() % 64;
       // TODO: Can we use return value from atomic update in second iteration?
-      BlockBitmapT updated_mask = rotl(*free_bitmap, rotation_len);
+      BlockBitmapT updated_mask = rotl(free_bitmap, rotation_len);
 
       // If there are not enough free slots, allocate as many as possible.
       int free_slots = __popcll(updated_mask);
@@ -307,7 +309,8 @@ class SoaAllocator {
       assert(__popcll(newly_selected_bits) == allocation_size);
       // Count the number of bits that were selected but already set to false
       // by another thread.
-      BlockBitmapT before_update = atomicAnd(free_bitmap, ~newly_selected_bits);
+      BlockBitmapT before_update = atomicAnd(free_bitmap_ptr, ~newly_selected_bits);
+      free_bitmap = before_update & ~newly_selected_bits;
       BlockBitmapT successful_alloc = newly_selected_bits & before_update;
       block_full = (before_update & ~successful_alloc) == 0;
 
