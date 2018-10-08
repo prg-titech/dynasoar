@@ -273,6 +273,12 @@ class SoaAllocator {
     printf("----------------------------------------------------------\n");
   }
 
+  __DEV__ void DBG_print_state_stats() {
+    for (int i = 0; i < kNumTypes; ++i) {
+      printf("num_leq_50_: %i\n", (int) num_leq_50_[i]);
+    }
+  }
+
  private:
   // Only executed by one thread per warp. Request are already aggregated when
   // reaching this function.

@@ -28,6 +28,10 @@ __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
 
+__global__ void DBG_stats_kernel() {
+  device_allocator->DBG_print_state_stats();
+}
+
 __device__ uint32_t random_number(uint32_t* state, uint32_t max) {
   // Advance and return random state.
   // Source: https://en.wikipedia.org/wiki/Lehmer_random_number_generator
@@ -489,6 +493,9 @@ int main(int argc, char* arvg[]) {
 
   int total_time = 0;
   for (int i = 0; i < 500; ++i) {
+    DBG_stats_kernel<<<1, 1>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+
     auto time_before = std::chrono::system_clock::now();
     step();
     auto time_after = std::chrono::system_clock::now();
