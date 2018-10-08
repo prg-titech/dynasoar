@@ -322,7 +322,7 @@ class SoaAllocator {
         }
 
         // Check if more than 50% full now.
-        int prev_full = N - __popcll(before_update);
+        int prev_full = BlockHelper<T>::kSize - __popcll(before_update);
         if (prev_full <= BlockHelper<T>::kLeq50Threshold
             && prev_full + num_successful_alloc > BlockHelper<T>::kLeq50Threshold) {
           ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
