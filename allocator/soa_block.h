@@ -33,17 +33,6 @@ class SoaBlock {
   static const BitmapT kBitmapInitState =
       N == N_Max ? (~0ULL) : ((1ULL << N) - 1);
 
-  // Result of block allocation.
-  struct BlockAllocationResult {
-    __device__ BlockAllocationResult(BitmapT allocation_mask_p,
-                                     AllocationState state_p)
-        : allocation_mask(allocation_mask_p), state(state_p) {}
-
-    BitmapT allocation_mask;
-
-    AllocationState state;
-  };
-
   // Initializes a new block.
   __DEV__ SoaBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % N_Max == 0);   // Alignment.
