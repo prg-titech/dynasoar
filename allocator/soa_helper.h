@@ -33,9 +33,14 @@ struct SoaClassUtil<void> {
 // Helpers for SOA field "Index" in class C.
 template<class C, int Index>
 struct SoaFieldHelper {
+  using OwnerClass = C;
   using type = typename std::tuple_element<Index, typename C::FieldTypes>::type;
   using PrevHelper = SoaFieldHelper<C, Index - 1>;
 
+  using ThisClass = SoaFieldHelper<C, Index>;
+
+  // Index of this field.
+  static const int kIndex = Index;
   // Offset of this field.
   static const int kOffset = PrevHelper::kOffsetWithField;
   // End-offset of this field.
@@ -46,11 +51,16 @@ struct SoaFieldHelper {
   static_assert(SoaFieldHelper<C, Index - 1>::kAlignment % kAlignment == 0,
                 "Fields in class must be sorted by size.");
 
-  static void DBG_print_stats() {
-    printf("%s[%i]: type = %s, offset = %i, size = %lu\n",
-           typeid(C).name(), Index, typeid(type).name(),
-           kOffset, sizeof(type));
-    SoaFieldHelper<C, Index - 1>::DBG_print_stats();
+  // Runs a functor for all fields in the tuple.
+  // Returns true if terminated early (without iterating over all fields).
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  static bool for_all(Args... args) {
+    F<ThisClass> func;
+    if (func(args...)) {  // If F returns false, stop enumerating.
+      return PrevHelper::template for_all<F, IterateBase>(args...);
+    } else {
+      return true;
+    }
   }
 };
 
@@ -66,8 +76,13 @@ struct SoaFieldHelper<C, -1> {
   static const int kOffsetWithField = kOffset;
   static const int kAlignment = SoaFieldHelper<C, 0>::kAlignment;
 
-  static void DBG_print_stats() {
-    BaseLastFieldHelper::DBG_print_stats();
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  static bool for_all(Args... args) {
+    if (IterateBase) {
+      return BaseLastFieldHelper::template for_all<F, IterateBase>(args...);
+    } else {
+      return false;
+    }
   }
 };
 
@@ -76,7 +91,22 @@ struct SoaFieldHelper<void, -1> {
   static const int kOffset = 0;
   static const int kOffsetWithField = 0;
 
-  static void DBG_print_stats() {}
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  static bool for_all(Args... args) { return false; }
+};
+
+// Helper for printing debug information about field.
+template<typename SoaFieldHelperT>
+struct SoaFieldDbgPrinter {
+  bool operator()() {
+    printf("%s[%i]: type = %s, offset = %i, size = %lu\n",
+           typeid(typename SoaFieldHelperT::OwnerClass).name(),
+           SoaFieldHelperT::kIndex,
+           typeid(typename SoaFieldHelperT::type).name(),
+           SoaFieldHelperT::kOffset,
+           sizeof(typename SoaFieldHelperT::type));
+    return true;  // true means "continue processing".
+  }
 };
 
 // Helpers for SOA class C.
@@ -100,8 +130,15 @@ struct SoaClassHelper {
     printf("----------------------------------------------------------\n");
     printf("Class %s: data_segment_size(1) = %i\n",
            typeid(C).name(), BlockConfig<1>::kDataSegmentSize);
-    SoaFieldHelper<C, kNumFieldThisClass - 1>::DBG_print_stats();
+    SoaFieldHelper<C, kNumFieldThisClass - 1>
+        ::template for_all<SoaFieldDbgPrinter, /*IterateBase=*/ true>();
     printf("----------------------------------------------------------\n");
+  }
+
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  static bool for_all(Args... args) {
+    return SoaFieldHelper<C, kNumFieldThisClass - 1>
+        ::template for_all<F, IterateBase>(args...);
   }
 };
 
@@ -111,6 +148,9 @@ struct SoaClassHelper<void> {
   static const int kNumFields = 0;
 
   static void DBG_print_stats() {}
+
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  static bool for_all(Args... args) { return false; }
 };
 
 #endif  // ALLOCATOR_SOA_HELPER_H
