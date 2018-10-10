@@ -264,6 +264,7 @@ class SoaAllocator {
 
   template<typename T>
   __DEV__ void defrag_move() {
+    // TODO: Use shared memory more efficiently.
     int slot_id = threadIdx.x % 32;
     int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
     extern __shared__ DefragRecord<BlockBitmapT> records[];
@@ -280,6 +281,9 @@ class SoaAllocator {
       // Target bitmap might have more ones, but that is OK.
       records[record_id].target_bitmap =
           get_block<T>(target_block_idx)->free_bitmap;
+
+      // Copy to global memory for scan step.
+      defrag_records_[record_id] = records[record_id];
 
       assert(__popcll(records[record_id].target_bitmap)
              >= __popcll(records[record_id].source_bitmap));
@@ -313,10 +317,41 @@ class SoaAllocator {
 
     __syncthreads();
     
-    // Deallocate source blocks.
     if (slot_id == 0) {
-      // deallocate_block<T>
+      // Delete source block.
+      deallocate_block<T>(records[record_id].source_block_idx);
+
+      // Update state of target block.
+      int num_source = __popcll(records[record_id].source_bitmap);
+      int num_target_before = __popcll(~records[record_id].target_bitmap
+          & BlockHelper<T>::BlockType::kBitmapInitState);
+
+      if (num_target_before + num_source == BlockHelper<T>::kSize) {
+        // Block is now full.
+         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(
+            records[record_id].target_block_idx));
+      }
+
+      if (num_target_before + num_source > BlockHelper<T>::kLeq50Threshold) {
+        // Block is now more than 50% full.
+        ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(
+            records[record_id].target_block_idx));
+      }
     }
+  }
+
+  __DEV__ void defrag_scan(int num_records) {
+    // Load records into shared memory.
+    extern __shared__ DefragRecord<BlockBitmapT> records[];
+    assert(blockDim.x > num_records);
+    if (threadIdx.x < num_records) {
+      // One thread per record.
+      records[threadIdx.x] = defrag_records_[threadIdx.x];
+    }
+
+    __syncthreads();
+
+    
   }
 
   template<typename T>
@@ -683,6 +718,9 @@ class SoaAllocator {
 
   // Copy of leq_50_ used during defragmentation.
   Bitmap<uint32_t, N> leq_50_work_;
+
+  // Temporary storage for defragmentation records.
+  DefragRecord<BlockBitmapT> defrag_records_[8192];
 
   char* data_;
 
