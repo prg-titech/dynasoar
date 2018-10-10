@@ -29,8 +29,8 @@ class SoaBlock {
 
   static_assert(N_Max == 64, "Not implemented: Custom N_Max.");
 
-  // Bitmap initializer: N_T bits set to 1.
-  static const BitmapT kBitmapInitState =
+  // Masks bits that are in use in this block. N_T bits set to 1.
+  static const BitmapT kUsedBitsMask =
       N == N_Max ? (~0ULL) : ((1ULL << N) - 1);
 
   // Initializes a new block.
@@ -38,8 +38,7 @@ class SoaBlock {
     assert(reinterpret_cast<uintptr_t>(this) % N_Max == 0);   // Alignment.
     type_id = TypeId;
     __threadfence();  // Initialize bitmap after type_id is visible.
-    free_bitmap = kBitmapInitState;
-    assert(__popcll(free_bitmap) == N);
+    allocation_bitmap = static_cast<Bitmap>(0);
   }
 
   // Constructs an object identifier.
@@ -58,25 +57,26 @@ class SoaBlock {
 
   // Initializes object iteration bitmap.
   __DEV__ void initialize_iteration() {
-    iteration_bitmap = (~free_bitmap) & kBitmapInitState;
+    iteration_bitmap = allocation_bitmap;
   }
 
   __DEV__ DeallocationState deallocate(int position) {
     BitmapT before;
-    BitmapT mask = 1ULL << position;
+    BitmapT selected_bit_mask = 1ULL << position;
+    BitmapT mask = ~selected_bit_mask;
 
     do {
-      // successful if: bit was "0" (allocated). Needed because we could be in
-      // invalidation check.
-      before = atomicOr(&free_bitmap, mask);
-    } while ((before & mask) != 0);
+      // successful if: bit was "1" (allocated). Needed because we could be in
+      // invalidation check. Retry otherwise.
+      before = atomicAnd(&allocation_bitmap, mask);
+    } while ((before & selected_bit_mask) == 0);
 
-    int slots_free_before = __popcll(before);
-    if (slots_free_before == 0) {
+    int slots_allocated_before = __popcll(before);
+    if (slots_allocated_before == N) {
       return kBlockNowActive;
-    } else if (slots_free_before == N - 1) {
+    } else if (slots_allocated_before == 1) {
       return kBlockNowEmpty;
-    } else if (slots_free_before == N - kLeq50Threshold - 1) {
+    } else if (slots_allocated_before == kLeq50Threshold + 1) {
       return kBlockNowLeq50Full;
     } else {
       return kRegularDealloc;
@@ -88,11 +88,11 @@ class SoaBlock {
   }
 
   __DEV__ int DBG_allocated_bits() {
-    return N - __popcll(free_bitmap);
+    return __popcll(allocation_bitmap);
   }
 
   __DEV__ bool is_slot_allocated(int index) {
-    return (free_bitmap & (1ULL << index)) == 0;
+    return allocation_bitmap & (1ULL << index);
   }
 
  private:
@@ -104,11 +104,10 @@ class SoaBlock {
   // TODO: Can this be replaced when using ROSE?
   char initialization_header_[kBlockDataSectionOffset - 3*sizeof(BitmapT)];
 
-  // Bitmap of free slots.
-  BitmapT free_bitmap;
+  // Bitmap of allocated slots.
+  BitmapT allocation_bitmap;
 
-  // A copy of ~free_bitmap. Set before the beginning of an iteration. Does
-  // not contain dirty objects.
+  // A copy of allocation_bitmap. Set before the beginning of an iteration.
   BitmapT iteration_bitmap;
 
   // Padding to 8 bytes.

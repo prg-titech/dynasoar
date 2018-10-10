@@ -100,9 +100,9 @@ class SoaAllocator {
 
         block_idx = find_active_block<T>();
         auto* block = get_block<T>(block_idx);
-        BlockBitmapT* free_bitmap = &block->free_bitmap;
+        BlockBitmapT* blk_alloc_bitmap = &block->allocation_bitmap;
         allocation_bitmap = allocate_in_block<T>(
-            free_bitmap, __popc(active), block_idx);
+            blk_alloc_bitmap, __popc(active), block_idx);
         int num_allocated = __popcll(allocation_bitmap);
 
         uint8_t actual_type_id = block->type_id;
@@ -281,14 +281,16 @@ class SoaAllocator {
   // Only executed by one thread per warp. Request are already aggregated when
   // reaching this function.
   template<typename T>
-  __DEV__ BlockBitmapT allocate_in_block(BlockBitmapT* free_bitmap_ptr,
+  __DEV__ BlockBitmapT allocate_in_block(BlockBitmapT* allocation_bitmap_ptr,
                                          int alloc_size, uint32_t block_idx) {
     // Allocation bits.
     BlockBitmapT selected_bits = 0;
     // Set to true if block is full.
     bool block_full;
 
-    BlockBitmapT free_bitmap = *free_bitmap_ptr;
+    BlockBitmapT allocation_bitmap = *allocation_bitmap_ptr;
+    BlockBitmapT free_bitmap =
+        ~allocation_bitmap & BlockHelper<T>::BlockType::kUsedBitsMask;
 
     do {
       // Bit set to 1 if slot is free.
@@ -316,10 +318,10 @@ class SoaAllocator {
       assert(__popcll(newly_selected_bits) == allocation_size);
       // Count the number of bits that were selected but already set to false
       // by another thread.
-      BlockBitmapT before_update = atomicAnd(free_bitmap_ptr, ~newly_selected_bits);
-      free_bitmap = before_update & ~newly_selected_bits;
-      BlockBitmapT successful_alloc = newly_selected_bits & before_update;
-      block_full = (before_update & ~successful_alloc) == 0;
+      BlockBitmapT before_update = atomicOr(allocation_bitmap_ptr, newly_selected_bits);
+      free_bitmap = (before_update | newly_selected_bits) & BlockHelper<T>::BlockType::kUsedBitsMask;
+      BlockBitmapT successful_alloc = newly_selected_bits & ~before_update;
+      block_full = (before_update & ~successful_alloc) == BlockHelper<T>::BlockType::kUsedBitsMask;
 
       if (successful_alloc > 0ULL) {
         // At least one slot allocated.
@@ -512,19 +514,20 @@ class SoaAllocator {
     auto* block = get_block<T>(block_idx);
 
     while (true) {
-      auto old_free_bitmap = atomicExch(&block->free_bitmap, 0ULL);
-      if (old_free_bitmap == BlockHelper<T>::BlockType::kBitmapInitState) {
+      auto old_allocation_bitmap = atomicExch(
+          &block->allocation_bitmap, BlockHelper<T>::BlockType::kUsedBitsMask);
+      if (old_allocation_bitmap == 0ULL) {
         return true;
-      } else if (old_free_bitmap != 0ULL) {
-        // block->free_bitmap = old_free_bitmap;
+      } else if (old_allocation_bitmap != BlockHelper<T>::BlockType::kUsedBitsMask) {
+        // Bitmap was modified.
 
-        // free_bitmap now 0. We should deactivate the block here, but since
+        // allocation_bitmap now 0. We should deactivate the block here, but since
         // the block deallocation procedure expects the invalid block to be
         // active, we omit this and only deactivate it in the specical case
         // described below.
 
         // At least one bit was modified. Rollback invalidation.
-        auto before_rollback = atomicOr(&block->free_bitmap, old_free_bitmap);
+        auto before_rollback = atomicAnd(&block->allocation_bitmap, old_free_bitmap);
         if (before_rollback > 0ULL) {
           if (N - __popcll(old_free_bitmap) > BlockHelper<T>::kLeq50Threshold
               && N - __popcll(before_rollback) <= BlockHelper<T>::kLeq50Threshold) {
