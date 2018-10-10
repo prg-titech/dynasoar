@@ -251,7 +251,7 @@ class Bitmap {
       return nested.find_allocated_private(seed);
     }
 
-    __DEV__ void nested_initialize(Bitmap<SizeT, N, ContainerT>& other) {
+    __DEV__ void nested_initialize(const Bitmap<SizeT, N, ContainerT>& other) {
       nested.initialize(other.data_.nested);
     }
 
@@ -299,7 +299,7 @@ class Bitmap {
       return kIndexError;
     }
 
-    __DEV__ void nested_initialize(Bitmap<SizeT, N, ContainerT>& other) {
+    __DEV__ void nested_initialize(const Bitmap<SizeT, N, ContainerT>& other) {
       assert(false);
     }
 

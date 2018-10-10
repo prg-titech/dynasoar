@@ -24,7 +24,15 @@ class SoaField {
     uint8_t obj_id = static_cast<uint8_t>(ptr_base)
         & static_cast<uint8_t>(0x3F);  // Truncated.
     // Base address of the block.
-    uintptr_t block_base = ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0);
+    char* block_base = reinterpret_cast<char*>(
+        ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0));
+    return data_ptr_from_location(block_base, block_size, obj_id);
+  }
+
+ public:
+  __DEV__ static T* data_ptr_from_location(char* block_base,
+                                           uint8_t block_size,
+                                           uint8_t obj_id) {
     assert(obj_id < block_size);
     // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(
@@ -33,7 +41,6 @@ class SoaField {
     return soa_array + obj_id;
   }
 
- public:
   // Field initialization.
   __DEV__ SoaField() {}
   __DEV__ explicit SoaField(const T& value) { *data_ptr() = value; }

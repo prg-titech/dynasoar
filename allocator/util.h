@@ -5,9 +5,9 @@
 
 __forceinline__ __device__ unsigned lane_id()
 {
-    unsigned ret; 
-    asm volatile ("mov.u32 %0, %laneid;" : "=r"(ret));
-    return ret;
+  unsigned ret;
+  asm volatile ("mov.u32 %0, %laneid;" : "=r"(ret));
+  return ret;
 }
 
 __forceinline__ __device__ unsigned int __lanemask_lt() {
@@ -21,6 +21,26 @@ __global__ void kernel_parallel_do(AllocatorT* allocator) {
   // TODO: Check overhead of allocator pointer dereference.
   // There is definitely a 2% overhead or so.....
   allocator->template parallel_do_cuda<W_MULT, T, func>();
+}
+
+template<class T, typename AllocatorT>
+__global__ void kernel_initialize_leq(AllocatorT* allocator) {
+  allocator->template initialize_leq_work_bitmap<T>();
+}
+
+template<class T, typename AllocatorT>
+__global__ void kernel_defrag_move(AllocatorT* allocator, int num_records) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tid < num_records*32) {
+    allocator->template defrag_move<T>();
+  }
+}
+
+template<typename T>
+T copy_from_device(T* device_ptr) {
+  T result;
+  cudaMemcpy(&result, device_ptr, sizeof(T), cudaMemcpyDeviceToHost);
+  return result;
 }
 
 #endif  // ALLOCATOR_SOA_UTIL_H

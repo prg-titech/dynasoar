@@ -62,6 +62,16 @@ struct SoaFieldHelper {
       return true;
     }
   }
+
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  __DEV__ static bool dev_for_all(Args... args) {
+    F<ThisClass> func;
+    if (func(args...)) {  // If F returns false, stop enumerating.
+      return PrevHelper::template dev_for_all<F, IterateBase>(args...);
+    } else {
+      return true;
+    }
+  }
 };
 
 template<class C>
@@ -84,6 +94,15 @@ struct SoaFieldHelper<C, -1> {
       return false;
     }
   }
+
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  __DEV__ static bool dev_for_all(Args... args) {
+    if (IterateBase) {
+      return BaseLastFieldHelper::template dev_for_all<F, IterateBase>(args...);
+    } else {
+      return false;
+    }
+  }
 };
 
 template<>
@@ -93,6 +112,9 @@ struct SoaFieldHelper<void, -1> {
 
   template<template<class> typename F, bool IterateBase, typename... Args>
   static bool for_all(Args... args) { return false; }
+
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  __DEV__ static bool dev_for_all(Args... args) { return false; }
 };
 
 // Helper for printing debug information about field.
@@ -130,8 +152,7 @@ struct SoaClassHelper {
     printf("----------------------------------------------------------\n");
     printf("Class %s: data_segment_size(1) = %i\n",
            typeid(C).name(), BlockConfig<1>::kDataSegmentSize);
-    SoaFieldHelper<C, kNumFieldThisClass - 1>
-        ::template for_all<SoaFieldDbgPrinter, /*IterateBase=*/ true>();
+    for_all<SoaFieldDbgPrinter, /*IterateBase=*/ true>();
     printf("----------------------------------------------------------\n");
   }
 
@@ -139,6 +160,12 @@ struct SoaClassHelper {
   static bool for_all(Args... args) {
     return SoaFieldHelper<C, kNumFieldThisClass - 1>
         ::template for_all<F, IterateBase>(args...);
+  }
+
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  __DEV__ static bool dev_for_all(Args... args) {
+    return SoaFieldHelper<C, kNumFieldThisClass - 1>
+        ::template dev_for_all<F, IterateBase>(args...);
   }
 };
 
@@ -151,6 +178,9 @@ struct SoaClassHelper<void> {
 
   template<template<class> typename F, bool IterateBase, typename... Args>
   static bool for_all(Args... args) { return false; }
+
+  template<template<class> typename F, bool IterateBase, typename... Args>
+  __DEV__ static bool dev_for_all(Args... args) { return false; }
 };
 
 #endif  // ALLOCATOR_SOA_HELPER_H

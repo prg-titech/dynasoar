@@ -11,6 +11,7 @@
 #include "bitmap/bitmap.h"
 
 #include "allocator/soa_block.h"
+#include "allocator/soa_defrag.h"
 #include "allocator/soa_field.h"
 #include "allocator/tuple_helper.h"
 #include "allocator/util.h"
@@ -214,6 +215,111 @@ class SoaAllocator {
   }
 
   template<typename T>
+  struct SoaObjectCopier {
+    // Copies a single field value from one block to another one.
+    template<typename SoaFieldHelperT>
+    struct ObjectCopyHelper {
+      using SoaFieldType = SoaField<typename SoaFieldHelperT::OwnerClass,
+                                    SoaFieldHelperT::kIndex>;
+
+      __DEV__ bool operator()(char* source_block_base, char* target_block_base,
+                              uint8_t source_slot, uint8_t target_slot) {
+        // TODO: Optimize copy routine for single value. Should not use the
+        // assignment operator here.
+        // TODO: Make block size a template parameter.
+        typename SoaFieldHelperT::type* source_ptr =
+            SoaFieldType::data_ptr_from_location(
+                source_block_base, BlockHelper<T>::kSize, source_slot);
+        typename SoaFieldHelperT::type* target_ptr =
+            SoaFieldType::data_ptr_from_location(
+                target_block_base, BlockHelper<T>::kSize, target_slot);
+        *target_ptr = *source_ptr;
+
+        return true;  // Continue processing.
+      }
+    };
+  };
+
+  // Should be invoked from host side.
+  template<typename T>
+  void parallel_defrag(int max_records) {
+    // Create working copy of leq_50_ bitmap.
+    kernel_initialize_leq<T><<<256, 256>>>(this);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    // Determine number of records.
+    auto num_leq_blocks =
+        copy_from_device(&num_leq_50_[TYPE_INDEX(Types..., T)]);
+    int num_records = min(max_records, num_leq_blocks/2);
+    int shared_mem_size = sizeof(DefragRecord<BlockBitmapT>)*num_records;
+    assert(shared_mem_size <= 48*1024*1024);
+
+    // Move objects. 4 SOA block per CUDA block. 32 threads per block.
+    // (Because blocks are at most 50% full.)
+    kernel_defrag_move<T><<<
+        (num_records + 4 - 1) / 4, 128,
+        shared_mem_size>>>(this, num_records);
+    gpuErrchk(cudaDeviceSynchronize());
+  }
+
+  template<typename T>
+  __DEV__ void defrag_move() {
+    int slot_id = threadIdx.x % 32;
+    int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
+    extern __shared__ DefragRecord<BlockBitmapT> records[];
+
+    if (slot_id == 0) {
+      uint32_t source_block_idx = leq_50_work_.deallocate();
+      uint32_t target_block_idx = leq_50_work_.deallocate();
+      records[record_id].source_block_idx = source_block_idx;
+      records[record_id].target_block_idx = target_block_idx;
+      // Invert free_bitmap to get a bitmap of allocations.
+      records[record_id].source_bitmap = 
+          ~get_block<T>(source_block_idx)->free_bitmap
+          & BlockHelper<T>::BlockType::kBitmapInitState;
+      // Target bitmap might have more ones, but that is OK.
+      records[record_id].target_bitmap =
+          get_block<T>(target_block_idx)->free_bitmap;
+
+      assert(__popcll(records[record_id].target_bitmap)
+             >= __popcll(records[record_id].source_bitmap));
+    }
+
+    __syncthreads();
+
+    // Find index of bit in bitmaps.
+    BlockBitmapT source_bitmap = records[record_id].source_bitmap;
+    BlockBitmapT target_bitmap = records[record_id].target_bitmap;
+    for (int i = 0; i < slot_id; ++i) {
+      // Clear least significant bit.
+      source_bitmap &= source_bitmap - 1;
+      target_bitmap &= target_bitmap - 1;
+    }
+    int source_object_id = __ffsll(source_bitmap) - 1;
+    int target_object_id = __ffsll(target_bitmap) - 1;
+
+    // Move objects.
+    if (source_object_id > -1) {
+      assert(target_object_id > -1);
+
+      SoaClassHelper<T>::template dev_for_all<
+              SoaObjectCopier<T>::ObjectCopyHelper, true>(
+          reinterpret_cast<char*>(
+              get_block<T>(records[record_id].source_block_idx)),
+          reinterpret_cast<char*>(
+              get_block<T>(records[record_id].target_block_idx)),
+          source_object_id, target_object_id);
+    }
+
+    __syncthreads();
+    
+    // Deallocate source blocks.
+    if (slot_id == 0) {
+      // deallocate_block<T>
+    }
+  }
+
+  template<typename T>
   __DEV__ void initialize_iteration() {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
          i += blockDim.x * gridDim.x) {
@@ -222,6 +328,11 @@ class SoaAllocator {
         get_block<T>(i)->initialize_iteration();
       }
     }
+  }
+
+  template<typename T>
+  __DEV__ void initialize_leq_work_bitmap() {
+    leq_50_work_.initialize(leq_50_[TYPE_INDEX(Types..., T)]);
   }
 
   // The number of allocated slots of a type. (#blocks * blocksize)
@@ -348,6 +459,16 @@ class SoaAllocator {
     return selected_bits;
   }
 
+  // Note: Assuming that the block is leq_50_!
+  template<class T>
+  __DEV__ void deallocate_block(uint32_t block_idx) {
+    ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+    ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+    atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
+    ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+    ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
+  }
+
   template<class T>
   __DEV__ void free_typed(T* obj) {
     obj->~T();
@@ -362,11 +483,7 @@ class SoaAllocator {
       // TODO: Special case if N == 2 or N == 1 for leq_50_.
       if (invalidate_block<T>(block_idx)) {
         // Block is invalidated and no new allocations can be performed.
-        ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
-        ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-        ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
+        deallocate_block<T>(block_idx);
       }
     } else if (dealloc_state == kBlockNowLeq50Full) {
       ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
@@ -563,6 +680,9 @@ class SoaAllocator {
   // Bit set if block is <= 50% full and active.
   Bitmap<uint32_t, N> leq_50_[kNumTypes];
   unsigned int num_leq_50_[kNumTypes];
+
+  // Copy of leq_50_ used during defragmentation.
+  Bitmap<uint32_t, N> leq_50_work_;
 
   char* data_;
 

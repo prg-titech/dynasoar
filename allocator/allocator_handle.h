@@ -42,6 +42,11 @@ class AllocatorHandle {
     allocator_->parallel_do<W_MULT, T, func>(num_blocks, num_threads);
   }
 
+  template<class T>
+  void parallel_defrag(int max_records) {
+    allocator_->parallel_defrag<T>(max_records);
+  }
+
  private:
   AllocatorT* allocator_ = nullptr;
   char* data_buffer_ = nullptr;

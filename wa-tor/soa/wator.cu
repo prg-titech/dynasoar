@@ -408,6 +408,8 @@ void generate_shark_array() {
 }
 
 void step() {
+  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 64);
+
   // --- FISH ---
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
