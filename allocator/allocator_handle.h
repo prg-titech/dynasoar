@@ -1,15 +1,12 @@
 #ifndef ALLOCATOR_ALLOCATOR_HANDLE_H
 #define ALLOCATOR_ALLOCATOR_HANDLE_H
 
+#include "allocator/util.h"
+
 template<typename AllocatorT>
 __global__ void init_allocator_kernel(AllocatorT* allocator,
                                       char* data_buffer) {
   new(allocator) AllocatorT(data_buffer);
-}
-
-template<typename AllocatorT, typename T>
-__global__ void init_iteration(AllocatorT* allocator) {
-  allocator->template initialize_iteration<T>();
 }
 
 template<typename AllocatorT>
@@ -37,7 +34,7 @@ class AllocatorHandle {
 
   template<int W_MULT, class T, void(T::*func)()>
   void parallel_do(int num_blocks, int num_threads) {
-    init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
+    kernel_init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
     gpuErrchk(cudaDeviceSynchronize());
     allocator_->parallel_do<W_MULT, T, func>(num_blocks, num_threads);
   }

@@ -16,13 +16,6 @@ __forceinline__ __device__ unsigned int __lanemask_lt() {
   return mask;
 }
 
-template<int W_MULT, class T, void(T::*func)(), typename AllocatorT>
-__global__ void kernel_parallel_do(AllocatorT* allocator) {
-  // TODO: Check overhead of allocator pointer dereference.
-  // There is definitely a 2% overhead or so.....
-  allocator->template parallel_do_cuda<W_MULT, T, func>();
-}
-
 template<class T, typename AllocatorT>
 __global__ void kernel_initialize_leq(AllocatorT* allocator) {
   allocator->template initialize_leq_work_bitmap<T>();
@@ -47,5 +40,13 @@ T copy_from_device(T* device_ptr) {
   cudaMemcpy(&result, device_ptr, sizeof(T), cudaMemcpyDeviceToHost);
   return result;
 }
+
+template<typename T, T>
+struct FunctionTypeGetter;
+
+template<typename T, typename R, typename... Args, R (T::*func)(Args...)>
+struct FunctionTypeGetter<R (T::*)(Args...), func> {
+  static constexpr R (T::*FunctionType)(Args...) = func;
+};
 
 #endif  // ALLOCATOR_SOA_UTIL_H

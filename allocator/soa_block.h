@@ -14,6 +14,7 @@ enum DeallocationState : int8_t {
 };
 
 
+// TODO: Fix visibility.
 // A SOA block containing objects.
 // T: Base type of the block.
 // N_Max: Maximum number of objects per block (regardless of type). Currently
@@ -95,7 +96,6 @@ class SoaBlock {
     return (free_bitmap & (1ULL << index)) == 0;
   }
 
- private:
   template<uint32_t, class...> friend class SoaAllocator;
 
   // Dummy area that may be overridden by zero initialization.

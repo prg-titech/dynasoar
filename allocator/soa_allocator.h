@@ -10,16 +10,19 @@
 
 #include "bitmap/bitmap.h"
 
+#include "allocator/soa_base.h"
 #include "allocator/soa_block.h"
 #include "allocator/soa_defrag.h"
+#include "allocator/soa_executor.h"
 #include "allocator/soa_field.h"
 #include "allocator/tuple_helper.h"
 #include "allocator/util.h"
 
 
+// TODO: Fix visibility.
 template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
- private:
+ public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
 
   static const uint8_t kObjectAddrBits = 6;
@@ -35,6 +38,8 @@ class SoaAllocator {
 
   template<typename T>
   struct BlockHelper {
+    static const int kIndex = TYPE_INDEX(Types..., T);
+
     static const int kSize =
         SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
             ::kPadded64BlockMinSize>::kSize;
@@ -43,7 +48,7 @@ class SoaAllocator {
         SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
             ::kPadded64BlockMinSize>::kBytes;
 
-    using BlockType = SoaBlock<T, TYPE_INDEX(Types..., T), kSize, 64>;
+    using BlockType = SoaBlock<T, kIndex, kSize, 64>;
 
     static const int kLeq50Threshold = BlockType::kLeq50Threshold;
   };
@@ -51,7 +56,6 @@ class SoaAllocator {
   using BlockBitmapT = typename BlockHelper<
       typename TupleHelper<Types...>::NonAbstractType>::BlockType::BitmapT;
 
- public:
   template<typename T>
   struct TypeId {
     static const uint8_t value =
@@ -174,46 +178,12 @@ class SoaAllocator {
     free(typed);
   }
 
-  // Should be invoked from host side.
+  // Call a member functions on all objects of a type.
   template<int W_MULT, class T, void(T::*func)()>
   void parallel_do(int num_blocks, int num_threads) {
-    allocated_[TYPE_INDEX(Types..., T)].scan();
-    kernel_parallel_do<W_MULT, T, func><<<num_blocks, num_threads>>>(this);
-    gpuErrchk(cudaDeviceSynchronize());
-  }
-
-  // This version assigns 64 threads to every block.
-  template<int W_MULT, class T, void(T::*func)()>
-  __DEV__ void parallel_do_cuda() {
-    const uint32_t N_alloc = allocated_[TYPE_INDEX(Types..., T)].scan_num_bits();
-    const int num_objs = BlockHelper<T>::kSize;
-
-    // Round to multiple of 64.
-    int num_threads = ((blockDim.x * gridDim.x)/num_objs)*num_objs;
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid < num_threads) {
-      for (int j = tid/num_objs; j < N_alloc; j += num_threads/num_objs) {
-        // i is the index of in the scan array.
-        int block_idx = allocated_[TYPE_INDEX(Types..., T)].scan_get_index(j);
-
-        // TODO: Consider doing a scan over "allocated" bitmap.
-        auto* block = get_block<T>(block_idx);
-        auto iteration_bitmap = block->iteration_bitmap;
-
-        int thread_offset = tid % num_objs;
-        // Advance bitmap to return thread_offset-th bit index.
-        for (int i = 0; i < thread_offset; ++i) {
-          // Clear last bit.
-          iteration_bitmap &= iteration_bitmap - 1;
-        }
-        int obj_bit = __ffsll(iteration_bitmap);
-        if (obj_bit > 0) {
-          T* obj = get_object<T>(block, obj_bit - 1);
-          // call the function.
-          (obj->*func)();
-        }
-      }
-    }
+    ParallelExecutor<ThisAllocator, T, void, T>
+        ::template FunctionWrapper<func>
+        ::parallel_do(this, num_blocks, num_threads);
   }
 
   template<typename T>
@@ -328,6 +298,8 @@ class SoaAllocator {
   struct SoaPointerUpdater {
     template<typename ScanClassT>
     struct ClassIterator {
+      using ThisClass = ClassIterator<ScanClassT>;
+
       // Checks if this field should be rewritten.
       template<typename SoaFieldHelperT>
       struct FieldChecker {
@@ -350,8 +322,10 @@ class SoaAllocator {
         template<bool Check, int Dummy> 
         struct FieldSelector {
           template<typename... Args>
-          __DEV__ static void call(ThisAllocator* allocator, int num_records) {
-
+          __DEV__ static void call(ThisAllocator* allocator,
+                                   ScanClassT* object, int num_records) {
+            printf("REWRITE FIELD! alloc=%p, obj=%p, records=%i\n",
+                   allocator, object, num_records);
           }
         };
 
@@ -359,26 +333,37 @@ class SoaAllocator {
         template<int Dummy>
         struct FieldSelector<false, Dummy> {
           __DEV__ static void call(ThisAllocator* allocator,
+                                   ScanClassT* object,
                                    int num_records) {}
         };
 
-        __DEV__ bool operator()(ThisAllocator* allocator, int num_records) {
+        __DEV__ bool operator()(ThisAllocator* allocator, ScanClassT* object,
+                                int num_records) {
           // Rewrite field if field type is a super class (or exact class)
           // of DefragT.
           FieldSelector<std::is_pointer<FieldType>::value
               && std::is_base_of<typename std::remove_pointer<FieldType>::type,
                                  DefragT>::value, 0>::call(
-              allocator, num_records);
+              allocator, object, num_records);
           return true;
         }
       };
 
-      bool operator()() {
+      bool operator()(ThisAllocator* allocator, int num_records) {
         bool process_class = SoaClassHelper<ScanClassT>::template for_all<
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
-          printf("Rewriting class: %s.\n", typeid(ScanClassT).name());
+          // TODO: Optimize. No need to do another scan here.
+          kernel_init_iteration<ThisAllocator, ScanClassT><<<128, 128>>>(allocator);
+          gpuErrchk(cudaDeviceSynchronize());
+
+          ParallelExecutor<ThisAllocator, ScanClassT, void,
+                           SoaBase<ThisAllocator>, /*Args...=*/ ThisAllocator*, int>
+              ::template FunctionWrapper<&SoaBase<ThisAllocator>
+                  ::template rewrite_object<ThisClass, ScanClassT>>
+              ::parallel_do(allocator, 128, 128, allocator, num_records);
         }
+
         return true;  // Continue processing.
       }
     };
@@ -395,10 +380,6 @@ class SoaAllocator {
     }
 
     __syncthreads();
-
-    //TupleHelper<Types...>
-    //      ::template dev_for_all<SoaPointerUpdater<T>::ClassIterator>(
-    //    this, num_records);
   }
 
   // Should be invoked from host side.
@@ -430,7 +411,8 @@ class SoaAllocator {
     //gpuErrchk(cudaDeviceSynchronize());
 
     TupleHelper<Types...>
-        ::template for_all<SoaPointerUpdater<T>::ClassIterator>();
+        ::template for_all<SoaPointerUpdater<T>::template ClassIterator>(
+            this, num_records);
   }
 
   template<typename T>
@@ -502,7 +484,6 @@ class SoaAllocator {
 
   }
 
- private:
   // Only executed by one thread per warp. Request are already aggregated when
   // reaching this function.
   template<typename T>
@@ -802,7 +783,6 @@ class SoaAllocator {
 
   static const uint32_t kN = N;
 
- public:
   static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
 };
 
