@@ -17,7 +17,7 @@ struct TupleHelper<T, Types...> {
       /*F=*/ typename TupleHelper<Types...>::NonAbstractType>::type;
 
   // Runs a functor for all types in the tuple.
-  // Returns true if terminated early (without iterating over all types).
+  // Returns true if F returned false for one type.
   template<template<class> typename F, typename... Args>
   static bool for_all(Args... args) {
     F<T> func;

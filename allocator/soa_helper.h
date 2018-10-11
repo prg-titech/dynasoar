@@ -52,7 +52,7 @@ struct SoaFieldHelper {
                 "Fields in class must be sorted by size.");
 
   // Runs a functor for all fields in the tuple.
-  // Returns true if terminated early (without iterating over all fields).
+  // Returns true if F returned false for a field.
   template<template<class> typename F, bool IterateBase, typename... Args>
   static bool for_all(Args... args) {
     F<ThisClass> func;

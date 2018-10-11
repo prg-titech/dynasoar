@@ -20,6 +20,8 @@
 template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
  private:
+  using ThisAllocator = SoaAllocator<N_Objects, Types...>;
+
   static const uint8_t kObjectAddrBits = 6;
   static const uint32_t kNumBlockElements = 64;
   static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
@@ -76,7 +78,7 @@ class SoaAllocator {
     }
   }
 
-  __DEV__ SoaAllocator(const SoaAllocator<N_Objects, Types...>&) = delete;
+  __DEV__ SoaAllocator(const ThisAllocator&) = delete;
 
   // Try to allocate everything in the same block.
   template<class T, typename... Args>
@@ -240,28 +242,6 @@ class SoaAllocator {
     };
   };
 
-  // Should be invoked from host side.
-  template<typename T>
-  void parallel_defrag(int max_records) {
-    // Create working copy of leq_50_ bitmap.
-    kernel_initialize_leq<T><<<256, 256>>>(this);
-    gpuErrchk(cudaDeviceSynchronize());
-
-    // Determine number of records.
-    auto num_leq_blocks =
-        copy_from_device(&num_leq_50_[TYPE_INDEX(Types..., T)]);
-    int num_records = min(max_records, num_leq_blocks/2);
-    int shared_mem_size = sizeof(DefragRecord<BlockBitmapT>)*num_records;
-    assert(shared_mem_size <= 48*1024*1024);
-
-    // Move objects. 4 SOA block per CUDA block. 32 threads per block.
-    // (Because blocks are at most 50% full.)
-    kernel_defrag_move<T><<<
-        (num_records + 4 - 1) / 4, 128,
-        shared_mem_size>>>(this, num_records);
-    gpuErrchk(cudaDeviceSynchronize());
-  }
-
   template<typename T>
   __DEV__ void defrag_move() {
     // TODO: Use shared memory more efficiently.
@@ -340,6 +320,71 @@ class SoaAllocator {
     }
   }
 
+  // Select fields of type DefragT* and rewrite pointers if necessary.
+  // DefragT: Type that was defragmented.
+  // ScanClassT: Class which is being scanned for affected fields.
+  // SoaFieldHelperT: SoaFieldHelper of potentially affected field.
+  template<typename DefragT>
+  struct SoaPointerUpdater {
+    template<typename ScanClassT>
+    struct ClassIterator {
+      // Checks if this field should be rewritten.
+      template<typename SoaFieldHelperT>
+      struct FieldChecker {
+        using FieldType = typename SoaFieldHelperT::type;
+
+        bool operator()() {
+          // Stop iterating if at least one field must be rewritten.
+          return !(std::is_pointer<FieldType>::value
+              && std::is_base_of<typename std::remove_pointer<FieldType>::type,
+                                 DefragT>::value);
+        }
+      };
+
+      // Scan and rewrite field.
+      template<typename SoaFieldHelperT>
+      struct FieldUpdater {
+        using FieldType = typename SoaFieldHelperT::type;
+
+        // Scan this field.
+        template<bool Check, int Dummy> 
+        struct FieldSelector {
+          template<typename... Args>
+          __DEV__ static void call(ThisAllocator* allocator, int num_records) {
+
+          }
+        };
+
+        // Do not scan this field.
+        template<int Dummy>
+        struct FieldSelector<false, Dummy> {
+          __DEV__ static void call(ThisAllocator* allocator,
+                                   int num_records) {}
+        };
+
+        __DEV__ bool operator()(ThisAllocator* allocator, int num_records) {
+          // Rewrite field if field type is a super class (or exact class)
+          // of DefragT.
+          FieldSelector<std::is_pointer<FieldType>::value
+              && std::is_base_of<typename std::remove_pointer<FieldType>::type,
+                                 DefragT>::value, 0>::call(
+              allocator, num_records);
+          return true;
+        }
+      };
+
+      bool operator()() {
+        bool process_class = SoaClassHelper<ScanClassT>::template for_all<
+            FieldChecker, /*IterateBase=*/ true>();
+        if (process_class) {
+          printf("Rewriting class: %s.\n", typeid(ScanClassT).name());
+        }
+        return true;  // Continue processing.
+      }
+    };
+  };
+
+  template<typename T>
   __DEV__ void defrag_scan(int num_records) {
     // Load records into shared memory.
     extern __shared__ DefragRecord<BlockBitmapT> records[];
@@ -351,7 +396,41 @@ class SoaAllocator {
 
     __syncthreads();
 
-    
+    //TupleHelper<Types...>
+    //      ::template dev_for_all<SoaPointerUpdater<T>::ClassIterator>(
+    //    this, num_records);
+  }
+
+  // Should be invoked from host side.
+  template<typename T>
+  void parallel_defrag(int max_records) {
+    // Create working copy of leq_50_ bitmap.
+    kernel_initialize_leq<T><<<256, 256>>>(this);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    // Determine number of records.
+    auto num_leq_blocks =
+        copy_from_device(&num_leq_50_[TYPE_INDEX(Types..., T)]);
+    int num_records = min(max_records, num_leq_blocks/2);
+    int shared_mem_size = sizeof(DefragRecord<BlockBitmapT>)*num_records;
+    assert(shared_mem_size <= 48*1024*1024);
+
+    // Move objects. 4 SOA block per CUDA block. 32 threads per block.
+    // (Because blocks are at most 50% full.)
+    kernel_defrag_move<T><<<
+        (num_records + 4 - 1) / 4, 128,
+        shared_mem_size>>>(this, num_records);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    // Make sure that we enumerate objects of type T correctly.
+    allocated_[TYPE_INDEX(Types..., T)].scan();
+
+    // Scan and rewrite pointers.
+    //kernel_defrag_scan<T><<<16, 32, shared_mem_size>>>(this, num_records);
+    //gpuErrchk(cudaDeviceSynchronize());
+
+    TupleHelper<Types...>
+        ::template for_all<SoaPointerUpdater<T>::ClassIterator>();
   }
 
   template<typename T>
@@ -536,8 +615,7 @@ class SoaAllocator {
       // T is a subclass of BaseClass. Check if same type.
       template<bool Check, int Dummy>
       struct ClassSelector {
-        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
-                                 BaseClass* obj) {
+        __DEV__ static bool call(ThisAllocator* allocator, BaseClass* obj) {
           if (obj->get_type() == TYPE_INDEX(Types..., T)) {
             allocator->free_typed(static_cast<T*>(obj));
             return false;  // No need to check other types.
@@ -550,14 +628,12 @@ class SoaAllocator {
       // T is not a subclass of BaseClass. Skip.
       template<int Dummy>
       struct ClassSelector<false, Dummy> {
-        __DEV__ static bool call(SoaAllocator<N_Objects, Types...>* allocator,
-                                 BaseClass* obj) {
+        __DEV__ static bool call(ThisAllocator* allocator, BaseClass* obj) {
           return true;
         }
       };
 
-      __DEV__ bool operator()(SoaAllocator<N_Objects, Types...>* allocator,
-                              BaseClass* obj) {
+      __DEV__ bool operator()(ThisAllocator* allocator, BaseClass* obj) {
         return ClassSelector<std::is_base_of<BaseClass, T>::value, 0>::call(
             allocator, obj);
       }
