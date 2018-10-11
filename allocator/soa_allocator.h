@@ -324,6 +324,10 @@ class SoaAllocator {
           template<typename... Args>
           __DEV__ static void call(ThisAllocator* allocator,
                                    ScanClassT* object, int num_records) {
+            extern __shared__ DefragRecord<BlockBitmapT> records[];
+
+            // TODO: This is inefficient. We first build a pointer and then
+            // disect it again.
             printf("REWRITE FIELD! alloc=%p, obj=%p, records=%i\n",
                    allocator, object, num_records);
           }
@@ -368,19 +372,6 @@ class SoaAllocator {
       }
     };
   };
-
-  template<typename T>
-  __DEV__ void defrag_scan(int num_records) {
-    // Load records into shared memory.
-    extern __shared__ DefragRecord<BlockBitmapT> records[];
-    assert(blockDim.x > num_records);
-    if (threadIdx.x < num_records) {
-      // One thread per record.
-      records[threadIdx.x] = defrag_records_[threadIdx.x];
-    }
-
-    __syncthreads();
-  }
 
   // Should be invoked from host side.
   template<typename T>

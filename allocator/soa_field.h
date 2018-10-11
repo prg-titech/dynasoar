@@ -18,6 +18,12 @@ class SoaField {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this)
         - sizeof(SoaField<C, Field>)
             * (Field + SoaClassUtil<typename C::BaseClass>::kNumFields);
+    return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
+  }
+
+ public:
+  __DEV__ static T* data_ptr_from_obj_ptr(C* obj) {
+    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
     // Block size (N_T), i.e., number of object slots in this block.
     uint8_t block_size = ptr_base >> 48;  // Truncated.
     // Object slot ID.
@@ -29,7 +35,6 @@ class SoaField {
     return data_ptr_from_location(block_base, block_size, obj_id);
   }
 
- public:
   __DEV__ static T* data_ptr_from_location(char* block_base,
                                            uint8_t block_size,
                                            uint8_t obj_id) {

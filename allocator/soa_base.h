@@ -1,6 +1,7 @@
 #ifndef ALLOCATOR_SOA_BASE_H
 #define ALLOCATOR_SOA_BASE_H
 
+#include "allocator/soa_defrag.h"
 #include "allocator/soa_helper.h"
 
 // User-defined classes should inherit from this class.
@@ -15,7 +16,16 @@ class SoaBase {
 
   template<typename ClassIterT, typename ScanClassT>
   __DEV__ void rewrite_object(AllocatorT* allocator, int num_records) {
-    // TODO: Load defrag_records into shared memory.
+    // Load records into shared memory.
+    extern __shared__ DefragRecord<typename AllocatorT::BlockBitmapT> records[];
+    assert(blockDim.x > num_records);
+    if (threadIdx.x < num_records) {
+      // One thread per record.
+      records[threadIdx.x] = allocator->defrag_records_[threadIdx.x];
+    }
+
+    __syncthreads();
+
     SoaClassHelper<ScanClassT>::template dev_for_all<ClassIterT::FieldUpdater,
                                                      /*IterateBase=*/ true>(
         allocator, static_cast<ScanClassT*>(this), num_records);
