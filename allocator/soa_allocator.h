@@ -368,11 +368,12 @@ class SoaAllocator {
                 assert(target_obj_id >= 0);
 
                 // Rewrite pointer.
-                // THIS DOES NOT WORK! COULD HAVE A SUBCLASS OF FIELDTYPE HERE!
                 auto* target_block = allocator->template get_block<
                     typename std::remove_pointer<FieldType>::type>(
                         records[i].target_block_idx);
-                *scan_location = target_block->make_pointer(target_obj_id);
+                *scan_location = reinterpret_cast<FieldType>(
+                    PointerHelper::rewrite_pointer(
+                        scan_value, target_block, target_obj_id));
               }
             }
           }

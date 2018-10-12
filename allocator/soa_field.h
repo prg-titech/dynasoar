@@ -15,6 +15,19 @@ struct PointerHelper {
     return reinterpret_cast<char*>(
         ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0));
   }
+
+  // Replace block base and object ID in ptr.
+  __DEV__ static void* rewrite_pointer(void* ptr, void* block_base,
+                                       uint8_t obj_id) {
+    uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
+    // Clear object ID and block base (48 bits).
+    ptr_as_int &= ~((1ULL << 48) - 1);
+    // Set object ID and block base.
+    ptr_as_int |= obj_id;
+    ptr_as_int |= reinterpret_cast<uintptr_t>(block_base);
+
+    return reinterpret_cast<void*>(ptr_as_int);
+  }
 };
 
 // Wrapper type for fields of SOA-structured classes. This class contains the
