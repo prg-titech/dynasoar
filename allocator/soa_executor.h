@@ -24,10 +24,11 @@ struct ParallelExecutor {
     using ThisClass = FunctionWrapper<func>;
 
     static void parallel_do(AllocatorT* allocator, int num_blocks,
-                            int num_threads, Args... args) {
+                            int num_threads, int shared_mem_size,
+                            Args... args) {
       allocator->allocated_[kTypeIndex].scan();
-      kernel_parallel_do<ThisClass><<<num_blocks, num_threads>>>(
-          allocator, args...);
+      kernel_parallel_do<ThisClass>
+          <<<num_blocks, num_threads, shared_mem_size>>>(allocator, args...);
       gpuErrchk(cudaDeviceSynchronize());
     }
 

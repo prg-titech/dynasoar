@@ -183,7 +183,7 @@ class SoaAllocator {
   void parallel_do(int num_blocks, int num_threads) {
     ParallelExecutor<ThisAllocator, T, void, T>
         ::template FunctionWrapper<func>
-        ::parallel_do(this, num_blocks, num_threads);
+        ::parallel_do(this, num_blocks, num_threads, /*shared_mem_size=*/ 0);
   }
 
   template<typename T>
@@ -411,7 +411,9 @@ class SoaAllocator {
                            SoaBase<ThisAllocator>, /*Args...=*/ ThisAllocator*, int>
               ::template FunctionWrapper<&SoaBase<ThisAllocator>
                   ::template rewrite_object<ThisClass, ScanClassT>>
-              ::parallel_do(allocator, 128, 128, allocator, num_records);
+              ::parallel_do(allocator, 128, 128,
+                            num_records*sizeof(DefragRecord<BlockBitmapT>),
+                            allocator, num_records);
         }
 
         return true;  // Continue processing.
