@@ -228,7 +228,7 @@ class SoaAllocator {
       records[record_id].source_bitmap = 
           ~get_block<T>(source_block_idx)->free_bitmap
           & BlockHelper<T>::BlockType::kBitmapInitState;
-      // Target bitmap might have more ones, but that is OK.
+      // Target bitmap contains all free slots in target block.
       records[record_id].target_bitmap =
           get_block<T>(target_block_idx)->free_bitmap;
 
@@ -243,6 +243,7 @@ class SoaAllocator {
 
     // Find index of bit in bitmaps.
     BlockBitmapT source_bitmap = records[record_id].source_bitmap;
+    int num_moves = __popcll(source_bitmap);
     BlockBitmapT target_bitmap = records[record_id].target_bitmap;
     for (int i = 0; i < slot_id; ++i) {
       // Clear least significant bit.
@@ -267,22 +268,30 @@ class SoaAllocator {
 
     __syncthreads();
     
-    if (slot_id == 0) {
+    // Last thread performs all update, because it has access to the new
+    // target_bitmap (with all slots occupied).
+    if (slot_id == num_moves - 1) {
+      // Invalidate source block.
+      get_block<T>(records[record_id].source_block_idx)->free_bitmap = 0;
       // Delete source block.
       deallocate_block<T>(records[record_id].source_block_idx);
 
-      // Update state of target block.
-      int num_source = __popcll(records[record_id].source_bitmap);
-      int num_target_before = __popcll(~records[record_id].target_bitmap
-          & BlockHelper<T>::BlockType::kBitmapInitState);
+      // Update free_bitmap in target block.
+      target_bitmap &= target_bitmap - 1;   // Clear one more bit.
+      get_block<T>(records[record_id].target_block_idx)->free_bitmap
+          = target_bitmap;
 
-      if (num_target_before + num_source == BlockHelper<T>::kSize) {
+      // Update state of target block.
+      int num_target_after = __popcll(
+          ~target_bitmap & BlockHelper<T>::BlockType::kBitmapInitState);
+
+      if (num_target_after == BlockHelper<T>::kSize) {
         // Block is now full.
          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(
             records[record_id].target_block_idx));
       }
 
-      if (num_target_before + num_source > BlockHelper<T>::kLeq50Threshold) {
+      if (num_target_after > BlockHelper<T>::kLeq50Threshold) {
         // Block is now more than 50% full.
         ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(
             records[record_id].target_block_idx));
