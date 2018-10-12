@@ -372,7 +372,7 @@ class SoaAllocator {
                 auto* target_block = allocator->template get_block<
                     typename std::remove_pointer<FieldType>::type>(
                         records[i].target_block_idx);
-                *scan_location = target_bitmap->make_pointer(target_obj_id);
+                *scan_location = target_block->make_pointer(target_obj_id);
               }
             }
           }
