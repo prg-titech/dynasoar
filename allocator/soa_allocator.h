@@ -327,6 +327,7 @@ class SoaAllocator {
           template<typename... Args>
           __DEV__ static void call(ThisAllocator* allocator,
                                    ScanClassT* object, int num_records) {
+            assert(reinterpret_cast<char*>(object) >= allocator->data_);
             extern __shared__ DefragRecord<BlockBitmapT> records[];
 
             // Location of field value to be scanned/rewritten.
@@ -334,12 +335,18 @@ class SoaAllocator {
             // disect it again. (Inside *_from_obj_ptr().)
             FieldType* scan_location =
                 SoaFieldType::data_ptr_from_obj_ptr(object);
+            assert(reinterpret_cast<char*>(scan_location) >= allocator->data_);
             FieldType scan_value = *scan_location;
+
+            if (scan_value == nullptr) return;
 
             // Calculate block index of scan_value.
             // TODO: Find a better way to do this.
             char* block_base =
                 PointerHelper::block_base_from_obj_ptr(scan_value);
+            //printf("obj=%p, scan_value=%p \n",  object, scan_value);
+
+            assert(reinterpret_cast<char*>(block_base) > allocator->data_);
             assert((block_base - allocator->data_) % kBlockSizeBytes == 0);
             uint32_t scan_block_idx = (block_base - allocator->data_)
                 / kBlockSizeBytes;
@@ -354,10 +361,10 @@ class SoaAllocator {
 
                 // First src_obj_id bits are set to 1.
                 BlockBitmapT cnt_mask = src_obj_id ==
-                   64 ? (~0ULL) : ((1ULL << src_obj_id) - 1);
+                   63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
                 int src_bit_cnt =
                     __popcll(cnt_mask & records[i].source_bitmap) - 1;
-                assert(src_bit_cnt >= 0);
+                assert(src_bit_cnt >= 0 && src_bit_cnt < 64);
 
                 // Find src_bit_cnt-th bit in target bitmap.
                 BlockBitmapT target_bitmap = records[i].target_bitmap;
@@ -446,9 +453,6 @@ class SoaAllocator {
     allocated_[TYPE_INDEX(Types..., T)].scan();
 
     // Scan and rewrite pointers.
-    //kernel_defrag_scan<T><<<16, 32, shared_mem_size>>>(this, num_records);
-    //gpuErrchk(cudaDeviceSynchronize());
-
     TupleHelper<Types...>
         ::template for_all<SoaPointerUpdater<T>::template ClassIterator>(
             this, num_records);

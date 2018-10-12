@@ -408,33 +408,44 @@ void generate_shark_array() {
 }
 
 void step() {
+  printf("STEP\n");
   allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 64);
+  gpuErrchk(cudaDeviceSynchronize());
+  printf("DONE DEFRAG\n");
 
   // --- FISH ---
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Cell::prepare DONE\n");
 
   allocator_handle->parallel_do<16, Fish, &Fish::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Fish::prepare DONE\n");
 
   allocator_handle->parallel_do<16, Cell, &Cell::decide>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Cell::decide DONE\n");
 
   allocator_handle->parallel_do<16, Fish, &Fish::update>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Fish::update DONE\n");
 
   // --- SHARKS ---
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Cell::prepare DONE\n");
 
   allocator_handle->parallel_do<16, Shark, &Shark::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Shark::prepare DONE\n");
 
   allocator_handle->parallel_do<16, Cell, &Cell::decide>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Cell::decide DONE\n");
 
   allocator_handle->parallel_do<16, Shark, &Shark::update>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
+  printf("Shark::update DONE\n");
 }
 
 void initialize() {
