@@ -220,8 +220,8 @@ class SoaAllocator {
     extern __shared__ DefragRecord<BlockBitmapT> records[];
 
     if (slot_id == 0) {
-      uint32_t source_block_idx = leq_50_work_.deallocate();
-      uint32_t target_block_idx = leq_50_work_.deallocate();
+      uint32_t source_block_idx = leq_50_work_.deallocate_seed(record_id);
+      uint32_t target_block_idx = leq_50_work_.deallocate_seed(record_id+37);
       records[record_id].source_block_idx = source_block_idx;
       records[record_id].target_block_idx = target_block_idx;
       // Invert free_bitmap to get a bitmap of allocations.
@@ -244,6 +244,7 @@ class SoaAllocator {
     // Find index of bit in bitmaps.
     BlockBitmapT source_bitmap = records[record_id].source_bitmap;
     int num_moves = __popcll(source_bitmap);
+    assert(num_moves <= BlockHelper<T>::kSize/2);
     BlockBitmapT target_bitmap = records[record_id].target_bitmap;
     for (int i = 0; i < slot_id; ++i) {
       // Clear least significant bit.
@@ -274,6 +275,7 @@ class SoaAllocator {
       // Invalidate source block.
       get_block<T>(records[record_id].source_block_idx)->free_bitmap = 0;
       // Delete source block.
+      // Precond.: Block is leq_50_, active, allocated.
       deallocate_block<T>(records[record_id].source_block_idx);
 
       // Update free_bitmap in target block.
@@ -348,17 +350,17 @@ class SoaAllocator {
             FieldType scan_value = *scan_location;
 
             if (scan_value == nullptr) return;
+            if (scan_value->get_type() != BlockHelper<DefragT>::kIndex) return;
 
             // Calculate block index of scan_value.
             // TODO: Find a better way to do this.
             char* block_base =
                 PointerHelper::block_base_from_obj_ptr(scan_value);
-            //printf("obj=%p, scan_value=%p \n",  object, scan_value);
-
             assert(reinterpret_cast<char*>(block_base) > allocator->data_);
             assert((block_base - allocator->data_) % kBlockSizeBytes == 0);
             uint32_t scan_block_idx = (block_base - allocator->data_)
                 / kBlockSizeBytes;
+            assert(scan_block_idx < N);
 
             // Scan shared memory for matching defrag record.
             // TODO: Replace with binary search or hash-based approach.
@@ -384,12 +386,12 @@ class SoaAllocator {
                 assert(target_obj_id >= 0);
 
                 // Rewrite pointer.
+                assert(records[i].target_block_idx < N);
                 auto* target_block = allocator->template get_block<
                     typename std::remove_pointer<FieldType>::type>(
                         records[i].target_block_idx);
-                *scan_location = reinterpret_cast<FieldType>(
-                    PointerHelper::rewrite_pointer(
-                        scan_value, target_block, target_obj_id));
+                *scan_location = PointerHelper::rewrite_pointer(
+                        scan_value, target_block, target_obj_id);
               }
             }
           }
@@ -448,6 +450,10 @@ class SoaAllocator {
     auto num_leq_blocks =
         copy_from_device(&num_leq_50_[TYPE_INDEX(Types..., T)]);
     int num_records = min(max_records, num_leq_blocks/2);
+    num_records = max(0, num_records);
+
+    printf("DEFRAG with num_records=%i / %i\n", num_records, num_leq_blocks/2);
+
     int shared_mem_size = sizeof(DefragRecord<BlockBitmapT>)*num_records;
     assert(shared_mem_size <= 48*1024*1024);
 

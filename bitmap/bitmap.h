@@ -114,6 +114,27 @@ class Bitmap {
     return index;
   }
 
+  __DEV__ SizeT deallocate_seed(int seed) {
+    SizeT index;
+    bool success;
+
+    INIT_RETRY;
+
+    int retries = 0;
+    do {
+      index = find_allocated<false>(retries++ + seed);
+      if (index == kIndexError) {
+        success = false;
+      } else {
+        success = deallocate<false>(index); // if false: other thread was faster
+      }
+    } while (!success && CONTINUE_RETRY);
+
+    assert(success);
+
+    return index;
+  }
+
   // Deallocate specific index, i.e., set bit to 0. Return value indicates
   // success. If Retry, then continue retrying until successful update.
   template<bool Retry = false>
@@ -170,7 +191,7 @@ class Bitmap {
     }
 
     if (kHasNested) {
-      data_.nested_initialize(other);
+      data_.nested_initialize(other.data_);
     }
   }
   // Initialize bitmap to all 0 or all 1.
@@ -251,8 +272,9 @@ class Bitmap {
       return nested.find_allocated_private(seed);
     }
 
-    __DEV__ void nested_initialize(const Bitmap<SizeT, N, ContainerT>& other) {
-      nested.initialize(other.data_.nested);
+    __DEV__ void nested_initialize(
+        const BitmapData<NumContainers, true>& other) {
+      nested.initialize(other.nested);
     }
 
     // Initialize the nested bitmap.
@@ -299,9 +321,8 @@ class Bitmap {
       return kIndexError;
     }
 
-    __DEV__ void nested_initialize(const Bitmap<SizeT, N, ContainerT>& other) {
-      assert(false);
-    }
+    __DEV__ void nested_initialize(
+        const BitmapData<NumContainers, false>& other) { assert(false); }
 
     __DEV__ void nested_initialize(bool allocated) { assert(false); }
 

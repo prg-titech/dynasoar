@@ -17,8 +17,9 @@ struct PointerHelper {
   }
 
   // Replace block base and object ID in ptr.
-  __DEV__ static void* rewrite_pointer(void* ptr, void* block_base,
-                                       uint8_t obj_id) {
+  template<typename T>
+  __DEV__ static T* rewrite_pointer(T* ptr, void* block_base,
+                                    uint8_t obj_id) {
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     // Clear object ID and block base (48 bits).
     ptr_as_int &= ~((1ULL << 48) - 1);
@@ -26,7 +27,7 @@ struct PointerHelper {
     ptr_as_int |= obj_id;
     ptr_as_int |= reinterpret_cast<uintptr_t>(block_base);
 
-    return reinterpret_cast<void*>(ptr_as_int);
+    return reinterpret_cast<T*>(ptr_as_int);
   }
 };
 
