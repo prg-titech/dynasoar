@@ -318,6 +318,9 @@ class SoaAllocator {
       struct FieldUpdater {
         using FieldType = typename SoaFieldHelperT::type;
 
+        using SoaFieldType = SoaField<typename SoaFieldHelperT::OwnerClass,
+                                      SoaFieldHelperT::kIndex>;
+
         // Scan this field.
         template<bool Check, int Dummy> 
         struct FieldSelector {
@@ -326,10 +329,52 @@ class SoaAllocator {
                                    ScanClassT* object, int num_records) {
             extern __shared__ DefragRecord<BlockBitmapT> records[];
 
+            // Location of field value to be scanned/rewritten.
             // TODO: This is inefficient. We first build a pointer and then
-            // disect it again.
-            printf("REWRITE FIELD! alloc=%p, obj=%p, records=%i\n",
-                   allocator, object, num_records);
+            // disect it again. (Inside *_from_obj_ptr().)
+            FieldType* scan_location =
+                SoaFieldType::data_ptr_from_obj_ptr(object);
+            FieldType scan_value = *scan_location;
+
+            // Calculate block index of scan_value.
+            // TODO: Find a better way to do this.
+            char* block_base =
+                PointerHelper::block_base_from_obj_ptr(scan_value);
+            assert((block_base - allocator->data_) % kBlockSizeBytes == 0);
+            uint32_t scan_block_idx = (block_base - allocator->data_)
+                / kBlockSizeBytes;
+
+            // Scan shared memory for matching defrag record.
+            // TODO: Replace with binary search or hash-based approach.
+            for (int i = 0; i < num_records; ++i) {
+              if (records[i].source_block_idx == scan_block_idx) {
+                // This pointer must be rewritten.
+                int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
+                assert((records[i].source_bitmap & (1ULL << src_obj_id)) != 0);
+
+                // First src_obj_id bits are set to 1.
+                BlockBitmapT cnt_mask = src_obj_id ==
+                   64 ? (~0ULL) : ((1ULL << src_obj_id) - 1);
+                int src_bit_cnt =
+                    __popcll(cnt_mask & records[i].source_bitmap) - 1;
+                assert(src_bit_cnt >= 0);
+
+                // Find src_bit_cnt-th bit in target bitmap.
+                BlockBitmapT target_bitmap = records[i].target_bitmap;
+                for (int j = 0; j < src_bit_cnt; ++j) {
+                  target_bitmap &= target_bitmap - 1;
+                }
+                int target_obj_id = __ffsll(target_bitmap) - 1;
+                assert(target_obj_id >= 0);
+
+                // Rewrite pointer.
+                // THIS DOES NOT WORK! COULD HAVE A SUBCLASS OF FIELDTYPE HERE!
+                auto* target_block = allocator->template get_block<
+                    typename std::remove_pointer<FieldType>::type>(
+                        records[i].target_block_idx);
+                *scan_location = target_bitmap->make_pointer(target_obj_id);
+              }
+            }
           }
         };
 

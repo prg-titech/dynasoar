@@ -3,6 +3,20 @@
 
 #include "allocator/configuration.h"
 
+struct PointerHelper {
+  __DEV__ static uint8_t obj_id_from_obj_ptr(void* obj) {
+    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
+    return static_cast<uint8_t>(ptr_base)
+        & static_cast<uint8_t>(0x3F);  // Truncated.
+  }
+
+  __DEV__ static char* block_base_from_obj_ptr(void* obj) {
+    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
+    return reinterpret_cast<char*>(
+        ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0));
+  }
+};
+
 // Wrapper type for fields of SOA-structured classes. This class contains the
 // logic for calculating the data location of a field from an object
 // identifier.
@@ -27,11 +41,9 @@ class SoaField {
     // Block size (N_T), i.e., number of object slots in this block.
     uint8_t block_size = ptr_base >> 48;  // Truncated.
     // Object slot ID.
-    uint8_t obj_id = static_cast<uint8_t>(ptr_base)
-        & static_cast<uint8_t>(0x3F);  // Truncated.
+    uint8_t obj_id = PointerHelper::obj_id_from_obj_ptr(obj);
     // Base address of the block.
-    char* block_base = reinterpret_cast<char*>(
-        ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0));
+    char* block_base = PointerHelper::block_base_from_obj_ptr(obj);
     return data_ptr_from_location(block_base, block_size, obj_id);
   }
 
