@@ -384,11 +384,13 @@ class SoaAllocator {
               if (records[i].source_block_idx == scan_block_idx) {
                 // This pointer must be rewritten.
                 int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
+                assert(src_obj_id < BlockHelper<DefragT>::kSize);
                 assert((records[i].source_bitmap & (1ULL << src_obj_id)) != 0);
 
                 // First src_obj_id bits are set to 1.
                 BlockBitmapT cnt_mask = src_obj_id ==
                    63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
+                assert(__popcll(cnt_mask) == src_obj_id + 1);
                 int src_bit_cnt =
                     __popcll(cnt_mask & records[i].source_bitmap) - 1;
                 assert(src_bit_cnt >= 0 && src_bit_cnt < 64);
@@ -399,7 +401,11 @@ class SoaAllocator {
                   target_bitmap &= target_bitmap - 1;
                 }
                 int target_obj_id = __ffsll(target_bitmap) - 1;
+                assert(target_obj_id < BlockHelper<DefragT>::kSize);
                 assert(target_obj_id >= 0);
+                assert((allocator->template get_block<DefragT>(
+                        records[i].target_block_idx)->free_bitmap
+                    & (1ULL << target_obj_id)) == 0);
 
                 // Rewrite pointer.
                 assert(records[i].target_block_idx < N);
@@ -410,6 +416,8 @@ class SoaAllocator {
                         scan_value, target_block, target_obj_id);
                 assert(PointerHelper::block_base_from_obj_ptr(*scan_location)
                     == reinterpret_cast<char*>(target_block));
+                assert((*scan_location)->get_type()
+                    == BlockHelper<DefragT>::kIndex);
                 break;
               }
             }
