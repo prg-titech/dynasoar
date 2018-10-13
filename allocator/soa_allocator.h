@@ -483,9 +483,6 @@ class SoaAllocator {
         shared_mem_size>>>(this, num_records);
     gpuErrchk(cudaDeviceSynchronize());
 
-    // Make sure that we enumerate objects of type T correctly.
-    allocated_[TYPE_INDEX(Types..., T)].scan();
-
     // Scan and rewrite pointers.
     TupleHelper<Types...>
         ::template for_all<SoaPointerUpdater<T>::template ClassIterator>(
