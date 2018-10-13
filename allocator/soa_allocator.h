@@ -220,9 +220,6 @@ class SoaAllocator {
     extern __shared__ DefragRecord<BlockBitmapT> records[];
 
     if (slot_id == 0) {
-      int DBG_num_leq = leq_50_work_.DBG_count_num_ones();
-      printf("DBG_num_leq = %i\n", DBG_num_leq);
-      
       uint32_t source_block_idx = leq_50_work_.deallocate_seed(record_id);
       uint32_t target_block_idx = leq_50_work_.deallocate_seed(record_id+37);
       records[record_id].source_block_idx = source_block_idx;
@@ -300,6 +297,7 @@ class SoaAllocator {
         // Block is now more than 50% full.
         ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(
             records[record_id].target_block_idx));
+        atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
       }
     }
   }
