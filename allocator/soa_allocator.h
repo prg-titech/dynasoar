@@ -354,6 +354,8 @@ class SoaAllocator {
 
             // Calculate block index of scan_value.
             // TODO: Find a better way to do this.
+            // TODO: There could be some random garbage in the field if it was
+            // not initialized. Replace asserts with if-check and return stmt.
             char* block_base =
                 PointerHelper::block_base_from_obj_ptr(scan_value);
             assert(reinterpret_cast<char*>(block_base) > allocator->data_);
@@ -392,6 +394,7 @@ class SoaAllocator {
                         records[i].target_block_idx);
                 *scan_location = PointerHelper::rewrite_pointer(
                         scan_value, target_block, target_obj_id);
+                break;
               }
             }
           }
