@@ -16,6 +16,9 @@ using AllocatorT = SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell>;
 
 class Cell : public SoaBase<AllocatorT> {
  public:
+  // Sanity check for DeviceArray.
+  static_assert(sizeof(DeviceArray<bool, 5>) == 5, "Size mismatch.");
+
   using FieldTypes = std::tuple<
       DeviceArray<Cell*, 4>,         // neighbors_
       Agent*,                        // agent_

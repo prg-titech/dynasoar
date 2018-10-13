@@ -215,6 +215,7 @@ class SoaAllocator {
   template<typename T>
   __DEV__ void defrag_move() {
     // TODO: Use shared memory more efficiently.
+    assert(blockDim.x % 32 == 0);
     int slot_id = threadIdx.x % 32;
     int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
     extern __shared__ DefragRecord<BlockBitmapT> records[];
@@ -222,12 +223,21 @@ class SoaAllocator {
     if (slot_id == 0) {
       uint32_t source_block_idx = leq_50_work_.deallocate_seed(record_id);
       uint32_t target_block_idx = leq_50_work_.deallocate_seed(record_id+37);
+
+      assert(get_block<T>(source_block_idx)->type_id
+          == BlockHelper<T>::kIndex);
+      assert(get_block<T>(target_block_idx)->type_id
+          == BlockHelper<T>::kIndex);
+
       records[record_id].source_block_idx = source_block_idx;
       records[record_id].target_block_idx = target_block_idx;
       // Invert free_bitmap to get a bitmap of allocations.
       records[record_id].source_bitmap = 
           ~get_block<T>(source_block_idx)->free_bitmap
           & BlockHelper<T>::BlockType::kBitmapInitState;
+      assert(__popcll(records[record_id].source_bitmap)         // #occupied
+          == BlockHelper<T>::kSize                              // == N - #free
+              - __popcll(get_block<T>(source_block_idx)->free_bitmap));
       // Target bitmap contains all free slots in target block.
       records[record_id].target_bitmap =
           get_block<T>(target_block_idx)->free_bitmap;
@@ -273,7 +283,7 @@ class SoaAllocator {
     // target_bitmap (with all slots occupied).
     if (slot_id == num_moves - 1) {
       // Invalidate source block.
-      get_block<T>(records[record_id].source_block_idx)->free_bitmap = 0;
+      get_block<T>(records[record_id].source_block_idx)->free_bitmap = 0ULL;
       // Delete source block.
       // Precond.: Block is leq_50_, active, allocated.
       deallocate_block<T>(records[record_id].source_block_idx);
@@ -286,6 +296,8 @@ class SoaAllocator {
       // Update state of target block.
       int num_target_after = __popcll(
           ~target_bitmap & BlockHelper<T>::BlockType::kBitmapInitState);
+      assert(num_target_after == __popcll(records[record_id].source_bitmap)
+          + BlockHelper<T>::kSize - __popcll(records[record_id].target_bitmap));
 
       if (num_target_after == BlockHelper<T>::kSize) {
         // Block is now full.
@@ -339,7 +351,6 @@ class SoaAllocator {
           template<typename... Args>
           __DEV__ static void call(ThisAllocator* allocator,
                                    ScanClassT* object, int num_records) {
-            assert(reinterpret_cast<char*>(object) >= allocator->data_);
             extern __shared__ DefragRecord<BlockBitmapT> records[];
 
             // Location of field value to be scanned/rewritten.
@@ -351,6 +362,7 @@ class SoaAllocator {
             FieldType scan_value = *scan_location;
 
             if (scan_value == nullptr) return;
+            // Check if value points to an object of type DefragT.
             if (scan_value->get_type() != BlockHelper<DefragT>::kIndex) return;
 
             // Calculate block index of scan_value.
@@ -359,7 +371,8 @@ class SoaAllocator {
             // not initialized. Replace asserts with if-check and return stmt.
             char* block_base =
                 PointerHelper::block_base_from_obj_ptr(scan_value);
-            assert(reinterpret_cast<char*>(block_base) > allocator->data_);
+            assert(block_base >= allocator->data_
+                   && block_base < allocator->data_ + kDataBufferSize);
             assert((block_base - allocator->data_) % kBlockSizeBytes == 0);
             uint32_t scan_block_idx = (block_base - allocator->data_)
                 / kBlockSizeBytes;
@@ -395,6 +408,8 @@ class SoaAllocator {
                         records[i].target_block_idx);
                 *scan_location = PointerHelper::rewrite_pointer(
                         scan_value, target_block, target_obj_id);
+                assert(PointerHelper::block_base_from_obj_ptr(*scan_location)
+                    == reinterpret_cast<char*>(target_block));
                 break;
               }
             }
