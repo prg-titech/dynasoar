@@ -216,6 +216,10 @@ class Bitmap {
     }
   }
 
+  __DEV__ SizeT DBG_count_num_ones() {
+    return data_.DBG_count_num_ones();
+  }
+
   // Return true if index is allocated.
   __DEV__ bool operator[](SizeT index) const {
     return data_.containers[index/kBitsize] & (kOne << (index % kBitsize));
@@ -254,6 +258,14 @@ class Bitmap {
 
     // Containers that store the bits.
     Bitmap<SizeT, NumContainers, ContainerT> nested;
+
+    __DEV__ SizeT DBG_count_num_ones() {
+      SizeT result = 0;
+      for (int i = 0; i < NumContainers; ++i) {
+        result += __popcll(containers[i]);
+      }
+      return result;
+    }
 
     // Allocate a specific bit in the nested bitmap.
     template<bool Retry>
@@ -309,6 +321,10 @@ class Bitmap {
     // Buffers for parallel enumeration (prefix sum).
     SizeT enumeration_result_buffer[NumContainers*kBitsize];
     SizeT enumeration_result_size;
+
+    __DEV__ SizeT DBG_count_num_ones() {
+      return __popcll(containers[0]);
+    }
 
     template<bool Retry>
     __DEV__ bool nested_allocate(SizeT pos) { assert(false); return false; }
