@@ -214,48 +214,52 @@ class SoaAllocator {
 
   template<typename T>
   __DEV__ void defrag_move() {
-    // TODO: Use shared memory more efficiently.
+    // Use 32 threads per SOA block, so that we can use warp shuffles instead
+    // of shared memory.
     assert(blockDim.x % 32 == 0);
     int slot_id = threadIdx.x % 32;
     int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
-    extern __shared__ DefragRecord<BlockBitmapT> records[];
+    const unsigned active = __activemask();
+
+    // Defrag record.
+    uint32_t source_block_idx, target_block_idx;
+    BlockBitmapT source_bitmap, target_bitmap;
 
     if (slot_id == 0) {
-      uint32_t source_block_idx = leq_50_work_.deallocate_seed(record_id);
-      uint32_t target_block_idx = leq_50_work_.deallocate_seed(record_id+37);
+      source_block_idx = leq_50_work_.deallocate_seed(record_id);
+      target_block_idx = leq_50_work_.deallocate_seed(record_id+37);
 
       assert(get_block<T>(source_block_idx)->type_id
           == BlockHelper<T>::kIndex);
       assert(get_block<T>(target_block_idx)->type_id
           == BlockHelper<T>::kIndex);
 
-      records[record_id].source_block_idx = source_block_idx;
-      records[record_id].target_block_idx = target_block_idx;
       // Invert free_bitmap to get a bitmap of allocations.
-      records[record_id].source_bitmap = 
-          ~get_block<T>(source_block_idx)->free_bitmap
-          & BlockHelper<T>::BlockType::kBitmapInitState;
-      assert(__popcll(records[record_id].source_bitmap)         // #occupied
-          == BlockHelper<T>::kSize                              // == N - #free
-              - __popcll(get_block<T>(source_block_idx)->free_bitmap));
+      source_bitmap = ~get_block<T>(source_block_idx)->free_bitmap
+                      & BlockHelper<T>::BlockType::kBitmapInitState;
+      assert(__popcll(source_bitmap) == BlockHelper<T>::kSize   // == N - #free
+          - __popcll(get_block<T>(source_block_idx)->free_bitmap));
       // Target bitmap contains all free slots in target block.
-      records[record_id].target_bitmap =
-          get_block<T>(target_block_idx)->free_bitmap;
+      target_bitmap = get_block<T>(target_block_idx)->free_bitmap;
 
       // Copy to global memory for scan step.
-      defrag_records_[record_id] = records[record_id];
+      defrag_records_[record_id].source_block_idx = source_block_idx;
+      defrag_records_[record_id].target_block_idx = target_block_idx;
+      defrag_records_[record_id].source_bitmap = source_bitmap;
+      defrag_records_[record_id].target_bitmap = target_bitmap;
 
-      assert(__popcll(records[record_id].target_bitmap)
-             >= __popcll(records[record_id].source_bitmap));
+      assert(__popcll(target_bitmap) >= __popcll(source_bitmap));
     }
 
-    __syncthreads();
+    // Shuffle defrag records from thread 0.
+    source_block_idx = __shfl_sync(active, source_block_idx, 0);
+    target_block_idx = __shfl_sync(active, target_block_idx, 0);
+    source_bitmap = __shfl_sync(active, source_bitmap, 0);
+    target_bitmap = __shfl_sync(active, target_bitmap, 0);
 
     // Find index of bit in bitmaps.
-    BlockBitmapT source_bitmap = records[record_id].source_bitmap;
     int num_moves = __popcll(source_bitmap);
     assert(num_moves <= BlockHelper<T>::kSize/2);
-    BlockBitmapT target_bitmap = records[record_id].target_bitmap;
     for (int i = 0; i < slot_id; ++i) {
       // Clear least significant bit.
       source_bitmap &= source_bitmap - 1;
@@ -270,45 +274,38 @@ class SoaAllocator {
 
       SoaClassHelper<T>::template dev_for_all<
               SoaObjectCopier<T>::ObjectCopyHelper, true>(
-          reinterpret_cast<char*>(
-              get_block<T>(records[record_id].source_block_idx)),
-          reinterpret_cast<char*>(
-              get_block<T>(records[record_id].target_block_idx)),
+          reinterpret_cast<char*>(get_block<T>(source_block_idx)),
+          reinterpret_cast<char*>(get_block<T>(target_block_idx)),
           source_object_id, target_object_id);
     }
-
-    __syncthreads();
     
     // Last thread performs all update, because it has access to the new
     // target_bitmap (with all slots occupied).
     if (slot_id == num_moves - 1) {
       // Invalidate source block.
-      get_block<T>(records[record_id].source_block_idx)->free_bitmap = 0ULL;
+      get_block<T>(source_block_idx)->free_bitmap = 0ULL;
       // Delete source block.
       // Precond.: Block is leq_50_, active, allocated.
-      deallocate_block<T>(records[record_id].source_block_idx);
+      deallocate_block<T>(source_block_idx);
 
       // Update free_bitmap in target block.
       target_bitmap &= target_bitmap - 1;   // Clear one more bit.
-      get_block<T>(records[record_id].target_block_idx)->free_bitmap
-          = target_bitmap;
+      get_block<T>(target_block_idx)->free_bitmap = target_bitmap;
 
       // Update state of target block.
       int num_target_after = __popcll(
           ~target_bitmap & BlockHelper<T>::BlockType::kBitmapInitState);
-      assert(num_target_after == __popcll(records[record_id].source_bitmap)
-          + BlockHelper<T>::kSize - __popcll(records[record_id].target_bitmap));
 
       if (num_target_after == BlockHelper<T>::kSize) {
         // Block is now full.
          ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(
-            records[record_id].target_block_idx));
+            target_block_idx));
       }
 
       if (num_target_after > BlockHelper<T>::kLeq50Threshold) {
         // Block is now more than 50% full.
         ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(
-            records[record_id].target_block_idx));
+            target_block_idx));
         atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
       }
     }
@@ -479,14 +476,10 @@ class SoaAllocator {
     int num_records = min(max_records, num_leq_blocks/2);
     num_records = max(0, num_records);
 
-    int shared_mem_size = sizeof(DefragRecord<BlockBitmapT>)*num_records;
-    assert(shared_mem_size <= 48*1024*1024);
-
     // Move objects. 4 SOA block per CUDA block. 32 threads per block.
     // (Because blocks are at most 50% full.)
     kernel_defrag_move<T><<<
-        (num_records + 4 - 1) / 4, 128,
-        shared_mem_size>>>(this, num_records);
+        (num_records + 4 - 1) / 4, 128>>>(this, num_records);
     gpuErrchk(cudaDeviceSynchronize());
 
     // Scan and rewrite pointers.
