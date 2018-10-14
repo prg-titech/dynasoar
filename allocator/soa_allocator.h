@@ -497,18 +497,19 @@ class SoaAllocator {
 
   // Should be invoked from host side.
   template<typename T>
-  void parallel_defrag(int num_blocks, int num_threads, int max_records) {
-    // Create working copy of leq_50_ bitmap.
-    kernel_initialize_leq<T><<<256, 256>>>(this);
-    gpuErrchk(cudaDeviceSynchronize());
-
+  void parallel_defrag(int num_blocks, int num_threads, int max_records,
+                       int min_records = 1) {
     // Determine number of records.
     auto num_leq_blocks =
         copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
     int num_records = min(max_records, num_leq_blocks/2);
     num_records = max(0, num_records);
 
-    if (num_records > 0) {
+    if (num_records >= min_records) {
+      // Create working copy of leq_50_ bitmap.
+      kernel_initialize_leq<T><<<256, 256>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+
       // Move objects. 4 SOA block per CUDA block. 32 threads per block.
       // (Because blocks are at most 50% full.)
       kernel_defrag_move<T><<<

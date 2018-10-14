@@ -410,8 +410,13 @@ void generate_shark_array() {
 void step() {
   gpuErrchk(cudaDeviceSynchronize());
   allocator_handle->parallel_defrag<Fish>(/*num_blocks=*/ 128,
-                                          /*num_threads=*/ 128,
-                                          /*max_records=*/ 64);
+                                          /*num_threads=*/ 1024,
+                                          /*max_records=*/ 512,
+                                          /*min_records=*/ 32);
+  allocator_handle->parallel_defrag<Shark>(/*num_blocks=*/ 128,
+                                           /*num_threads=*/ 1024,
+                                           /*max_records=*/ 512,
+                                           /*min_records=*/ 32);
   gpuErrchk(cudaDeviceSynchronize());
 
   // --- FISH ---

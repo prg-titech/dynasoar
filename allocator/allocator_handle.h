@@ -40,8 +40,10 @@ class AllocatorHandle {
   }
 
   template<class T>
-  void parallel_defrag(int num_blocks, int num_threads, int max_records) {
-    allocator_->parallel_defrag<T>(num_blocks, num_threads, max_records);
+  void parallel_defrag(int num_blocks, int num_threads, int max_records,
+                       int min_records = 1) {
+    allocator_->parallel_defrag<T>(num_blocks, num_threads, max_records,
+                                   min_records);
   }
 
  private:
