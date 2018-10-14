@@ -196,6 +196,9 @@ class SoaAllocator {
 
       __DEV__ bool operator()(char* source_block_base, char* target_block_base,
                               uint8_t source_slot, uint8_t target_slot) {
+        assert(source_slot < BlockHelper<T>::kSize);
+        assert(target_slot < BlockHelper<T>::kSize);
+
         // TODO: Optimize copy routine for single value. Should not use the
         // assignment operator here.
         // TODO: Make block size a template parameter.
@@ -205,11 +208,12 @@ class SoaAllocator {
         typename SoaFieldHelperT::type* target_ptr =
             SoaFieldType::data_ptr_from_location(
                 target_block_base, BlockHelper<T>::kSize, target_slot);
+
         *target_ptr = *source_ptr;
 
 #ifndef NDEBUG
         // Reset value for debugging purposes.
-        *source_ptr = 0;
+        memset(source_ptr, 0, sizeof(typename SoaFieldHelperT::type));
 #endif  // NDEBUG
 
         return true;  // Continue processing.
@@ -353,7 +357,8 @@ class SoaAllocator {
           template<typename... Args>
           __DEV__ static void call(ThisAllocator* allocator,
                                    ScanClassT* object, int num_records) {
-            extern __shared__ DefragRecord<BlockBitmapT> records[];
+            //extern __shared__ DefragRecord<BlockBitmapT> records[];
+            auto* records = allocator->defrag_records_;
 
             // Location of field value to be scanned/rewritten.
             // TODO: This is inefficient. We first build a pointer and then
@@ -392,21 +397,11 @@ class SoaAllocator {
                 assert((records[i].source_bitmap & (1ULL << src_obj_id)) != 0);
 
                 // First src_obj_id bits are set to 1.
-                /*
                 BlockBitmapT cnt_mask = src_obj_id ==
                    63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
                 assert(__popcll(cnt_mask) == src_obj_id + 1);
                 int src_bit_cnt =
                     __popcll(cnt_mask & records[i].source_bitmap) - 1;
-                    */
-
-                int src_bit_cnt = 0;
-                for (int j = 0; j < src_obj_id; ++j) {
-                  if ((records[i].source_bitmap & (1ULL << src_obj_id)) != 0) {
-                    ++src_bit_cnt;
-                  }
-                }
-                assert(src_bit_cnt >= 0 && src_bit_cnt < 64);
 
                 // Find src_bit_cnt-th bit in target bitmap.
                 BlockBitmapT target_bitmap = records[i].target_bitmap;
@@ -427,10 +422,19 @@ class SoaAllocator {
                         records[i].target_block_idx);
                 *scan_location = PointerHelper::rewrite_pointer(
                         scan_value, target_block, target_obj_id);
+
+#ifndef NDEBUG
+                // Sanity checks.
                 assert(PointerHelper::block_base_from_obj_ptr(*scan_location)
                     == reinterpret_cast<char*>(target_block));
                 assert((*scan_location)->get_type()
                     == BlockHelper<DefragT>::kIndex);
+                auto* loc_block = reinterpret_cast<typename BlockHelper<DefragT>::BlockType*>(
+                    PointerHelper::block_base_from_obj_ptr(*scan_location));
+                assert(loc_block->type_id == BlockHelper<DefragT>::kIndex);
+                assert((loc_block->free_bitmap & (1ULL << target_obj_id)) == 0);
+#endif  // NDEBUG
+
                 break;
               }
             }
@@ -453,11 +457,12 @@ class SoaAllocator {
               && std::is_base_of<typename std::remove_pointer<FieldType>::type,
                                  DefragT>::value, 0>::call(
               allocator, object, num_records);
-          return true;
+          return true;  // Continue processing.
         }
       };
 
-      bool operator()(ThisAllocator* allocator, int num_records) {
+      bool operator()(ThisAllocator* allocator, int num_blocks,
+                      int num_threads, int num_records) {
         bool process_class = SoaClassHelper<ScanClassT>::template for_all<
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
@@ -469,7 +474,7 @@ class SoaAllocator {
                            SoaBase<ThisAllocator>, /*Args...=*/ ThisAllocator*, int>
               ::template FunctionWrapper<&SoaBase<ThisAllocator>
                   ::template rewrite_object<ThisClass, ScanClassT>>
-              ::parallel_do(allocator, 128, 128,
+              ::parallel_do(allocator, num_blocks, num_threads,
                             num_records*sizeof(DefragRecord<BlockBitmapT>),
                             allocator, num_records);
         }
@@ -481,7 +486,7 @@ class SoaAllocator {
 
   // Should be invoked from host side.
   template<typename T>
-  void parallel_defrag(int max_records) {
+  void parallel_defrag(int num_blocks, int num_threads, int max_records) {
     // Create working copy of leq_50_ bitmap.
     kernel_initialize_leq<T><<<256, 256>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
@@ -501,7 +506,7 @@ class SoaAllocator {
     // Scan and rewrite pointers.
     TupleHelper<Types...>
         ::template for_all<SoaPointerUpdater<T>::template ClassIterator>(
-            this, num_records);
+            this, num_blocks, num_threads, num_records);
   }
 
   template<typename T>

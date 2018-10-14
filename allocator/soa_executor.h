@@ -18,6 +18,7 @@ template<typename AllocatorT, typename T, typename R,
 struct ParallelExecutor {
   using BlockHelperT = typename AllocatorT::template BlockHelper<T>;
   static const int kTypeIndex = BlockHelperT::kIndex;
+  static const int kSize = BlockHelperT::kSize;
 
   template<R (Base::*func)(Args...)>
   struct FunctionWrapper {
@@ -36,13 +37,12 @@ struct ParallelExecutor {
                                          Args... args) {
       const uint32_t N_alloc =
           allocator->allocated_[kTypeIndex].scan_num_bits();
-      const int num_objs = BlockHelperT::kSize;
 
       // Round to multiple of 64.
-      int num_threads = ((blockDim.x * gridDim.x)/num_objs)*num_objs;
+      int num_threads = ((blockDim.x * gridDim.x)/kSize)*kSize;
       int tid = blockIdx.x * blockDim.x + threadIdx.x;
       if (tid < num_threads) {
-        for (int j = tid/num_objs; j < N_alloc; j += num_threads/num_objs) {
+        for (int j = tid/kSize; j < N_alloc; j += num_threads/kSize) {
           // i is the index of in the scan array.
           int block_idx = allocator->allocated_[kTypeIndex].scan_get_index(j);
 
@@ -50,7 +50,7 @@ struct ParallelExecutor {
           auto* block = allocator->template get_block<T>(block_idx);
           auto iteration_bitmap = block->iteration_bitmap;
 
-          int thread_offset = tid % num_objs;
+          int thread_offset = tid % kSize;
           // Advance bitmap to return thread_offset-th bit index.
           for (int i = 0; i < thread_offset; ++i) {
             // Clear last bit.
