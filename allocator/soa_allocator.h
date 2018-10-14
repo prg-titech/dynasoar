@@ -113,7 +113,7 @@ class SoaAllocator {
         int num_allocated = __popcll(allocation_bitmap);
 
         uint8_t actual_type_id = block->type_id;
-        if (actual_type_id != TYPE_INDEX(Types..., T)) {
+        if (actual_type_id != BlockHelper<T>::kIndex) {
           // Block deallocated and initialized for a new type between lookup
           // from active bitmap and here. This is extremely unlikely!
           // But possible.
@@ -163,7 +163,7 @@ class SoaAllocator {
   template<class T>
   __DEV__ void free(T* obj) {
     uint8_t type_id = obj->get_type();
-    if (type_id == TYPE_INDEX(Types..., T)) {
+    if (type_id == BlockHelper<T>::kIndex) {
       free_typed(obj);
     } else {
       ASSERT_SUCCESS(TupleHelper<Types...>
@@ -301,15 +301,15 @@ class SoaAllocator {
 
       if (num_target_after == BlockHelper<T>::kSize) {
         // Block is now full.
-         ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(
+         ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(
             records[record_id].target_block_idx));
       }
 
       if (num_target_after > BlockHelper<T>::kLeq50Threshold) {
         // Block is now more than 50% full.
-        ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(
+        ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(
             records[record_id].target_block_idx));
-        atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
+        atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
       }
     }
   }
@@ -475,11 +475,9 @@ class SoaAllocator {
 
     // Determine number of records.
     auto num_leq_blocks =
-        copy_from_device(&num_leq_50_[TYPE_INDEX(Types..., T)]);
+        copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
     int num_records = min(max_records, num_leq_blocks/2);
     num_records = max(0, num_records);
-
-    printf("DEFRAG with num_records=%i / %i\n", num_records, num_leq_blocks/2);
 
     int shared_mem_size = sizeof(DefragRecord<BlockBitmapT>)*num_records;
     assert(shared_mem_size <= 48*1024*1024);
@@ -501,7 +499,7 @@ class SoaAllocator {
   __DEV__ void initialize_iteration() {
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
          i += blockDim.x * gridDim.x) {
-      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
+      if (allocated_[BlockHelper<T>::kIndex][i]) {
         // Initialize block.
         get_block<T>(i)->initialize_iteration();
       }
@@ -510,7 +508,7 @@ class SoaAllocator {
 
   template<typename T>
   __DEV__ void initialize_leq_work_bitmap() {
-    leq_50_work_.initialize(leq_50_[TYPE_INDEX(Types..., T)]);
+    leq_50_work_.initialize(leq_50_[BlockHelper<T>::kIndex]);
   }
 
   // The number of allocated slots of a type. (#blocks * blocksize)
@@ -518,7 +516,7 @@ class SoaAllocator {
   __DEV__ uint32_t DBG_allocated_slots() {
     uint32_t counter = 0;
     for (int i = 0; i < N; ++i) {
-      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
+      if (allocated_[BlockHelper<T>::kIndex][i]) {
         counter += get_block<T>(i)->DBG_num_bits();
       }
     }
@@ -530,7 +528,7 @@ class SoaAllocator {
   __DEV__ uint32_t DBG_used_slots() {
     uint32_t counter = 0;
     for (int i = 0; i < N; ++i) {
-      if (allocated_[TYPE_INDEX(Types..., T)][i]) {
+      if (allocated_[BlockHelper<T>::kIndex][i]) {
         counter += get_block<T>(i)->DBG_allocated_bits();
       }
     }
@@ -616,15 +614,15 @@ class SoaAllocator {
         selected_bits |= successful_alloc;
 
         if (block_full) {
-          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+          ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
         }
 
         // Check if more than 50% full now.
         int prev_full = BlockHelper<T>::kSize - __popcll(before_update);
         if (prev_full <= BlockHelper<T>::kLeq50Threshold
             && prev_full + num_successful_alloc > BlockHelper<T>::kLeq50Threshold) {
-          ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-          atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
+          ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
+          atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
         }
       }
 
@@ -639,10 +637,10 @@ class SoaAllocator {
   // Note: Assuming that the block is leq_50_!
   template<class T>
   __DEV__ void deallocate_block(uint32_t block_idx) {
-    ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-    ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-    atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
-    ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+    ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
+    ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
+    atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+    ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
     ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
   }
 
@@ -654,7 +652,7 @@ class SoaAllocator {
     const auto dealloc_state = get_block<T>(block_idx)->deallocate(obj_id);
 
     if (dealloc_state == kBlockNowActive) {
-      ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+      ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
     } else if (dealloc_state == kBlockNowEmpty) {
       // Assume that block is empty.
       // TODO: Special case if N == 2 or N == 1 for leq_50_.
@@ -663,8 +661,8 @@ class SoaAllocator {
         deallocate_block<T>(block_idx);
       }
     } else if (dealloc_state == kBlockNowLeq50Full) {
-      ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
-      atomicAdd(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
+      ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
+      atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
     }
   }
 
@@ -679,7 +677,7 @@ class SoaAllocator {
       template<bool Check, int Dummy>
       struct ClassSelector {
         __DEV__ static bool call(ThisAllocator* allocator, BaseClass* obj) {
-          if (obj->get_type() == TYPE_INDEX(Types..., T)) {
+          if (obj->get_type() == BlockHelper<T>::kIndex) {
             allocator->free_typed(static_cast<T*>(obj));
             return false;  // No need to check other types.
           } else {
@@ -705,7 +703,7 @@ class SoaAllocator {
 
   template<typename T>
   __DEV__ bool is_block_allocated(uint32_t index) {
-    return allocated_[TYPE_INDEX(Types..., T)][index];
+    return allocated_[BlockHelper<T>::kIndex][index];
   }
 
   template<class T>
@@ -745,7 +743,7 @@ class SoaAllocator {
       // TODO: Tune number of retries.
       int retries = 5;   // retries=2 before
       do {
-        block_idx = active_[TYPE_INDEX(Types..., T)]
+        block_idx = active_[BlockHelper<T>::kIndex]
             .template find_allocated<false>(retries);
       } while (block_idx == Bitmap<uint32_t, N>::kIndexError
                && --retries > 0);
@@ -755,10 +753,10 @@ class SoaAllocator {
         block_idx = global_free_.deallocate();
         assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
-        ASSERT_SUCCESS(allocated_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
-        ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
-        atomicAdd(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
-        ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].allocate<true>(block_idx));
+        ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
+        ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
+        atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+        ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
       }
     } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
 
@@ -820,14 +818,14 @@ class SoaAllocator {
           if (N - __popcll(old_free_bitmap) > BlockHelper<T>::kLeq50Threshold
               && N - __popcll(before_rollback) <= BlockHelper<T>::kLeq50Threshold) {
             // Some thread is trying to set the bit in the leq_50 bitmap.
-            ASSERT_SUCCESS(leq_50_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
-            atomicSub(&num_leq_50_[TYPE_INDEX(Types..., T)], 1);
+            ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
+            atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
           }
 
           // At least 1 other thread deallocated an object (set a bit). That
           // thread is attempting to make the block active. For this to
           // succeed, we have to deactivate the block here.
-          ASSERT_SUCCESS(active_[TYPE_INDEX(Types..., T)].deallocate<true>(block_idx));
+          ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
         }
 
         if ((before_rollback | old_free_bitmap) !=
