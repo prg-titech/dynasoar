@@ -207,6 +207,11 @@ class SoaAllocator {
                 target_block_base, BlockHelper<T>::kSize, target_slot);
         *target_ptr = *source_ptr;
 
+#ifndef NDEBUG
+        // Reset value for debugging purposes.
+        *source_ptr = 0;
+#endif  // NDEBUG
+
         return true;  // Continue processing.
       }
     };
