@@ -357,8 +357,8 @@ class SoaAllocator {
           template<typename... Args>
           __DEV__ static void call(ThisAllocator* allocator,
                                    ScanClassT* object, int num_records) {
-            //extern __shared__ DefragRecord<BlockBitmapT> records[];
-            auto* records = allocator->defrag_records_;
+            assert(num_records == allocator->num_defrag_records_);
+            extern __shared__ DefragRecord<BlockBitmapT> records[];
 
             // Location of field value to be scanned/rewritten.
             // TODO: This is inefficient. We first build a pointer and then
@@ -474,15 +474,26 @@ class SoaAllocator {
                            SoaBase<ThisAllocator>, /*Args...=*/ ThisAllocator*, int>
               ::template FunctionWrapper<&SoaBase<ThisAllocator>
                   ::template rewrite_object<ThisClass, ScanClassT>>
+              ::template WithPre<&ThisAllocator::load_records_to_shared_mem>
               ::parallel_do(allocator, num_blocks, num_threads,
-                            num_records*sizeof(DefragRecord<BlockBitmapT>),
-                            allocator, num_records);
+                                     num_records*sizeof(DefragRecord<BlockBitmapT>),
+                                     allocator, num_records);
         }
 
         return true;  // Continue processing.
       }
     };
   };
+
+  __DEV__ void load_records_to_shared_mem(ThisAllocator* allocator,
+                                          int num_records) {
+    extern __shared__ DefragRecord<BlockBitmapT> records[];
+    for (int i = threadIdx.x; i < num_defrag_records_; i += blockDim.x) {
+      records[i] = defrag_records_[i];
+    }
+
+    __syncthreads();
+  }
 
   // Should be invoked from host side.
   template<typename T>
@@ -497,16 +508,18 @@ class SoaAllocator {
     int num_records = min(max_records, num_leq_blocks/2);
     num_records = max(0, num_records);
 
-    // Move objects. 4 SOA block per CUDA block. 32 threads per block.
-    // (Because blocks are at most 50% full.)
-    kernel_defrag_move<T><<<
-        (num_records + 4 - 1) / 4, 128>>>(this, num_records);
-    gpuErrchk(cudaDeviceSynchronize());
+    if (num_records > 0) {
+      // Move objects. 4 SOA block per CUDA block. 32 threads per block.
+      // (Because blocks are at most 50% full.)
+      kernel_defrag_move<T><<<
+          (num_records + 4 - 1) / 4, 128>>>(this, num_records);
+      gpuErrchk(cudaDeviceSynchronize());
 
-    // Scan and rewrite pointers.
-    TupleHelper<Types...>
-        ::template for_all<SoaPointerUpdater<T>::template ClassIterator>(
-            this, num_blocks, num_threads, num_records);
+      // Scan and rewrite pointers.
+      TupleHelper<Types...>
+          ::template for_all<SoaPointerUpdater<T>::template ClassIterator>(
+              this, num_blocks, num_threads, num_records);
+    }
   }
 
   template<typename T>
@@ -871,6 +884,7 @@ class SoaAllocator {
   Bitmap<uint32_t, N> leq_50_work_;
 
   // Temporary storage for defragmentation records.
+  int num_defrag_records_;
   DefragRecord<BlockBitmapT> defrag_records_[8192];
 
   char* data_;

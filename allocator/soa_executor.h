@@ -13,6 +13,16 @@ __global__ void kernel_parallel_do(AllocatorT* allocator, Args... args) {
   WrapperT::parallel_do_cuda(allocator, args...);
 }
 
+// Run member function on allocator, then perform do-all operation.
+template<typename WrapperT, typename PreT,
+         typename AllocatorT, typename... Args>
+__global__ void kernel_parallel_do_with_pre(AllocatorT* allocator, Args... args) {
+  // TODO: Check overhead of allocator pointer dereference.
+  // There is definitely a 2% overhead or so.....
+  PreT::run_pre(allocator, args...);
+  WrapperT::parallel_do_cuda(allocator, args...);
+}
+
 template<typename AllocatorT, typename T, typename R,
          typename Base, typename... Args>
 struct ParallelExecutor {
@@ -32,6 +42,24 @@ struct ParallelExecutor {
           <<<num_blocks, num_threads, shared_mem_size>>>(allocator, args...);
       gpuErrchk(cudaDeviceSynchronize());
     }
+
+    template<void(AllocatorT::*pre_func)(Args...)>
+    struct WithPre {
+      using PreClass = WithPre<pre_func>;
+
+      static void parallel_do(AllocatorT* allocator, int num_blocks,
+                              int num_threads, int shared_mem_size,
+                              Args... args) {
+        allocator->allocated_[kTypeIndex].scan();
+        kernel_parallel_do_with_pre<ThisClass, PreClass>
+            <<<num_blocks, num_threads, shared_mem_size>>>(allocator, args...);
+        gpuErrchk(cudaDeviceSynchronize());
+      }
+
+      __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {
+        (allocator->*pre_func)(args...);
+      }
+    };
 
     static __DEV__ void parallel_do_cuda(AllocatorT* allocator,
                                          Args... args) {

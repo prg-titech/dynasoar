@@ -16,14 +16,6 @@ class SoaBase {
 
   template<typename ClassIterT, typename ScanClassT>
   __DEV__ void rewrite_object(AllocatorT* allocator, int num_records) {
-    // Load records into shared memory.
-    extern __shared__ DefragRecord<typename AllocatorT::BlockBitmapT> records[];
-    for (int i = threadIdx.x; i < num_records; i += blockDim.x) {
-      records[i] = allocator->defrag_records_[i];
-    }
-
-    __syncthreads();
-
     SoaClassHelper<ScanClassT>::template dev_for_all<ClassIterT::FieldUpdater,
                                                      /*IterateBase=*/ true>(
         allocator, static_cast<ScanClassT*>(this), num_records);

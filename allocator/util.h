@@ -24,6 +24,10 @@ __global__ void kernel_initialize_leq(AllocatorT* allocator) {
 template<class T, typename AllocatorT>
 __global__ void kernel_defrag_move(AllocatorT* allocator, int num_records) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tid == 0) {
+    allocator->num_defrag_records_ = num_records;
+  }
+
   if (tid < num_records*32) {
     allocator->template defrag_move<T>();
   }

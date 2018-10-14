@@ -9,6 +9,13 @@ struct DefragRecord {
   BitmapT target_bitmap;
   uint32_t source_block_idx;
   uint32_t target_block_idx;
+
+  __DEV__ bool operator==(const DefragRecord<BitmapT>& other) const {
+    return source_bitmap == other.source_bitmap
+        && target_bitmap == other.target_bitmap
+        && source_block_idx == other.source_block_idx
+        && target_block_idx == other.target_block_idx;
+  }
 };
 
 #endif  // ALLOCATOR_SOA_DEFRAG_H
