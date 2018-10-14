@@ -18,10 +18,8 @@ class SoaBase {
   __DEV__ void rewrite_object(AllocatorT* allocator, int num_records) {
     // Load records into shared memory.
     extern __shared__ DefragRecord<typename AllocatorT::BlockBitmapT> records[];
-    assert(blockDim.x >= num_records);
-    if (threadIdx.x < num_records) {
-      // One thread per record.
-      records[threadIdx.x] = allocator->defrag_records_[threadIdx.x];
+    for (int i = threadIdx.x; i < num_records; i += blockDim.x) {
+      records[i] = allocator->defrag_records_[i];
     }
 
     __syncthreads();
