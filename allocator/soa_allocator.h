@@ -347,8 +347,9 @@ class SoaAllocator {
         struct FieldSelector {
           template<typename... Args>
           __DEV__ static void call(ThisAllocator* allocator,
-                                   ScanClassT* object, int num_records) {
-            extern __shared__ DefragRecord<BlockBitmapT> records[];
+                                   ScanClassT* object, int num_records,
+                                   DefragRecord<BlockBitmapT>* records) {
+            //extern __shared__ DefragRecord<BlockBitmapT> records[];
 
             // Location of field value to be scanned/rewritten.
             // TODO: This is inefficient. We first build a pointer and then
@@ -426,17 +427,18 @@ class SoaAllocator {
         struct FieldSelector<false, Dummy> {
           __DEV__ static void call(ThisAllocator* allocator,
                                    ScanClassT* object,
-                                   int num_records) {}
+                                   int num_records,
+                                   DefragRecord<BlockBitmapT>* records) {}
         };
 
         __DEV__ bool operator()(ThisAllocator* allocator, ScanClassT* object,
-                                int num_records) {
+                                int num_records, DefragRecord<BlockBitmapT>* records) {
           // Rewrite field if field type is a super class (or exact class)
           // of DefragT.
           FieldSelector<std::is_pointer<FieldType>::value
               && std::is_base_of<typename std::remove_pointer<FieldType>::type,
                                  DefragT>::value, 0>::call(
-              allocator, object, num_records);
+              allocator, object, num_records, records);
           return true;
         }
       };

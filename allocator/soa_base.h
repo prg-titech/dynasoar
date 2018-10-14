@@ -26,7 +26,7 @@ class SoaBase {
 
     SoaClassHelper<ScanClassT>::template dev_for_all<ClassIterT::FieldUpdater,
                                                      /*IterateBase=*/ true>(
-        allocator, static_cast<ScanClassT*>(this), num_records);
+        allocator, static_cast<ScanClassT*>(this), num_records, records);
   }
 };
 
