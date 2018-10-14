@@ -360,7 +360,9 @@ class SoaAllocator {
             // disect it again. (Inside *_from_obj_ptr().)
             FieldType* scan_location =
                 SoaFieldType::data_ptr_from_obj_ptr(object);
-            assert(reinterpret_cast<char*>(scan_location) >= allocator->data_);
+            assert(reinterpret_cast<char*>(scan_location) >= allocator->data_
+                && reinterpret_cast<char*>(scan_location)
+                    < allocator->data_ + kDataBufferSize);
             FieldType scan_value = *scan_location;
 
             if (scan_value == nullptr) return;
@@ -390,11 +392,20 @@ class SoaAllocator {
                 assert((records[i].source_bitmap & (1ULL << src_obj_id)) != 0);
 
                 // First src_obj_id bits are set to 1.
+                /*
                 BlockBitmapT cnt_mask = src_obj_id ==
                    63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
                 assert(__popcll(cnt_mask) == src_obj_id + 1);
                 int src_bit_cnt =
                     __popcll(cnt_mask & records[i].source_bitmap) - 1;
+                    */
+
+                int src_bit_cnt = 0;
+                for (int j = 0; j < src_obj_id; ++j) {
+                  if ((records[i].source_bitmap & (1ULL << src_obj_id)) != 0) {
+                    ++src_bit_cnt;
+                  }
+                }
                 assert(src_bit_cnt >= 0 && src_bit_cnt < 64);
 
                 // Find src_bit_cnt-th bit in target bitmap.
