@@ -17,13 +17,20 @@ __forceinline__ __device__ unsigned int __lanemask_lt() {
 }
 
 template<class T, typename AllocatorT>
-__global__ void kernel_initialize_leq(AllocatorT* allocator) {
+__global__ void kernel_initialize_leq(AllocatorT* allocator,
+                                      int num_records) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tid < num_records) {
+    allocator->initialize_leq_collisions();
+  }
+
   allocator->template initialize_leq_work_bitmap<T>();
 }
 
 template<class T, typename AllocatorT>
 __global__ void kernel_defrag_move(AllocatorT* allocator, int num_records) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  // TODO: Move to intialization kernel.
   if (tid == 0) {
     allocator->num_defrag_records_ = num_records;
   }

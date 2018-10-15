@@ -221,8 +221,13 @@ class SoaAllocator {
     };
   };
 
-  static const SizeT kDefragIndexEmpty =
+  static const unsigned int kDefragIndexEmpty =
       std::numeric_limits<unsigned int>::max();
+
+  __DEV__ void initialize_leq_collisions() {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    leq_collisions_[tid] = kDefragIndexEmpty;
+  }
 
   template<typename T>
   __DEV__ void defrag_move() {
@@ -231,7 +236,7 @@ class SoaAllocator {
     assert(blockDim.x % 32 == 0);
     int slot_id = threadIdx.x % 32;
     int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
-    int num_buckets = blockIdx.x * gridDim.x / 32;
+    int num_buckets = blockDim.x * gridDim.x / 32;
     const unsigned active = __activemask();
 
     // Problem: Cannot keep collision array in shared memory.
@@ -245,13 +250,16 @@ class SoaAllocator {
         source_block_idx = leq_50_work_.deallocate_seed(record_id + i);
 
         record_id = block_idx_hash(source_block_idx, num_buckets);
-        auto before = atomicCAS(&leq_collisions_[record_id].source_block_idx,
+        assert(record_id < num_buckets);
+        auto before = atomicCAS(&leq_collisions_[record_id],
                                 /*compare=*/ kDefragIndexEmpty,
-                                /*before=*/ source_block_idx);
+                                /*val=*/ source_block_idx);
 
         if (before == kDefragIndexEmpty) {
           break;
         } else {
+          // Collision detected.
+          ASSERT_SUCCESS(leq_50_work_.allocate<true>(source_block_idx));
           source_block_idx = kDefragIndexEmpty;
         }
       }
@@ -279,60 +287,62 @@ class SoaAllocator {
 
     // Shuffle defrag records from thread 0.
     source_block_idx = __shfl_sync(active, source_block_idx, 0);
-    target_block_idx = __shfl_sync(active, target_block_idx, 0);
-    source_bitmap = __shfl_sync(active, source_bitmap, 0);
-    target_bitmap = __shfl_sync(active, target_bitmap, 0);
+    if (source_block_idx != kDefragIndexEmpty) {
+      target_block_idx = __shfl_sync(active, target_block_idx, 0);
+      source_bitmap = __shfl_sync(active, source_bitmap, 0);
+      target_bitmap = __shfl_sync(active, target_bitmap, 0);
 
-    // Find index of bit in bitmaps.
-    int num_moves = __popcll(source_bitmap);
-    assert(num_moves <= BlockHelper<T>::kSize/2);
-    for (int i = 0; i < slot_id; ++i) {
-      // Clear least significant bit.
-      source_bitmap &= source_bitmap - 1;
-      target_bitmap &= target_bitmap - 1;
-    }
-    int source_object_id = __ffsll(source_bitmap) - 1;
-    int target_object_id = __ffsll(target_bitmap) - 1;
-
-    // Move objects.
-    if (source_object_id > -1) {
-      assert(target_object_id > -1);
-
-      SoaClassHelper<T>::template dev_for_all<
-              SoaObjectCopier<T>::ObjectCopyHelper, true>(
-          reinterpret_cast<char*>(get_block<T>(source_block_idx)),
-          reinterpret_cast<char*>(get_block<T>(target_block_idx)),
-          source_object_id, target_object_id);
-    }
-    
-    // Last thread performs all update, because it has access to the new
-    // target_bitmap (with all slots occupied).
-    if (slot_id == num_moves - 1) {
-      // Invalidate source block.
-      get_block<T>(source_block_idx)->free_bitmap = 0ULL;
-      // Delete source block.
-      // Precond.: Block is leq_50_, active, allocated.
-      deallocate_block<T>(source_block_idx);
-
-      // Update free_bitmap in target block.
-      target_bitmap &= target_bitmap - 1;   // Clear one more bit.
-      get_block<T>(target_block_idx)->free_bitmap = target_bitmap;
-
-      // Update state of target block.
-      int num_target_after = __popcll(
-          ~target_bitmap & BlockHelper<T>::BlockType::kBitmapInitState);
-
-      if (num_target_after == BlockHelper<T>::kSize) {
-        // Block is now full.
-         ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(
-            target_block_idx));
+      // Find index of bit in bitmaps.
+      int num_moves = __popcll(source_bitmap);
+      assert(num_moves <= BlockHelper<T>::kSize/2);
+      for (int i = 0; i < slot_id; ++i) {
+        // Clear least significant bit.
+        source_bitmap &= source_bitmap - 1;
+        target_bitmap &= target_bitmap - 1;
       }
+      int source_object_id = __ffsll(source_bitmap) - 1;
+      int target_object_id = __ffsll(target_bitmap) - 1;
 
-      if (num_target_after > BlockHelper<T>::kLeq50Threshold) {
-        // Block is now more than 50% full.
-        ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(
-            target_block_idx));
-        atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+      // Move objects.
+      if (source_object_id > -1) {
+        assert(target_object_id > -1);
+
+        SoaClassHelper<T>::template dev_for_all<
+                SoaObjectCopier<T>::ObjectCopyHelper, true>(
+            reinterpret_cast<char*>(get_block<T>(source_block_idx)),
+            reinterpret_cast<char*>(get_block<T>(target_block_idx)),
+            source_object_id, target_object_id);
+      }
+      
+      // Last thread performs all update, because it has access to the new
+      // target_bitmap (with all slots occupied).
+      if (slot_id == num_moves - 1) {
+        // Invalidate source block.
+        get_block<T>(source_block_idx)->free_bitmap = 0ULL;
+        // Delete source block.
+        // Precond.: Block is leq_50_, active, allocated.
+        deallocate_block<T>(source_block_idx);
+
+        // Update free_bitmap in target block.
+        target_bitmap &= target_bitmap - 1;   // Clear one more bit.
+        get_block<T>(target_block_idx)->free_bitmap = target_bitmap;
+
+        // Update state of target block.
+        int num_target_after = __popcll(
+            ~target_bitmap & BlockHelper<T>::BlockType::kBitmapInitState);
+
+        if (num_target_after == BlockHelper<T>::kSize) {
+          // Block is now full.
+           ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(
+              target_block_idx));
+        }
+
+        if (num_target_after > BlockHelper<T>::kLeq50Threshold) {
+          // Block is now more than 50% full.
+          ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(
+              target_block_idx));
+          atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+        }
       }
     }
   }
@@ -404,56 +414,53 @@ class SoaAllocator {
                 / kBlockSizeBytes;
             assert(scan_block_idx < N);
 
-            // Scan shared memory for matching defrag record.
-            // TODO: Replace with binary search or hash-based approach.
-            for (int i = 0; i < num_records; ++i) {
-              if (records[i].source_block_idx == scan_block_idx) {
-                // This pointer must be rewritten.
-                int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
-                assert(src_obj_id < BlockHelper<DefragT>::kSize);
-                assert((records[i].source_bitmap & (1ULL << src_obj_id)) != 0);
+            // Look for defrag record for this block.
+            int record_id = block_idx_hash(scan_block_idx, num_records);
+            assert(record_id < num_records);
+            if (records[record_id].source_block_idx == scan_block_idx) {
+              // This pointer must be rewritten.
+              int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
+              assert(src_obj_id < BlockHelper<DefragT>::kSize);
+              assert((records[record_id].source_bitmap & (1ULL << src_obj_id)) != 0);
 
-                // First src_obj_id bits are set to 1.
-                BlockBitmapT cnt_mask = src_obj_id ==
-                   63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
-                assert(__popcll(cnt_mask) == src_obj_id + 1);
-                int src_bit_cnt =
-                    __popcll(cnt_mask & records[i].source_bitmap) - 1;
+              // First src_obj_id bits are set to 1.
+              BlockBitmapT cnt_mask = src_obj_id ==
+                 63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
+              assert(__popcll(cnt_mask) == src_obj_id + 1);
+              int src_bit_cnt =
+                  __popcll(cnt_mask & records[record_id].source_bitmap) - 1;
 
-                // Find src_bit_cnt-th bit in target bitmap.
-                BlockBitmapT target_bitmap = records[i].target_bitmap;
-                for (int j = 0; j < src_bit_cnt; ++j) {
-                  target_bitmap &= target_bitmap - 1;
-                }
-                int target_obj_id = __ffsll(target_bitmap) - 1;
-                assert(target_obj_id < BlockHelper<DefragT>::kSize);
-                assert(target_obj_id >= 0);
-                assert((allocator->template get_block<DefragT>(
-                        records[i].target_block_idx)->free_bitmap
-                    & (1ULL << target_obj_id)) == 0);
+              // Find src_bit_cnt-th bit in target bitmap.
+              BlockBitmapT target_bitmap = records[record_id].target_bitmap;
+              for (int j = 0; j < src_bit_cnt; ++j) {
+                target_bitmap &= target_bitmap - 1;
+              }
+              int target_obj_id = __ffsll(target_bitmap) - 1;
+              assert(target_obj_id < BlockHelper<DefragT>::kSize);
+              assert(target_obj_id >= 0);
+              assert((allocator->template get_block<DefragT>(
+                      records[record_id].target_block_idx)->free_bitmap
+                  & (1ULL << target_obj_id)) == 0);
 
-                // Rewrite pointer.
-                assert(records[i].target_block_idx < N);
-                auto* target_block = allocator->template get_block<
-                    typename std::remove_pointer<FieldType>::type>(
-                        records[i].target_block_idx);
-                *scan_location = PointerHelper::rewrite_pointer(
-                        scan_value, target_block, target_obj_id);
+              // Rewrite pointer.
+              assert(records[record_id].target_block_idx < N);
+              auto* target_block = allocator->template get_block<
+                  typename std::remove_pointer<FieldType>::type>(
+                      records[record_id].target_block_idx);
+              *scan_location = PointerHelper::rewrite_pointer(
+                      scan_value, target_block, target_obj_id);
 
 #ifndef NDEBUG
-                // Sanity checks.
-                assert(PointerHelper::block_base_from_obj_ptr(*scan_location)
-                    == reinterpret_cast<char*>(target_block));
-                assert((*scan_location)->get_type()
-                    == BlockHelper<DefragT>::kIndex);
-                auto* loc_block = reinterpret_cast<typename BlockHelper<DefragT>::BlockType*>(
-                    PointerHelper::block_base_from_obj_ptr(*scan_location));
-                assert(loc_block->type_id == BlockHelper<DefragT>::kIndex);
-                assert((loc_block->free_bitmap & (1ULL << target_obj_id)) == 0);
+              // Sanity checks.
+              assert(PointerHelper::block_base_from_obj_ptr(*scan_location)
+                  == reinterpret_cast<char*>(target_block));
+              assert((*scan_location)->get_type()
+                  == BlockHelper<DefragT>::kIndex);
+              auto* loc_block = reinterpret_cast<typename BlockHelper<DefragT>::BlockType*>(
+                  PointerHelper::block_base_from_obj_ptr(*scan_location));
+              assert(loc_block->type_id == BlockHelper<DefragT>::kIndex);
+              assert((loc_block->free_bitmap & (1ULL << target_obj_id)) == 0);
 #endif  // NDEBUG
-
-                break;
-              }
             }
           }
         };
@@ -524,7 +531,7 @@ class SoaAllocator {
 
     if (num_records >= min_records) {
       // Create working copy of leq_50_ bitmap.
-      kernel_initialize_leq<T><<<256, 256>>>(this);
+      kernel_initialize_leq<T><<<256, 256>>>(this, num_records);
       gpuErrchk(cudaDeviceSynchronize());
 
       // Move objects. 4 SOA block per CUDA block. 32 threads per block.
@@ -904,6 +911,7 @@ class SoaAllocator {
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
   DefragRecord<BlockBitmapT> defrag_records_[8192];
+  static_assert(sizeof(unsigned int) == sizeof(uint32_t), "Type mismatch.");
   unsigned int leq_collisions_[8192];
 
   char* data_;
