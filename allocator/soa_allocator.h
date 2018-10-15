@@ -226,17 +226,17 @@ class SoaAllocator {
 
   __DEV__ void initialize_leq_collisions() {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    leq_collisions_[tid] = kDefragIndexEmpty;
+    defrag_records_[tid].source_block_idx = kDefragIndexEmpty;
   }
 
   template<typename T>
-  __DEV__ void defrag_move() {
+  __DEV__ void defrag_move(int num_records) {
     // Use 32 threads per SOA block, so that we can use warp shuffles instead
     // of shared memory.
     assert(blockDim.x % 32 == 0);
     int slot_id = threadIdx.x % 32;
     int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
-    int num_buckets = blockDim.x * gridDim.x / 32;
+    //int num_buckets = blockDim.x * gridDim.x / 32;
     const unsigned active = __activemask();
 
     // Problem: Cannot keep collision array in shared memory.
@@ -248,24 +248,31 @@ class SoaAllocator {
     if (slot_id == 0) {
       for (int i = 0; i < 3; ++i) {  // 3 tries
         source_block_idx = leq_50_work_.deallocate_seed(record_id + i);
+        assert(source_block_idx != (Bitmap<uint32_t, N>::kIndexError));
 
-        record_id = block_idx_hash(source_block_idx, num_buckets);
-        assert(record_id < num_buckets);
-        auto before = atomicCAS(&leq_collisions_[record_id],
-                                /*compare=*/ kDefragIndexEmpty,
-                                /*val=*/ source_block_idx);
+        record_id = block_idx_hash(source_block_idx, num_records);
+        assert(record_id < num_records);
+        unsigned int before = atomicCAS(&defrag_records_[record_id].source_block_idx,
+                                        kDefragIndexEmpty,
+                                        source_block_idx);
 
         if (before == kDefragIndexEmpty) {
+          assert(defrag_records_[record_id].source_block_idx == source_block_idx);
           break;
         } else {
           // Collision detected.
+          assert(defrag_records_[record_id].source_block_idx != source_block_idx
+              && defrag_records_[record_id].source_block_idx != kDefragIndexEmpty);
           ASSERT_SUCCESS(leq_50_work_.allocate<true>(source_block_idx));
           source_block_idx = kDefragIndexEmpty;
         }
       }
 
+
+      //source_block_idx = leq_50_work_.deallocate_seed(record_id + slot_id);
       if (source_block_idx != kDefragIndexEmpty) {
         target_block_idx = leq_50_work_.deallocate_seed(record_id + 509);
+        assert(target_block_idx != (Bitmap<uint32_t, N>::kIndexError));
 
         // Invert free_bitmap to get a bitmap of allocations.
         source_bitmap = ~get_block<T>(source_block_idx)->free_bitmap
@@ -276,13 +283,12 @@ class SoaAllocator {
         target_bitmap = get_block<T>(target_block_idx)->free_bitmap;
 
         // Copy to global memory for scan step.
-        defrag_records_[record_id].source_block_idx = source_block_idx;
         defrag_records_[record_id].target_block_idx = target_block_idx;
         defrag_records_[record_id].source_bitmap = source_bitmap;
         defrag_records_[record_id].target_bitmap = target_bitmap;
 
         assert(__popcll(target_bitmap) >= __popcll(source_bitmap));
-      }  // else: Too many collisions, no block chosen.
+      }
     }
 
     // Shuffle defrag records from thread 0.
@@ -418,6 +424,7 @@ class SoaAllocator {
             int record_id = block_idx_hash(scan_block_idx, num_records);
             assert(record_id < num_records);
             if (records[record_id].source_block_idx == scan_block_idx) {
+              //printf("FOUND: %i at %i\n", (int) scan_block_idx, record_id);
               // This pointer must be rewritten.
               int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
               assert(src_obj_id < BlockHelper<DefragT>::kSize);
@@ -911,8 +918,6 @@ class SoaAllocator {
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
   DefragRecord<BlockBitmapT> defrag_records_[8192];
-  static_assert(sizeof(unsigned int) == sizeof(uint32_t), "Type mismatch.");
-  unsigned int leq_collisions_[8192];
 
   char* data_;
 

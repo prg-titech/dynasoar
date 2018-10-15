@@ -407,18 +407,18 @@ void generate_shark_array() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-void step() {
-  gpuErrchk(cudaDeviceSynchronize());
+void defrag() {
   allocator_handle->parallel_defrag<Fish>(/*num_blocks=*/ 128,
                                           /*num_threads=*/ 1024,
                                           /*max_records=*/ 512,
-                                          /*min_records=*/ 32);
+                                          /*min_records=*/ 64);
   allocator_handle->parallel_defrag<Shark>(/*num_blocks=*/ 128,
                                            /*num_threads=*/ 1024,
                                            /*max_records=*/ 512,
-                                           /*min_records=*/ 32);
-  gpuErrchk(cudaDeviceSynchronize());
+                                           /*min_records=*/ 64);
+}
 
+void step() {
   // --- FISH ---
   allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
       NUM_BLOCKS, THREADS_PER_BLOCK);
@@ -507,6 +507,7 @@ int main(int argc, char* arvg[]) {
     DBG_stats_kernel<<<1, 1>>>();
     gpuErrchk(cudaDeviceSynchronize());
 
+    defrag();
     auto time_before = std::chrono::system_clock::now();
     step();
     auto time_after = std::chrono::system_clock::now();

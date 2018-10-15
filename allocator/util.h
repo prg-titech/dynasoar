@@ -36,7 +36,7 @@ __global__ void kernel_defrag_move(AllocatorT* allocator, int num_records) {
   }
 
   if (tid < num_records*32) {
-    allocator->template defrag_move<T>();
+    allocator->template defrag_move<T>(num_records);
   }
 }
 
