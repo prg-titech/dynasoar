@@ -18,4 +18,8 @@ struct DefragRecord {
   }
 };
 
+__DEV__ int block_idx_hash(uint32_t block_idx, int num_buckets) {
+  return block_idx % num_buckets;
+}
+
 #endif  // ALLOCATOR_SOA_DEFRAG_H

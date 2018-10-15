@@ -221,6 +221,9 @@ class SoaAllocator {
     };
   };
 
+  static const SizeT kDefragIndexEmpty =
+      std::numeric_limits<unsigned int>::max();
+
   template<typename T>
   __DEV__ void defrag_move() {
     // Use 32 threads per SOA block, so that we can use warp shuffles instead
@@ -228,36 +231,50 @@ class SoaAllocator {
     assert(blockDim.x % 32 == 0);
     int slot_id = threadIdx.x % 32;
     int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
+    int num_buckets = blockIdx.x * gridDim.x / 32;
     const unsigned active = __activemask();
+
+    // Problem: Cannot keep collision array in shared memory.
 
     // Defrag record.
     uint32_t source_block_idx, target_block_idx;
     BlockBitmapT source_bitmap, target_bitmap;
 
     if (slot_id == 0) {
-      source_block_idx = leq_50_work_.deallocate_seed(record_id);
-      target_block_idx = leq_50_work_.deallocate_seed(record_id+37);
+      for (int i = 0; i < 3; ++i) {  // 3 tries
+        source_block_idx = leq_50_work_.deallocate_seed(record_id + i);
 
-      assert(get_block<T>(source_block_idx)->type_id
-          == BlockHelper<T>::kIndex);
-      assert(get_block<T>(target_block_idx)->type_id
-          == BlockHelper<T>::kIndex);
+        record_id = block_idx_hash(source_block_idx, num_buckets);
+        auto before = atomicCAS(&leq_collisions_[record_id].source_block_idx,
+                                /*compare=*/ kDefragIndexEmpty,
+                                /*before=*/ source_block_idx);
 
-      // Invert free_bitmap to get a bitmap of allocations.
-      source_bitmap = ~get_block<T>(source_block_idx)->free_bitmap
-                      & BlockHelper<T>::BlockType::kBitmapInitState;
-      assert(__popcll(source_bitmap) == BlockHelper<T>::kSize   // == N - #free
-          - __popcll(get_block<T>(source_block_idx)->free_bitmap));
-      // Target bitmap contains all free slots in target block.
-      target_bitmap = get_block<T>(target_block_idx)->free_bitmap;
+        if (before == kDefragIndexEmpty) {
+          break;
+        } else {
+          source_block_idx = kDefragIndexEmpty;
+        }
+      }
 
-      // Copy to global memory for scan step.
-      defrag_records_[record_id].source_block_idx = source_block_idx;
-      defrag_records_[record_id].target_block_idx = target_block_idx;
-      defrag_records_[record_id].source_bitmap = source_bitmap;
-      defrag_records_[record_id].target_bitmap = target_bitmap;
+      if (source_block_idx != kDefragIndexEmpty) {
+        target_block_idx = leq_50_work_.deallocate_seed(record_id + 509);
 
-      assert(__popcll(target_bitmap) >= __popcll(source_bitmap));
+        // Invert free_bitmap to get a bitmap of allocations.
+        source_bitmap = ~get_block<T>(source_block_idx)->free_bitmap
+                        & BlockHelper<T>::BlockType::kBitmapInitState;
+        assert(__popcll(source_bitmap) == BlockHelper<T>::kSize   // == N - #free
+            - __popcll(get_block<T>(source_block_idx)->free_bitmap));
+        // Target bitmap contains all free slots in target block.
+        target_bitmap = get_block<T>(target_block_idx)->free_bitmap;
+
+        // Copy to global memory for scan step.
+        defrag_records_[record_id].source_block_idx = source_block_idx;
+        defrag_records_[record_id].target_block_idx = target_block_idx;
+        defrag_records_[record_id].source_bitmap = source_bitmap;
+        defrag_records_[record_id].target_bitmap = target_bitmap;
+
+        assert(__popcll(target_bitmap) >= __popcll(source_bitmap));
+      }  // else: Too many collisions, no block chosen.
     }
 
     // Shuffle defrag records from thread 0.
@@ -887,6 +904,7 @@ class SoaAllocator {
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
   DefragRecord<BlockBitmapT> defrag_records_[8192];
+  unsigned int leq_collisions_[8192];
 
   char* data_;
 
