@@ -20,11 +20,10 @@ template<class T, typename AllocatorT>
 __global__ void kernel_initialize_leq(AllocatorT* allocator,
                                       int num_records) {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  assert(blockDim.x * gridDim.x >= num_records);
   if (tid < num_records) {
     allocator->initialize_leq_collisions();
   }
-
-  allocator->template initialize_leq_work_bitmap<T>();
 }
 
 template<class T, typename AllocatorT>

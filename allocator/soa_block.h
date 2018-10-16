@@ -112,6 +112,7 @@ class SoaBlock {
   BitmapT iteration_bitmap;
 
   // Padding to 8 bytes.
+  // TODO: Must be volatile!
   uint8_t type_id;
 
   // Size of data segment.

@@ -247,7 +247,7 @@ class SoaAllocator {
 
     if (slot_id == 0) {
       for (int i = 0; i < 3; ++i) {  // 3 tries
-        source_block_idx = leq_50_work_.deallocate_seed(record_id + i);
+        source_block_idx = leq_50_[BlockHelper<T>::kIndex].deallocate_seed(record_id + i);
         assert(source_block_idx != (Bitmap<uint32_t, N>::kIndexError));
 
         record_id = block_idx_hash(source_block_idx, num_records);
@@ -263,15 +263,13 @@ class SoaAllocator {
           // Collision detected.
           assert(defrag_records_[record_id].source_block_idx != source_block_idx
               && defrag_records_[record_id].source_block_idx != kDefragIndexEmpty);
-          ASSERT_SUCCESS(leq_50_work_.allocate<true>(source_block_idx));
+          ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(source_block_idx));
           source_block_idx = kDefragIndexEmpty;
         }
       }
 
-
-      //source_block_idx = leq_50_work_.deallocate_seed(record_id + slot_id);
       if (source_block_idx != kDefragIndexEmpty) {
-        target_block_idx = leq_50_work_.deallocate_seed(record_id + 509);
+        target_block_idx = leq_50_[BlockHelper<T>::kIndex].deallocate_seed(record_id + 509);
         assert(target_block_idx != (Bitmap<uint32_t, N>::kIndexError));
 
         // Invert free_bitmap to get a bitmap of allocations.
@@ -280,7 +278,8 @@ class SoaAllocator {
         assert(__popcll(source_bitmap) == BlockHelper<T>::kSize   // == N - #free
             - __popcll(get_block<T>(source_block_idx)->free_bitmap));
         // Target bitmap contains all free slots in target block.
-        target_bitmap = get_block<T>(target_block_idx)->free_bitmap;
+        // TODO: Is is necessary to use atomicOr here?
+        target_bitmap = atomicOr(&get_block<T>(target_block_idx)->free_bitmap, 0ULL);
 
         // Copy to global memory for scan step.
         defrag_records_[record_id].target_block_idx = target_block_idx;
@@ -326,12 +325,19 @@ class SoaAllocator {
         // Invalidate source block.
         get_block<T>(source_block_idx)->free_bitmap = 0ULL;
         // Delete source block.
-        // Precond.: Block is leq_50_, active, allocated.
-        deallocate_block<T>(source_block_idx);
+        // Precond.: Block is active and allocated. Block was already
+        // removed from leq_50_ above.
+        deallocate_block<T>(source_block_idx, /*dealloc_leq_50=*/ false);
 
         // Update free_bitmap in target block.
         target_bitmap &= target_bitmap - 1;   // Clear one more bit.
-        get_block<T>(target_block_idx)->free_bitmap = target_bitmap;
+        //get_block<T>(target_block_idx)->free_bitmap = target_bitmap;
+        atomicExch(&get_block<T>(target_block_idx)->free_bitmap, target_bitmap);
+        // Make sure updated bitmap is visible to all threads before
+        // (potentially) putting the block back into the leq_50_ bitmap.
+        // Problem: Thread fence is not enough. There is no guarantee that
+        // previous update is visible.
+        __threadfence();
 
         // Update state of target block.
         int num_target_after = __popcll(
@@ -343,11 +349,14 @@ class SoaAllocator {
               target_block_idx));
         }
 
-        if (num_target_after > BlockHelper<T>::kLeq50Threshold) {
-          // Block is now more than 50% full.
-          ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(
+        if (num_target_after <= BlockHelper<T>::kLeq50Threshold) {
+          // Block is still less than 50% full.
+          ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(
               target_block_idx));
           atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+        } else {
+          // Deferred update from above. (2 block removed from bitmap.)
+          atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 2);
         }
       }
     }
@@ -565,11 +574,6 @@ class SoaAllocator {
     }
   }
 
-  template<typename T>
-  __DEV__ void initialize_leq_work_bitmap() {
-    leq_50_work_.initialize(leq_50_[BlockHelper<T>::kIndex]);
-  }
-
   // The number of allocated slots of a type. (#blocks * blocksize)
   template<class T>
   __DEV__ uint32_t DBG_allocated_slots() {
@@ -695,10 +699,14 @@ class SoaAllocator {
 
   // Note: Assuming that the block is leq_50_!
   template<class T>
-  __DEV__ void deallocate_block(uint32_t block_idx) {
+  __DEV__ void deallocate_block(uint32_t block_idx, bool dealloc_leq_50 = true) {
     ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
-    ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
-    atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+
+    if (dealloc_leq_50) {
+      ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
+      atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+    }
+
     ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
     ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
   }
@@ -911,9 +919,6 @@ class SoaAllocator {
   // Bit set if block is <= 50% full and active.
   Bitmap<uint32_t, N> leq_50_[kNumTypes];
   unsigned int num_leq_50_[kNumTypes];
-
-  // Copy of leq_50_ used during defragmentation.
-  Bitmap<uint32_t, N> leq_50_work_;
 
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
