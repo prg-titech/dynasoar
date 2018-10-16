@@ -411,11 +411,11 @@ void defrag() {
   allocator_handle->parallel_defrag<Fish>(/*num_blocks=*/ 128,
                                           /*num_threads=*/ 1024,
                                           /*max_records=*/ 512,
-                                          /*min_records=*/ 64);
+                                          /*min_records=*/ 16);
   allocator_handle->parallel_defrag<Shark>(/*num_blocks=*/ 128,
                                            /*num_threads=*/ 1024,
                                            /*max_records=*/ 512,
-                                           /*min_records=*/ 64);
+                                           /*min_records=*/ 16);
 }
 
 void step() {
@@ -507,13 +507,18 @@ int main(int argc, char* arvg[]) {
     DBG_stats_kernel<<<1, 1>>>();
     gpuErrchk(cudaDeviceSynchronize());
 
-    defrag();
     auto time_before = std::chrono::system_clock::now();
     step();
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
     total_time += time_running;
+
+    for (int j = 0; j < 10; ++j) {
+      defrag();
+    }
+
+    //print_stats();
   }
 
   printf("%i,%i,", GRID_SIZE_Y, total_time);
