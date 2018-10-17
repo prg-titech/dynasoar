@@ -223,6 +223,8 @@ class SoaAllocator {
 
   static const unsigned int kDefragIndexEmpty =
       std::numeric_limits<unsigned int>::max();
+  static const unsigned int kDefragIndexBlocked =
+      std::numeric_limits<unsigned int>::max() - 1;
 
   __DEV__ void initialize_leq_collisions() {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -271,6 +273,13 @@ class SoaAllocator {
       if (source_block_idx != kDefragIndexEmpty) {
         target_block_idx = leq_50_[BlockHelper<T>::kIndex].deallocate_seed(record_id + 509);
         assert(target_block_idx != (Bitmap<uint32_t, N>::kIndexError));
+
+        // Block target block's slot.
+        // TODO: Not ideal. It reduces the number of defrag records.
+        int target_hash = block_idx_hash(target_block_idx, num_records);
+        atomicCAS(&defrag_records_[target_hash].source_block_idx,
+                  kDefragIndexEmpty,
+                  kDefragIndexBlocked);
 
         // Invert free_bitmap to get a bitmap of allocations.
         source_bitmap = ~get_block<T>(source_block_idx)->free_bitmap
