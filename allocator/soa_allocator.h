@@ -931,7 +931,7 @@ class SoaAllocator {
 
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
-  DefragRecord<BlockBitmapT> defrag_records_[8192];
+  DefragRecord<BlockBitmapT> defrag_records_[kMaxDefragRecords];
 
   char* data_;
 

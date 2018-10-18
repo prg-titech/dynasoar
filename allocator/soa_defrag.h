@@ -1,6 +1,8 @@
 #ifndef ALLOCATOR_SOA_DEFRAG_H
 #define ALLOCATOR_SOA_DEFRAG_H
 
+static const int kMaxDefragRecords = 8192;
+
 template<typename BitmapT>
 struct DefragRecord {
   // Previous allocation bitmap. (Not free bitmap!)
