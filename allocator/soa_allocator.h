@@ -79,6 +79,7 @@ class SoaAllocator {
       active_[i].initialize(false);
       leq_50_[i].initialize(false);
       num_leq_50_[i] = 0;
+      num_allocated_[i] = 0;
     }
   }
 
@@ -922,6 +923,7 @@ class SoaAllocator {
   Bitmap<uint32_t, N> global_free_;
 
   Bitmap<uint32_t, N> allocated_[kNumTypes];
+  unsigned int num_allocated_[kNumTypes];
 
   Bitmap<uint32_t, N> active_[kNumTypes];
 

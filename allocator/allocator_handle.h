@@ -35,6 +35,7 @@ class AllocatorHandle {
   template<int W_MULT, class T, void(T::*func)()>
   void parallel_do(int num_blocks, int num_threads) {
     kernel_init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
+
     gpuErrchk(cudaDeviceSynchronize());
     allocator_->parallel_do<W_MULT, T, func>(num_blocks, num_threads);
   }

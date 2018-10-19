@@ -508,16 +508,20 @@ int main(int argc, char* arvg[]) {
     gpuErrchk(cudaDeviceSynchronize());
     auto time_before = std::chrono::system_clock::now();
 
-    for (int j = 0; j < 10; ++j) {
-      defrag();
-    }
-
     step();
+
+    if (i % 10 == 0) {
+      for (int j = 0; j < 10; ++j) {
+        defrag();
+      }
+    }
 
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
     total_time += time_running;
+
+
     //print_stats();
   }
 

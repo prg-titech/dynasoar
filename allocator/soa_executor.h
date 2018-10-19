@@ -29,6 +29,7 @@ struct ParallelExecutor {
   using BlockHelperT = typename AllocatorT::template BlockHelper<T>;
   static const int kTypeIndex = BlockHelperT::kIndex;
   static const int kSize = BlockHelperT::kSize;
+  static const int kCudaBlockSize = 256;
 
   template<R (Base::*func)(Args...)>
   struct FunctionWrapper {
@@ -38,8 +39,18 @@ struct ParallelExecutor {
                             int num_threads, int shared_mem_size,
                             Args... args) {
       allocator->allocated_[kTypeIndex].scan();
+
+      // Determine number of CUDA threads.
+      uint32_t* d_num_soa_blocks_ptr =
+          &allocator->allocated_[AllocatorT::template BlockHelper<T>::kIndex]
+              .data_.enumeration_result_size;
+      uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
+      uint32_t total_threads = num_soa_blocks * BlockHelperT::kSize;
+
       kernel_parallel_do<ThisClass>
-          <<<num_blocks, num_threads, shared_mem_size>>>(allocator, args...);
+          <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
+            kCudaBlockSize,
+            shared_mem_size>>>(allocator, args...);
       gpuErrchk(cudaDeviceSynchronize());
     }
 
@@ -51,8 +62,18 @@ struct ParallelExecutor {
                               int num_threads, int shared_mem_size,
                               Args... args) {
         allocator->allocated_[kTypeIndex].scan();
+
+        // Determine number of CUDA threads.
+        uint32_t* d_num_soa_blocks_ptr =
+            &allocator->allocated_[AllocatorT::template BlockHelper<T>::kIndex]
+                .data_.enumeration_result_size;
+        uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
+        uint32_t total_threads = num_soa_blocks * BlockHelperT::kSize;
+
         kernel_parallel_do_with_pre<ThisClass, PreClass>
-            <<<num_blocks, num_threads, shared_mem_size>>>(allocator, args...);
+            <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
+              kCudaBlockSize,
+              shared_mem_size>>>(allocator, args...);
         gpuErrchk(cudaDeviceSynchronize());
       }
 
