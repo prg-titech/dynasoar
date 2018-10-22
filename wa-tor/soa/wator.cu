@@ -410,12 +410,12 @@ void generate_shark_array() {
 void defrag() {
   allocator_handle->parallel_defrag<Fish>(/*num_blocks=*/ 128,
                                           /*num_threads=*/ 1024,
-                                          /*max_records=*/ 384,
-                                          /*min_records=*/ 512);
+                                          /*max_records=*/ 128,
+                                          /*min_records=*/ 128);
   allocator_handle->parallel_defrag<Shark>(/*num_blocks=*/ 128,
                                            /*num_threads=*/ 1024,
-                                           /*max_records=*/ 384,
-                                           /*min_records=*/ 512);
+                                           /*max_records=*/ 128,
+                                           /*min_records=*/ 128);
 }
 
 void step() {
@@ -504,17 +504,18 @@ int main(int argc, char* arvg[]) {
 
   int total_time = 0;
   for (int i = 0; i < 500; ++i) {
+    printf("%i\n", i);
     DBG_stats_kernel<<<1, 1>>>();
     gpuErrchk(cudaDeviceSynchronize());
     auto time_before = std::chrono::system_clock::now();
 
     step();
 
-    if (i % 10 == 0) {
-      for (int j = 0; j < 10; ++j) {
+    //if (i % 10 == 0) {
+      for (int j = 0; j < 50; ++j) {
         defrag();
       }
-    }
+    //}
 
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
