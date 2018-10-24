@@ -185,10 +185,10 @@ class SoaAllocator {
 
   // Call a member functions on all objects of a type.
   template<int W_MULT, class T, void(T::*func)()>
-  void parallel_do(int num_blocks, int num_threads) {
+  void parallel_do() {
     ParallelExecutor<ThisAllocator, T, void, T>
         ::template FunctionWrapper<func>
-        ::parallel_do(this, num_blocks, num_threads, /*shared_mem_size=*/ 0);
+        ::parallel_do(this, /*shared_mem_size=*/ 0);
   }
 
   template<typename T>
@@ -515,8 +515,7 @@ class SoaAllocator {
         }
       };
 
-      bool operator()(ThisAllocator* allocator, int num_blocks,
-                      int num_threads, int num_records) {
+      bool operator()(ThisAllocator* allocator, int num_records) {
         bool process_class = SoaClassHelper<ScanClassT>::template for_all<
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
@@ -529,9 +528,9 @@ class SoaAllocator {
               ::template FunctionWrapper<&SoaBase<ThisAllocator>
                   ::template rewrite_object<ThisClass, ScanClassT>>
               ::template WithPre<&ThisAllocator::load_records_to_shared_mem>
-              ::parallel_do(allocator, num_blocks, num_threads,
-                                     num_records*sizeof(DefragRecord<BlockBitmapT>),
-                                     allocator, num_records);
+              ::parallel_do(allocator,
+                            num_records*sizeof(DefragRecord<BlockBitmapT>),
+                            allocator, num_records);
         }
 
         return true;  // Continue processing.
@@ -551,8 +550,7 @@ class SoaAllocator {
 
   // Should be invoked from host side.
   template<typename T>
-  void parallel_defrag(int num_blocks, int num_threads, int max_records,
-                       int min_records = 1) {
+  void parallel_defrag(int max_records, int min_records = 1) {
     // Determine number of records.
     auto num_leq_blocks =
         copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
@@ -573,7 +571,7 @@ class SoaAllocator {
       // Scan and rewrite pointers.
       TupleHelper<Types...>
           ::template for_all<SoaPointerUpdater<T>::template ClassIterator>(
-              this, num_blocks, num_threads, num_records);
+              this, num_records);
     }
   }
 

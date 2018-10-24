@@ -408,42 +408,24 @@ void generate_shark_array() {
 }
 
 void defrag() {
-  allocator_handle->parallel_defrag<Fish>(/*num_blocks=*/ 128,
-                                          /*num_threads=*/ 1024,
-                                          /*max_records=*/ 128,
+  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 128,
                                           /*min_records=*/ 128);
-  allocator_handle->parallel_defrag<Shark>(/*num_blocks=*/ 128,
-                                           /*num_threads=*/ 1024,
-                                           /*max_records=*/ 128,
+  allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 128,
                                            /*min_records=*/ 128);
 }
 
 void step() {
   // --- FISH ---
-  allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
-
-  allocator_handle->parallel_do<16, Fish, &Fish::prepare>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
-
-  allocator_handle->parallel_do<16, Cell, &Cell::decide>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
-
-  allocator_handle->parallel_do<16, Fish, &Fish::update>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
+  allocator_handle->parallel_do<16, Cell, &Cell::prepare>();
+  allocator_handle->parallel_do<16, Fish, &Fish::prepare>();
+  allocator_handle->parallel_do<16, Cell, &Cell::decide>();
+  allocator_handle->parallel_do<16, Fish, &Fish::update>();
 
   // --- SHARKS ---
-  allocator_handle->parallel_do<16, Cell, &Cell::prepare>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
-
-  allocator_handle->parallel_do<16, Shark, &Shark::prepare>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
-
-  allocator_handle->parallel_do<16, Cell, &Cell::decide>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
-
-  allocator_handle->parallel_do<16, Shark, &Shark::update>(
-      NUM_BLOCKS, THREADS_PER_BLOCK);
+  allocator_handle->parallel_do<16, Cell, &Cell::prepare>();
+  allocator_handle->parallel_do<16, Shark, &Shark::prepare>();
+  allocator_handle->parallel_do<16, Cell, &Cell::decide>();
+  allocator_handle->parallel_do<16, Shark, &Shark::update>();
 }
 
 void initialize() {
@@ -504,7 +486,6 @@ int main(int argc, char* arvg[]) {
 
   int total_time = 0;
   for (int i = 0; i < 500; ++i) {
-    printf("%i\n", i);
     DBG_stats_kernel<<<1, 1>>>();
     gpuErrchk(cudaDeviceSynchronize());
     auto time_before = std::chrono::system_clock::now();
@@ -512,7 +493,7 @@ int main(int argc, char* arvg[]) {
     step();
 
     //if (i % 10 == 0) {
-      for (int j = 0; j < 50; ++j) {
+      for (int j = 0; j < 10; ++j) {
         defrag();
       }
     //}

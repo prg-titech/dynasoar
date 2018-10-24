@@ -35,8 +35,7 @@ struct ParallelExecutor {
   struct FunctionWrapper {
     using ThisClass = FunctionWrapper<func>;
 
-    static void parallel_do(AllocatorT* allocator, int num_blocks,
-                            int num_threads, int shared_mem_size,
+    static void parallel_do(AllocatorT* allocator, int shared_mem_size,
                             Args... args) {
       allocator->allocated_[kTypeIndex].scan();
 
@@ -58,8 +57,7 @@ struct ParallelExecutor {
     struct WithPre {
       using PreClass = WithPre<pre_func>;
 
-      static void parallel_do(AllocatorT* allocator, int num_blocks,
-                              int num_threads, int shared_mem_size,
+      static void parallel_do(AllocatorT* allocator, int shared_mem_size,
                               Args... args) {
         allocator->allocated_[kTypeIndex].scan();
 

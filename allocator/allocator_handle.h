@@ -33,18 +33,16 @@ class AllocatorHandle {
   AllocatorT* device_pointer() { return allocator_; }
 
   template<int W_MULT, class T, void(T::*func)()>
-  void parallel_do(int num_blocks, int num_threads) {
+  void parallel_do() {
     kernel_init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
 
     gpuErrchk(cudaDeviceSynchronize());
-    allocator_->parallel_do<W_MULT, T, func>(num_blocks, num_threads);
+    allocator_->parallel_do<W_MULT, T, func>();
   }
 
   template<class T>
-  void parallel_defrag(int num_blocks, int num_threads, int max_records,
-                       int min_records = 1) {
-    allocator_->parallel_defrag<T>(num_blocks, num_threads, max_records,
-                                   min_records);
+  void parallel_defrag(int max_records, int min_records = 1) {
+    allocator_->parallel_defrag<T>(max_records, min_records);
   }
 
  private:
