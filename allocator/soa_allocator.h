@@ -610,6 +610,7 @@ class SoaAllocator {
     return counter;
   }
 
+  // Print compile-type configuration statistics about this allocator.
   template<typename T>
   struct SoaTypeDbgPrinter {
     bool operator()() {
@@ -637,8 +638,45 @@ class SoaAllocator {
     printf("----------------------------------------------------------\n");
   }
 
-  __DEV__ void DBG_print_state_stats() {
+  // Print runtime block usage statistics about this allocator.
+  template<typename T>
+  struct SoaTypeBlockDbgPrinter {
+    __DEV__ bool operator()(ThisAllocator* allocator) {
+      int num_blk_alloc = allocator->allocated_[BlockHelper<T>::kIndex]
+          .DBG_count_num_ones();
+      int num_blk_leq50 = allocator->leq_50_[BlockHelper<T>::kIndex]
+          .DBG_count_num_ones();
+      int num_blk_active = allocator->active_[BlockHelper<T>::kIndex]
+          .DBG_count_num_ones();
 
+      int num_obj_alloc = 0;
+      int num_obj_used = 0;
+
+      for (int i = 0; i < N; ++i) {
+        if (allocator->allocated_[BlockHelper<T>::kIndex][i]) {
+          auto* block = allocator->get_block<T>(i);
+          num_obj_alloc += BlockHelper<T>::kSize;
+          num_obj_used += block->DBG_allocated_bits();
+        }
+      }
+
+      float obj_frag = 1 - static_cast<float>(num_obj_used) / num_obj_alloc;
+
+      printf("| %2i | %8i | %8i | %8i || %8i | %8i | %.6f |\n",
+             BlockHelper<T>::kIndex, num_blk_alloc, num_blk_leq50, num_blk_active,
+             num_obj_alloc, num_obj_used, obj_frag);
+      return true;
+    }
+  };
+
+  __DEV__ void DBG_print_state_stats() {
+    int num_blk_free = global_free_.DBG_count_num_ones();
+
+    printf("-------------------------------------------------------------------------\n");
+    printf("| Ty | #B_alloc | #B_leq50 | #B_activ || #O_alloc |  #O_used |   O_frag |\n");
+    printf("| fr | %8i |      n/a |      n/a ||      n/a |      n/a |      n/a |\n",
+           num_blk_free);
+    TupleHelper<Types...>::template dev_for_all<SoaTypeBlockDbgPrinter>(this);
   }
 
   // Only executed by one thread per warp. Request are already aggregated when

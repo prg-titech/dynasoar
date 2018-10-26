@@ -408,10 +408,10 @@ void generate_shark_array() {
 }
 
 void defrag() {
-  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 128,
-                                          /*min_records=*/ 128);
-  allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 128,
-                                           /*min_records=*/ 128);
+  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 32,
+                                          /*min_records=*/ 32);
+  allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 32,
+                                           /*min_records=*/ 32);
 }
 
 void step() {
@@ -493,7 +493,7 @@ int main(int argc, char* arvg[]) {
     step();
 
     //if (i % 10 == 0) {
-      for (int j = 0; j < 10; ++j) {
+      for (int j = 0; j < 200; ++j) {
         defrag();
       }
     //}
