@@ -641,13 +641,20 @@ class SoaAllocator {
   // Print runtime block usage statistics about this allocator.
   template<typename T>
   struct SoaTypeBlockDbgPrinter {
-    __DEV__ bool operator()(ThisAllocator* allocator) {
+    __DEV__ bool operator()(ThisAllocator* allocator, int* total_num_blk_alloc,
+                            int* total_num_blk_leq50, int* total_num_blk_active,
+                            int* total_num_obj_alloc, int* total_num_obj_used) {
       int num_blk_alloc = allocator->allocated_[BlockHelper<T>::kIndex]
           .DBG_count_num_ones();
+      *total_num_blk_alloc += num_blk_alloc;
+
       int num_blk_leq50 = allocator->leq_50_[BlockHelper<T>::kIndex]
           .DBG_count_num_ones();
+      *total_num_blk_leq50 += num_blk_leq50;
+
       int num_blk_active = allocator->active_[BlockHelper<T>::kIndex]
           .DBG_count_num_ones();
+      *total_num_blk_active += num_blk_active;
 
       int num_obj_alloc = 0;
       int num_obj_used = 0;
@@ -660,6 +667,8 @@ class SoaAllocator {
         }
       }
 
+      *total_num_obj_alloc += num_obj_alloc;
+      *total_num_obj_used += num_obj_used;
       float obj_frag = 1 - static_cast<float>(num_obj_used) / num_obj_alloc;
 
       printf("│ %2i │ %8i │ %8i │ %8i ││ %8i │ %8i │ %.6f │\n",
@@ -677,7 +686,21 @@ class SoaAllocator {
     printf("├────┼──────────┼──────────┼──────────┼┼──────────┼──────────┼──────────┤\n");
     printf("│ fr │ %8i │      n/a │      n/a ││      n/a │      n/a │      n/a │\n",
            num_blk_free);
-    TupleHelper<Types...>::template dev_for_all<SoaTypeBlockDbgPrinter>(this);
+
+    // Accumulators for statistics.
+    int total_num_blk_alloc = 0, total_num_blk_leq50 = 0;
+    int total_num_blk_active = 0, total_num_obj_alloc = 0;
+    int total_num_obj_used = 0;
+
+    TupleHelper<Types...>::template dev_for_all<SoaTypeBlockDbgPrinter>(
+        this, &total_num_blk_alloc, &total_num_blk_leq50,
+        &total_num_blk_active, &total_num_obj_alloc, &total_num_obj_used);
+    float total_obj_frag = 1 - static_cast<float>(total_num_obj_used)
+        / total_num_obj_alloc;
+    printf("│  Σ │ %8i │ %8i │ %8i ││ %8i │ %8i │ %.6f │\n",
+           total_num_blk_alloc, total_num_blk_leq50, total_num_blk_active,
+           total_num_obj_alloc, total_num_obj_used, total_obj_frag);
+    printf("└────┴──────────┴──────────┴──────────┴┴──────────┴──────────┴──────────┘\n");
   }
 
   // Only executed by one thread per warp. Request are already aggregated when
