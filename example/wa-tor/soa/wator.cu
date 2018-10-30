@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#include "wa-tor/soa/wator.h"
+#include "example/wa-tor/soa/wator.h"
 #include "allocator/allocator_handle.h"
 
 #define SPAWN_THRESHOLD 4
@@ -22,6 +22,8 @@
 
 namespace wa_tor {
 
+static const int kSeed = 42;
+
 __device__ AllocatorT* device_allocator;
 
 // Host side pointer.
@@ -32,24 +34,8 @@ __global__ void DBG_stats_kernel() {
   device_allocator->DBG_print_state_stats();
 }
 
-__device__ uint32_t random_number(uint32_t* state, uint32_t max) {
-  // Advance and return random state.
-  // Source: https://en.wikipedia.org/wiki/Lehmer_random_number_generator
-  *state = static_cast<uint32_t>(
-      static_cast<uint64_t>(*state) * 1103515245u + 12345) % 2147483648u;
-  return ((*state) >> 7) % max;
-}
-
-__device__ uint32_t random_number(uint32_t* state) {
-  // Advance and return random state.
-  // Source: https://en.wikipedia.org/wiki/Lehmer_random_number_generator
-  *state = static_cast<uint32_t>(
-      static_cast<uint64_t>(*state) * 1103515245u + 12345) % 2147483648u;
-  return ((*state) >> 7);
-}
-
-__device__ Cell::Cell(uint32_t random_state) : random_state_(random_state),
-                                               agent_(nullptr) {
+__device__ Cell::Cell() : agent_(nullptr) {
+  curand_init(kSeed, threadIdx.x + blockIdx.x * blockDim.x, 0, &random_state_);
   assert(random_state != 0);
   prepare();
 }
@@ -71,7 +57,7 @@ __device__ void Cell::decide() {
     }
 
     if (num_candidates > 0) {
-      uint32_t selected_index = random_number(&random_state_, num_candidates);
+      uint32_t selected_index = curand(&random_state_) % num_candidates;
       neighbors_[candidates[selected_index]]->agent()->set_new_position(this);
     }
   }
@@ -111,7 +97,7 @@ __device__ void Cell::prepare() {
   for (int i = 0; i < 5; ++i) { neighbor_request_[i] = false; }
 }
 
-__device__ uint32_t* Cell::random_state() { return &random_state_; }
+__device__ curandState_t& Cell::random_state() { return random_state_; }
 
 __device__ void Cell::request_random_fish_neighbor() {
   agent_->random_state();
@@ -130,7 +116,7 @@ __device__ void Cell::request_random_free_neighbor() {
 }
 
 template<bool(Cell::*predicate)() const>
-__device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
+__device__ bool Cell::request_random_neighbor(curandState_t& random_state) {
   uint8_t candidates[4];
   uint8_t num_candidates = 0;
 
@@ -143,7 +129,7 @@ __device__ bool Cell::request_random_neighbor(uint32_t* random_state) {
   if (num_candidates == 0) {
     return false;
   } else {
-    uint32_t selected_index = random_number(random_state, num_candidates);
+    uint32_t selected_index = curand(&random_state) % num_candidates;
     uint8_t selected = candidates[selected_index];
     uint8_t neighbor_index = (selected + 2) % 4;
     neighbors_[selected]->neighbor_request_[neighbor_index] = true;
@@ -163,11 +149,9 @@ __device__ void Cell::set_neighbors(Cell* left, Cell* top,
   neighbors_[3] = bottom;
 }
 
-__device__ Agent::Agent(uint32_t random_state) : random_state_(random_state) {
-  assert(random_state != 0);
-}
+__device__ Agent::Agent(int seed) { curand_init(seed, 0, 0, &random_state_); }
 
-__device__ uint32_t* Agent::random_state() { return &random_state_; }
+__device__ curandState_t& Agent::random_state() { return random_state_; }
 
 __device__ void Agent::set_new_position(Cell* new_pos) {
   // Check for race condition. (This is not bullet proof.)
@@ -176,18 +160,12 @@ __device__ void Agent::set_new_position(Cell* new_pos) {
   new_position_ = new_pos;
 }
 
-__device__ Cell* Agent::position() const {
-  return position_;
-}
+__device__ Cell* Agent::position() const { return position_; }
 
-__device__ void Agent::set_position(Cell* cell) {
-  position_ = cell;
-}
+__device__ void Agent::set_position(Cell* cell) { position_ = cell; }
 
-__device__ Fish::Fish(uint32_t random_state)
-    : Agent(random_state), egg_timer_(random_state % SPAWN_THRESHOLD) {
-  assert(random_state != 0);
-}
+__device__ Fish::Fish(int seed)
+    : Agent(seed), egg_timer_(seed % SPAWN_THRESHOLD) {}
 
 __device__ void Fish::prepare() {
   egg_timer_++;
@@ -206,10 +184,7 @@ __device__ void Fish::update() {
     new_position_->enter(this);
 
     if (OPTION_FISH_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
-      uint32_t new_random_state = random_number(&random_state_) + 401;
-      new_random_state = new_random_state != 0 ? new_random_state
-                                               : random_state_;
-      auto* new_fish = device_allocator->make_new<Fish>(new_random_state);
+      auto* new_fish = device_allocator->make_new<Fish>(curand(&random_state_));
       assert(new_fish != nullptr);
       old_position->enter(new_fish);
       egg_timer_ = (uint32_t) 0;
@@ -218,11 +193,8 @@ __device__ void Fish::update() {
 }
 
 
-__device__ Shark::Shark(uint32_t random_state)
-    : Agent(random_state), energy_(ENERGY_START),
-      egg_timer_(random_state % SPAWN_THRESHOLD) {
-  assert(random_state_ != 0);
-}
+__device__ Shark::Shark(int seed)
+    : Agent(seed), energy_(ENERGY_START), egg_timer_(seed % SPAWN_THRESHOLD) {}
 
 __device__ void Shark::prepare() {
   egg_timer_++;
@@ -254,11 +226,8 @@ __device__ void Shark::update() {
       new_position_->enter(this);
 
       if (OPTION_SHARK_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
-        assert(random_state_ != 0);
-        uint32_t new_random_state = random_number(&random_state_) + 601;
-        new_random_state = new_random_state != 0 ? new_random_state
-                                                 : random_state_;
-        auto* new_shark = device_allocator->make_new<Shark>(new_random_state);
+        auto* new_shark =
+            device_allocator->make_new<Shark>(curand(&random_state_));
         assert(new_shark != nullptr);
         old_position->enter(new_shark);
         egg_timer_ = 0;
@@ -282,15 +251,7 @@ __global__ void create_cells() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
   if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
-    int x = tid % GRID_SIZE_X;
-    int y = tid / GRID_SIZE_X;
-
-    float init_state = __logf(tid + 401);
-    uint32_t init_state_int = *reinterpret_cast<uint32_t*>(&init_state);
-
-    // Cell* new_cell = new Cell(init_state_int);
-    Cell* new_cell = device_allocator->make_new<Cell>(
-        601*x*x*y + init_state_int);
+    Cell* new_cell = device_allocator->make_new<Cell>();
     assert(new_cell != nullptr);
     cells[tid] = new_cell;
   }
@@ -316,15 +277,14 @@ __global__ void setup_cells() {
     cells[tid]->set_neighbors(left, top, right, bottom);
 
     // Initialize with random agent.
-    uint32_t agent_type = random_number(cells[tid]->random_state(), 4);
+    auto& rand_state = cells[tid]->random_state();
+    uint32_t agent_type = curand(&rand_state) % 4;
     if (agent_type == 0) {
-      auto* agent = device_allocator->make_new<Fish>(
-          *(cells[tid]->random_state()));
+      auto* agent = device_allocator->make_new<Fish>(curand(&rand_state));
       assert(agent != nullptr);
       cells[tid]->enter(agent);
     } else if (agent_type == 1) {
-      auto* agent = device_allocator->make_new<Shark>(
-          *(cells[tid]->random_state()));
+      auto* agent = device_allocator->make_new<Shark>(curand(&rand_state));
       assert(agent != nullptr);
       cells[tid]->enter(agent);
     } else {
@@ -349,11 +309,11 @@ __global__ void print_checksum() {
 
   // Sorting of the array does not matter in the calculation here.
   for (int i = 0; i < num_sharks; ++i) {
-    chksum += *(sharks[i]->position()->random_state()) % 601;
+    chksum += curand(&sharks[i]->position()->random_state()) % 601;
   }
 
   for (int i = 0; i < num_fish; ++i) {
-    chksum += *(fish[i]->position()->random_state()) % 601;
+    chksum += curand(&fish[i]->position()->random_state()) % 601;
   }
 
   uint32_t fish_use = device_allocator->DBG_used_slots<Fish>();

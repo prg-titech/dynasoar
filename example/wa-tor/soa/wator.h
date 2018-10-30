@@ -1,6 +1,8 @@
 #ifndef WA_TOR_SOA_WATOR_H
 #define WA_TOR_SOA_WATOR_H
 
+#include <curand_kernel.h>
+
 #include "allocator/soa_allocator.h"
 #include "allocator/soa_base.h"
 
@@ -20,24 +22,24 @@ class Cell : public SoaBase<AllocatorT> {
   static_assert(sizeof(DeviceArray<bool, 5>) == 5, "Size mismatch.");
 
   using FieldTypes = std::tuple<
+      curandState_t,                 // random_state_ (48 bytes)
       DeviceArray<Cell*, 4>,         // neighbors_
       Agent*,                        // agent_
-      uint32_t,                      // random_state_
       DeviceArray<bool, 5>>;         // neighbor_request_
 
  private:
+  SoaField<Cell, 0> random_state_;
+
   // left, top, right, bottom
-  SoaField<Cell, 0> neighbors_;
+  SoaField<Cell, 1> neighbors_;
 
-  SoaField<Cell, 1> agent_;
-
-  SoaField<Cell, 2> random_state_;
+  SoaField<Cell, 2> agent_;
 
   // left, top, right, bottom, self
   SoaField<Cell, 3> neighbor_request_;
 
  public:
-  __device__ Cell(uint32_t random_state);
+  __device__ Cell();
 
   __device__ Agent* agent() const;
 
@@ -57,7 +59,7 @@ class Cell : public SoaBase<AllocatorT> {
 
   __device__ void prepare();
 
-  __device__ uint32_t* random_state();
+  __device__ curandState_t& random_state();
 
   __device__ void set_neighbors(Cell* left, Cell* top,
                                 Cell* right, Cell* bottom);
@@ -67,29 +69,29 @@ class Cell : public SoaBase<AllocatorT> {
   __device__ void request_random_free_neighbor();
 
   template<bool(Cell::*predicate)() const>
-  __device__ bool request_random_neighbor(uint32_t* random_state);
+  __device__ bool request_random_neighbor(curandState_t& random_state);
 };
 
 class Agent : public SoaBase<AllocatorT> {
  public:
   using FieldTypes = std::tuple<
+      curandState_t,    // random_state_
       Cell*,            // position_
-      Cell*,            // new_position_
-      uint32_t>;        // random_state_
+      Cell*>;           // new_position_
 
   static const bool kIsAbstract = true;
 
  protected:
-  SoaField<Agent, 0> position_;
-  SoaField<Agent, 1> new_position_;
-  SoaField<Agent, 2> random_state_;
+  SoaField<Agent, 0> random_state_;
+  SoaField<Agent, 1> position_;
+  SoaField<Agent, 2> new_position_;
 
  public:
-  __device__ Agent(uint32_t random_state);
+  __device__ Agent(int seed);
 
   __device__ Cell* position() const;
 
-  __device__ uint32_t* random_state();
+  __device__ curandState_t& random_state();
 
   __device__ void set_new_position(Cell* new_pos);
 
@@ -108,7 +110,7 @@ class Fish : public Agent {
   SoaField<Fish, 0> egg_timer_;
 
  public:
-  __device__ Fish(uint32_t random_state);
+  __device__ Fish(int seed);
 
   __device__ void prepare();
 
@@ -129,7 +131,7 @@ class Shark : public Agent {
   SoaField<Shark, 1> egg_timer_;
 
  public:
-  __device__ Shark(uint32_t random_state);
+  __device__ Shark(int seed);
 
   __device__ void prepare();
 
