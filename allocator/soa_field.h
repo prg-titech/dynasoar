@@ -85,8 +85,8 @@ class SoaField {
   __DEV__ T* operator&() const { return data_ptr(); }
 
   // Support member function calls.
-  __DEV__ T operator->() { return *data_ptr(); }
-  __DEV__ T operator->() const { return *data_ptr(); }
+  __DEV__ T& operator->() { return *data_ptr(); }
+  __DEV__ T& operator->() const { return *data_ptr(); }
 
   // Dereference type in case of pointer type.
   __DEV__ typename std::remove_pointer<T>::type& operator*() {

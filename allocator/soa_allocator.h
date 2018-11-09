@@ -58,8 +58,7 @@ class SoaAllocator {
 
   template<typename T>
   struct TypeId {
-    static const uint8_t value =
-        TupleHelper<Types...>::template TupleIndex<T, 0>::value;
+    static const uint8_t value = BlockHelper<T>::kIndex;
   };
 
   __DEV__ static uint8_t get_type(const void* ptr) {

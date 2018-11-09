@@ -8,6 +8,7 @@ __global__ void kernel_init_stream_compaction(AllocatorT* allocator) {
   allocator->template initialize_stream_compaction_array<T>();
 }
 
+
 // Execution Model: Single-Method Multiple-Objects
 // - Run same method on multiple objects and allow creation/destruction of
 //   objects during runtime.
@@ -31,10 +32,16 @@ class SoaAllocator {
  public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
 
+  template<typename T>
+  struct TypeId {
+    static const uint8_t value = TYPE_INDEX(Types..., T);
+  };
+
   template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
     // Add object to pointer array.
     T* result =  new T(args...);
+    result->set_type(TYPE_INDEX(Types..., T));
     auto pos = atomicAdd(&num_objects_[TYPE_INDEX(Types..., T)], 1);
     objects_[TYPE_INDEX(Types..., T)][pos] = result;
     return result;
@@ -46,6 +53,9 @@ class SoaAllocator {
     deleted_objects_[TYPE_INDEX(Types..., T)][pos] = obj;
     delete obj;
   }
+
+  // TODO: Implement.
+  __DEV__ void DBG_print_state_stats() {}
 
  private:
   static const int kNumTypes = sizeof...(Types);
@@ -99,6 +109,7 @@ class SoaAllocator {
   }
 };
 
+
 template<typename AllocatorT>
 class AllocatorHandle {
  public:
@@ -128,6 +139,71 @@ class AllocatorHandle {
   // This is a no-op.
   template<class T>
   void parallel_defrag(int max_records, int min_records = 1) {}
+};
+
+
+template<typename C, int Field>
+class SoaField {
+ private:
+  using T = typename SoaFieldHelper<C, Field>::type;
+
+  // Data stored in here.
+  T data_;
+
+  __DEV__ T* data_ptr() const { return &data_; }
+
+ public:
+  // Field initialization.
+  __DEV__ SoaField() {}
+  __DEV__ explicit SoaField(const T& value) : data_(value);
+
+  // Explicit conversion for automatic conversion to base type.
+  __DEV__ operator T&() { return data_; }
+  __DEV__ operator const T&() const { return data_; }
+
+  // Custom address-of operator.
+  __DEV__ T* operator&() { return &data_; }
+  __DEV__ T* operator&() const { return &data_; }
+
+  // Support member function calls.
+  __DEV__ T& operator->() { return data_; }
+  __DEV__ T& operator->() const { return data_; }
+
+  // Dereference type in case of pointer type.
+  __DEV__ typename std::remove_pointer<T>::type& operator*() {
+    return *data_;
+  }
+  __DEV__ typename std::remove_pointer<T>::type& operator*() const {
+    return *data_;
+  }
+
+  // Array access in case of device array.
+  template<typename U = T>
+  __DEV__ typename std::enable_if<is_device_array<U>::value,
+                                  typename U::BaseType>::type&
+  operator[](size_t pos) { return data_[pos]; }
+
+  // Assignment operator.
+  __DEV__ T& operator=(const T& value) {
+    data_ = value;
+    return data_;
+  }
+};
+
+
+template<class AllocatorT>
+class SoaBase {
+ public:
+  using Allocator = AllocatorT;
+  using BaseClass = void;
+  static const bool kIsAbstract = false;
+
+  __DEV__ uint8_t get_type() const { return dynamic_type_; }
+
+  __DEV__ void set_type(uint8_t type_id) { dynamic_type_ = type_id; }
+
+ private:
+  uint8_t dynamic_type_;
 };
 
 #endif  // EXAMPLE_CONFIGURATION_CUDA_ALLOCATOR_H

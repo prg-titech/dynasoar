@@ -4,7 +4,6 @@
 #include <inttypes.h>
 
 #include "example/wa-tor/soa/wator.h"
-#include "allocator/allocator_handle.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
@@ -36,7 +35,6 @@ __global__ void DBG_stats_kernel() {
 
 __device__ Cell::Cell() : agent_(nullptr) {
   curand_init(kSeed, threadIdx.x + blockIdx.x * blockDim.x, 0, &random_state_);
-  assert(random_state != 0);
   prepare();
 }
 

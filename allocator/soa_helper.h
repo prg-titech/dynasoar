@@ -1,6 +1,8 @@
 #ifndef ALLOCATOR_SOA_HELPER_H
 #define ALLOCATOR_SOA_HELPER_H
 
+#include <tuple>
+
 #include "allocator/util.h"
 
 // Determine to which byte boundary objects should be aligned.
