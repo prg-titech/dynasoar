@@ -15,6 +15,8 @@
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
 #define OPTION_FISH_SPAWN true
+#define OPTION_DEFRAG false
+#define OPTION_PRINT_STATS false
 
 #define THREADS_PER_BLOCK 256
 #define NUM_BLOCKS 1024
@@ -374,16 +376,16 @@ void defrag() {
 
 void step() {
   // --- FISH ---
-  allocator_handle->parallel_do<16, Cell, &Cell::prepare>();
-  allocator_handle->parallel_do<16, Fish, &Fish::prepare>();
-  allocator_handle->parallel_do<16, Cell, &Cell::decide>();
-  allocator_handle->parallel_do<16, Fish, &Fish::update>();
+  allocator_handle->parallel_do<Cell, &Cell::prepare>();
+  allocator_handle->parallel_do<Fish, &Fish::prepare>();
+  allocator_handle->parallel_do<Cell, &Cell::decide>();
+  allocator_handle->parallel_do<Fish, &Fish::update>();
 
   // --- SHARKS ---
-  allocator_handle->parallel_do<16, Cell, &Cell::prepare>();
-  allocator_handle->parallel_do<16, Shark, &Shark::prepare>();
-  allocator_handle->parallel_do<16, Cell, &Cell::decide>();
-  allocator_handle->parallel_do<16, Shark, &Shark::update>();
+  allocator_handle->parallel_do<Cell, &Cell::prepare>();
+  allocator_handle->parallel_do<Shark, &Shark::prepare>();
+  allocator_handle->parallel_do<Cell, &Cell::decide>();
+  allocator_handle->parallel_do<Shark, &Shark::update>();
 }
 
 void initialize() {
@@ -444,26 +446,25 @@ int main(int argc, char* arvg[]) {
 
   int total_time = 0;
   for (int i = 0; i < 500; ++i) {
-    printf("ITERATION: %i\n", i);
-    DBG_stats_kernel<<<1, 1>>>();
-    gpuErrchk(cudaDeviceSynchronize());
-    auto time_before = std::chrono::system_clock::now();
+    if (OPTION_PRINT_STATS) {
+      printf("ITERATION: %i\n", i);
+      DBG_stats_kernel<<<1, 1>>>();
+      gpuErrchk(cudaDeviceSynchronize());
+    }
 
+    auto time_before = std::chrono::system_clock::now();
     step();
 
-    //if (i % 10 == 0) {
+    if (OPTION_DEFRAG) {
       for (int j = 0; j < 000; ++j) {
         defrag();
       }
-    //}
+    }
 
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
     total_time += time_running;
-
-
-    //print_stats();
   }
 
   printf("%i,%i,", GRID_SIZE_Y, total_time);

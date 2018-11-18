@@ -32,12 +32,12 @@ class AllocatorHandle {
 
   AllocatorT* device_pointer() { return allocator_; }
 
-  template<int W_MULT, class T, void(T::*func)()>
+  template<class T, void(T::*func)()>
   void parallel_do() {
     kernel_init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
 
     gpuErrchk(cudaDeviceSynchronize());
-    allocator_->parallel_do<W_MULT, T, func>();
+    allocator_->parallel_do<T, func>();
   }
 
   template<class T>

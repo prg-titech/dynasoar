@@ -183,7 +183,7 @@ class SoaAllocator {
   }
 
   // Call a member functions on all objects of a type.
-  template<int W_MULT, class T, void(T::*func)()>
+  template<class T, void(T::*func)()>
   void parallel_do() {
     ParallelExecutor<ThisAllocator, T, void, T>
         ::template FunctionWrapper<func>
