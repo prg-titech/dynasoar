@@ -3,8 +3,8 @@
 
 #include <curand_kernel.h>
 
-// #include "example/configuration/soa_alloc.h"
-#include "example/configuration/cuda_allocator.h"
+#include "example/configuration/soa_alloc.h"
+//#include "example/configuration/cuda_allocator.h"
 
 namespace wa_tor {
 

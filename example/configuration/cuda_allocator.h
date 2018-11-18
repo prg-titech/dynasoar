@@ -113,7 +113,7 @@ class SoaAllocator {
 template<typename AllocatorT>
 class AllocatorHandle {
  public:
-  template<int W_MULT, class T, void(T::*func)()>
+  template<class T, void(T::*func)()>
   void parallel_do() {
     kernel_init_stream_compaction<ThisAllocator, T><<<128, 128>>>(allocator_);
     gpuErrchk(cudaDeviceSynchronize());
@@ -133,7 +133,7 @@ class AllocatorHandle {
     kernel_init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
 
     gpuErrchk(cudaDeviceSynchronize());
-    allocator_->parallel_do<W_MULT, T, func>();
+    allocator_->parallel_do<T, func>();
   }
 
   // This is a no-op.
