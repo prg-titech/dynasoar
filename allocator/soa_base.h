@@ -1,7 +1,6 @@
 #ifndef ALLOCATOR_SOA_BASE_H
 #define ALLOCATOR_SOA_BASE_H
 
-#include "allocator/soa_defrag.h"
 #include "allocator/soa_helper.h"
 
 // User-defined classes should inherit from this class.
