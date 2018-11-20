@@ -414,7 +414,11 @@ class Bitmap {
                 "N must be of size (sizeof(ContainerT)*8)**D * x.");
 
   // Nested bitmap structure.
-  BitmapData<kNumContainers, kHasNested> data_;
+  using BitmapDataT = BitmapData<kNumContainers, kHasNested>;
+  BitmapDataT data_;
+
+  // Type of outer bitmap.
+  using OuterBitmapT = Bitmap<SizeT, N*kBitsize, ContainerT>;
 };
 
 #endif  // BITMAP_BITMAP_H
