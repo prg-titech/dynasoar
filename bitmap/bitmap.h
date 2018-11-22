@@ -257,7 +257,8 @@ class Bitmap {
     SizeT enumeration_result_size;
 
     // Containers that store the bits.
-    Bitmap<SizeT, NumContainers, ContainerT> nested;
+    using BitmapT = Bitmap<SizeT, NumContainers, ContainerT>;
+    BitmapT nested;
 
     __DEV__ SizeT DBG_count_num_ones() {
       SizeT result = 0;
@@ -412,6 +413,9 @@ class Bitmap {
 
   static_assert(!kHasNested || N % kBitsize == 0,
                 "N must be of size (sizeof(ContainerT)*8)**D * x.");
+
+  using SizeTT = SizeT;
+  using ContainerTT = ContainerT;
 
   // Nested bitmap structure.
   using BitmapDataT = BitmapData<kNumContainers, kHasNested>;
