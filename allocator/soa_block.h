@@ -57,9 +57,13 @@ class SoaBlock {
     return reinterpret_cast<T*>(ptr_as_int);
   }
 
+  __DEV__ BitmapT allocation_bitmap() const {
+    return ~free_bitmap & kBitmapInitState;
+  }
+
   // Initializes object iteration bitmap.
   __DEV__ void initialize_iteration() {
-    iteration_bitmap = (~free_bitmap) & kBitmapInitState;
+    iteration_bitmap = allocation_bitmap();
   }
 
   __DEV__ DeallocationState deallocate(int position) {

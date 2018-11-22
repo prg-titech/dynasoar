@@ -402,6 +402,9 @@ class Bitmap {
     return __ffsll(val) - 1;
   }
 
+  template<typename F, typename... Args>
+  __DEV__ void enumerate(F func, Args... args);
+
   // The number of bits per container.
   static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
@@ -424,5 +427,7 @@ class Bitmap {
   // Type of outer bitmap.
   using OuterBitmapT = Bitmap<SizeT, N*kBitsize, ContainerT>;
 };
+
+#include "bitmap/sequential_enumerate.h"
 
 #endif  // BITMAP_BITMAP_H

@@ -43,6 +43,8 @@ __device__ Cell::Cell() : agent_(nullptr) {
 __device__ Agent* Cell::agent() const { return agent_; }
 
 __device__ void Cell::decide() {
+  //device_allocator->device_do<Fish>(&Fish::update);
+
   if (neighbor_request_[4]) {
     // This cell has priority.
     agent_->set_new_position(this);

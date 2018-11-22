@@ -215,6 +215,16 @@ class SoaAllocator {
         ::parallel_do(this, /*shared_mem_size=*/ 0);
   }
 
+  // Call a member function on all objects of type.
+  // Device version (sequential).
+  template<class T, typename F, typename... Args>
+  __DEV__ void device_do(F func, Args... args) {
+    // device_do iterates over objects in a block.
+    allocated_[BlockHelper<T>::kIndex].enumerate(
+      &SequentialExecutor<T, F, ThisAllocator, Args...>::device_do,
+      func, this, args...);
+  }
+
   // Should be invoked from host side.
   template<typename T>
   void parallel_defrag(int max_records, int min_records = 1);
@@ -541,6 +551,22 @@ class SoaAllocator {
 
   static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
 };
+
+
+template<typename T, typename F, typename AllocatorT, typename... Args>
+__DEV__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
+    uint32_t block_idx, F func, AllocatorT* allocator, Args... args) {
+  auto* block = allocator->template get_block<T>(block_idx);
+  auto bitmap = block->allocation_bitmap();
+
+  while (bitmap != 0ULL) {
+    int pos = __ffsll(bitmap) - 1;
+    bitmap &= bitmap - 1;
+
+    auto* obj = allocator->template get_object<T>(block, pos);
+    (obj->*func)(args...);
+  }
+}
 
 
 // This are textual headers. Must be included at the end of the file.

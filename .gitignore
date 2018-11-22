@@ -5,3 +5,4 @@
 *.cubin
 a.out
 *.fatbin
+bin/

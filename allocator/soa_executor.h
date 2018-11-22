@@ -115,4 +115,11 @@ struct ParallelExecutor {
   };
 };
 
+template<typename T, typename F, typename AllocatorT, typename... Args>
+struct SequentialExecutor {
+  // Defined in soa_allocator.h.
+  __DEV__ static void device_do(uint32_t block_idx, F func,
+                                AllocatorT* allocator, Args... args);
+};
+
 #endif  // ALLOCATOR_SOA_EXECUTOR_H
