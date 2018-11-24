@@ -40,6 +40,8 @@ class Body : public SoaBase<AllocatorT> {
   __DEV__ void apply_force(Body* other);
 
   __DEV__ void update();
+
+  __DEV__ void add_checksum();
 };
 
 }  // nbody
