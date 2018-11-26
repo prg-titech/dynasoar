@@ -33,8 +33,10 @@ void draw(float* host_Body_pos_x, float* host_Body_pos_y,
 
   // Draw all bodies.
   for (int i = 0; i < kNumBodies; ++i) {
-    render_rect(renderer, host_Body_pos_x[i], host_Body_pos_y[i],
-                host_Body_mass[i]);
+    render_rect(renderer,
+                host_Body_pos_x[i] / kScalingFactor,
+                host_Body_pos_y[i] / kScalingFactor,
+                host_Body_mass[i] / kScalingFactor);
   }
 
   SDL_RenderPresent(renderer);

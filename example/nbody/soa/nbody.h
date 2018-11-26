@@ -42,6 +42,8 @@ class Body : public SoaBase<AllocatorT> {
   __DEV__ void update();
 
   __DEV__ void add_checksum();
+
+  __DEV__ void add_to_draw_array();
 };
 
 }  // nbody

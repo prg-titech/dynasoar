@@ -2,11 +2,20 @@
 
 #include "example/nbody/soa/configuration.h"
 #include "example/nbody/soa/nbody.h"
+#include "example/nbody/soa/rendering.h"
+
+#define OPTION_DRAW false
 
 namespace nbody {
 
 __device__ AllocatorT* device_allocator;
 __device__ double device_checksum;
+
+// Helper variables for drawing.
+__device__ int draw_counter = 0;
+__device__ float Body_pos_x[kNumBodies];
+__device__ float Body_pos_y[kNumBodies];
+__device__ float Body_mass[kNumBodies];
 
 // Host side pointer.
 AllocatorHandle<AllocatorT>* allocator_handle;
@@ -26,15 +35,18 @@ __DEV__ void Body::compute_force() {
 
 
 __DEV__ void Body::apply_force(Body* other) {
+  // Update `other`.
   if (other != this) {
     float dx = pos_x_ - other->pos_x_;
     float dy = pos_y_ - other->pos_y_;
     float dist = sqrt(dx*dx + dy*dy);
-    float F = kGravityConstant * mass_ * other->mass_ / (dist * dist);
-    force_x_ += F*dx / dist;
-    force_y_ += F*dy / dist;
+    float F = kGravityConstant * mass_ * other->mass_
+        / (dist * dist + kDampeningFactor);
+    other->force_x_ += F*dx / dist;
+    other->force_y_ += F*dy / dist;
   }
 }
+
 
 __DEV__ void Body::update() {
   vel_x_ += force_x_*kDt / mass_;
@@ -57,6 +69,14 @@ __DEV__ void Body::add_checksum() {
 }
 
 
+__DEV__ void Body::add_to_draw_array() {
+  int idx = atomicAdd(&draw_counter, 1);
+  Body_pos_x[idx] = pos_x_;
+  Body_pos_y[idx] = pos_y_;
+  Body_mass[idx] = mass_;
+}
+
+
 __global__ void kernel_compute_checksum() {
   device_checksum = 0.0f;
   device_allocator->template device_do<Body>(&Body::add_checksum);
@@ -72,15 +92,29 @@ __global__ void kernel_initialize_bodies() {
     device_allocator->make_new<Body>(
         /*pos_x=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
         /*pos_y=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
-        /*vel_x=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 1000,
-        /*vel_y=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 1000,
+        /*vel_x=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
+        /*vel_y=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
         /*mass=*/ kScalingFactor * (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
   }
 }
 
 
+__global__ void kernel_reset_draw_counters() {
+  draw_counter = 0;
+}
+
+
 int main(int argc, char** argv) {
+  if (OPTION_DRAW) {
+    init_renderer();
+  }
+
   AllocatorT::DBG_print_stats();
+
+  // Host-side variables for rendering.
+  float host_Body_pos_x[kNumBodies];
+  float host_Body_pos_y[kNumBodies];
+  float host_Body_mass[kNumBodies];
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -96,6 +130,21 @@ int main(int argc, char** argv) {
   for (int i = 0; i < kNumIterations; ++i) {
     allocator_handle->parallel_do<Body, &Body::compute_force>();
     allocator_handle->parallel_do<Body, &Body::update>();
+
+    if (OPTION_DRAW) {
+      kernel_reset_draw_counters<<<1, 1>>>();
+      gpuErrchk(cudaDeviceSynchronize());
+      allocator_handle->parallel_do<Body, &Body::add_to_draw_array>();
+      gpuErrchk(cudaDeviceSynchronize());
+
+      cudaMemcpyFromSymbol(host_Body_pos_x, Body_pos_x,
+                           sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+      cudaMemcpyFromSymbol(host_Body_pos_y, Body_pos_y, sizeof(float)*kNumBodies, 0,
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpyFromSymbol(host_Body_mass, Body_mass, sizeof(float)*kNumBodies, 0,
+                 cudaMemcpyDeviceToHost);
+      draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass);
+    }
   }
 
   auto time_end = std::chrono::system_clock::now();
@@ -112,6 +161,11 @@ int main(int argc, char** argv) {
   cudaMemcpyFromSymbol(&checksum, device_checksum, sizeof(device_checksum), 0,
                        cudaMemcpyDeviceToHost);
   printf("Checksum: %f\n", checksum);
+
+
+  if (OPTION_DRAW) {
+    close_renderer();
+  }
 
   return 0;
 }

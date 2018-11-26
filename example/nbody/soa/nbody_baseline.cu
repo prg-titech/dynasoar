@@ -49,11 +49,11 @@ __device__ void Body_compute_force(int id) {
   for (int i = 0; i < kNumBodies; ++i) {
     // Do not compute force with the body itself.
     if (id != i) {
-      float dx = dev_Body_pos_x[id] - dev_Body_pos_x[i];
-      float dy = dev_Body_pos_y[id] - dev_Body_pos_y[i];
+      float dx = dev_Body_pos_x[i] - dev_Body_pos_x[id];
+      float dy = dev_Body_pos_y[i] - dev_Body_pos_y[id];
       float dist = sqrt(dx*dx + dy*dy);
       float F = kGravityConstant * dev_Body_mass[id] * dev_Body_mass[i]
-          / (dist * dist);
+          / (dist * dist + kDampeningFactor);
       dev_Body_force_x[id] += F*dx / dist;
       dev_Body_force_y[id] += F*dy / dist;
     }
@@ -105,8 +105,8 @@ __global__ void kernel_initialize_bodies(float* pos_x, float* pos_y,
     new_Body(/*id=*/ i,
              /*pos_x=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
              /*pos_y=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
-             /*vel_x=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 1000,
-             /*vel_y=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 1000,
+             /*vel_x=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
+             /*vel_y=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
              /*mass=*/ kScalingFactor * (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
   }
 }
