@@ -2,6 +2,11 @@
 #include <curand_kernel.h>
 #include <stdio.h>
 
+#include "example/nbody/soa/configuration.h"
+#include "example/nbody/soa/rendering.h"
+
+#define OPTION_DRAW false
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -12,13 +17,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-static const int kScalingFactor = 100;
-static const int kSeed = 42;
-static const int kNumIterations = 500;
-static const int kNumBodies = 4096;
-static const float kDt = 0.5f;
-static const float kGravityConstant = 6.673e-11;  // gravitational constant
-static const float kMaxMass = 1000.0f;
+namespace nbody {
 
 static const int kCudaBlockSize = 256;
 
@@ -138,6 +137,10 @@ __global__ void kernel_compute_checksum() {
 
 
 int main(int argc, char** argv) {
+  if (OPTION_DRAW) {
+    init_renderer();
+  }
+
   float* host_Body_pos_x;
   float* host_Body_pos_y;
   float* host_Body_vel_x;
@@ -154,6 +157,11 @@ int main(int argc, char** argv) {
   cudaMalloc(&host_Body_mass, sizeof(float)*kNumBodies);
   cudaMalloc(&host_Body_force_x, sizeof(float)*kNumBodies);
   cudaMalloc(&host_Body_force_y, sizeof(float)*kNumBodies);
+
+  // Host-side variables for rendering.
+  float Body_pos_x[kNumBodies];
+  float Body_pos_y[kNumBodies];
+  float Body_mass[kNumBodies];
 
   auto time_start = std::chrono::system_clock::now();
 
@@ -174,6 +182,16 @@ int main(int argc, char** argv) {
         (kNumBodies + kCudaBlockSize - 1)/kCudaBlockSize,
         kCudaBlockSize>>>();
     gpuErrchk(cudaDeviceSynchronize());
+
+    if (OPTION_DRAW) {
+      cudaMemcpy(Body_pos_x, host_Body_pos_x, sizeof(float)*kNumBodies,
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpy(Body_pos_y, host_Body_pos_y, sizeof(float)*kNumBodies,
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpy(Body_mass, host_Body_mass, sizeof(float)*kNumBodies,
+                 cudaMemcpyDeviceToHost);
+      draw(Body_pos_x, Body_pos_y, Body_mass);
+    }
   }
 
   auto time_end = std::chrono::system_clock::now();
@@ -199,5 +217,16 @@ int main(int argc, char** argv) {
   cudaFree(host_Body_force_x);
   cudaFree(host_Body_force_y);
 
+  if (OPTION_DRAW) {
+    close_renderer();
+  }
+
   return 0;
+}
+
+}  // namespace nbody
+
+
+int main(int argc, char** argv) {
+  nbody::main(argc, argv);
 }
