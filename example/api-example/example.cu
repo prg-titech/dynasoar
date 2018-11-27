@@ -13,6 +13,19 @@ using AllocatorT = SoaAllocator<64*64*64*64, Foo, Bar>;
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
+class Bar : public SoaBase<AllocatorT> {
+ public:
+  using FieldTypes = std::tuple<int, int, int>;
+
+  SoaField<Bar, 0> field1_;
+  SoaField<Bar, 1> field2_;
+  SoaField<Bar, 2> field3_;
+
+  __device__ void foo(int v) {
+    field1_ += v;
+  }
+};
+
 class Foo : public SoaBase<AllocatorT> {
  public:
   // Pre-declare types of all fields.
@@ -28,11 +41,12 @@ class Foo : public SoaBase<AllocatorT> {
   __device__ void qux() {
     field1_ = field2_ + field3_;
   }
-};
 
-class Bar : public SoaBase<AllocatorT> {
- public:
-  using FieldTypes = std::tuple<int, int, int>;
+  __device__ void baz() {
+    // Run in Bar::foo(42) sequentially for all objects of type Bar. Note that
+    // Foo::baz may run in parallel though.
+    device_allocator->template device_do<Bar>(&Bar::foo, 42);
+  }
 };
 
 __global__ void create_objects() {

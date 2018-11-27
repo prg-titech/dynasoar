@@ -15,6 +15,17 @@ SMMO (Single-Method Multiple-Objects) is a wide-spread pattern of parallel, obje
 ## Prerequisites
 Tested with CUDA Toolkit 9.1 on a Nvidia Titan Xp machine (Ubuntu 16.04.1).
 
+## API Overview
+All classes/structs that should be managed by SoaAlloc must inherit from `SoaBase<AllocatorT>`, where `AllocatorT` is the fully configured typed of the allocator. The first template argument to `SoaAllocator` is the maximum number of objects that can exist within the allocator at any given time; this number determines the memory usage of the allocator. The following arguments are all classes/structs that are managed by SoaAlloc.
+
+SoaAlloc has a host side API (`AllocatorHandle<AllocatorT>`) and a device side API (`AllocatorT`). The following functionality is provided with those APIs.
+* `AllocatorHandle::AllocatorHandle()`: The constructor allocated all necessary memory on GPU.
+* `AllocatorHandle::device_pointer()`: Returns a pointer to the device allocator handle (`AllocatorT*`).
+* `AllocatorHandle::parallel_do<C, &C::foo>()`: Runs the member function `C::foo()` in parallel for all objects of type `C` that were created with the allocator. Internally, this will launch a CUDA kernel. This function returns when the CUDA kernel has finished processing all objects.
+* `AllocatorT::make_new<C>(/*args*/)`: Creates a new object of type `C`, where `C` must be managed by the allocator. Returns a pointer to the new objects. This is similar to C++ `new`.
+* `AllocatorT:free<C>(/*args*/)`: Deletes an existing object of type `C` that was created with the allocator. This is similar to C++ `delete`.
+* `AllocatorT::device_do<C>(&C::foo /*, args*/)`: Runs `C::foo(/*args*/)` for all objects of type `C` that were created with the allocator. Note that this does not spawn a new CUDA kernel; execution is sequential.
+
 ## API Example
 This example does not compute anything meaningful and is only meant to show the API. Take a look at the code in the `example` directory for more interesting examples.
 
@@ -48,6 +59,12 @@ class Foo : public SoaBase<AllocatorT> {
  
   __device__ void qux() {
     field1_ = field2_ + field3_;
+  }
+
+  __device__ void baz() {
+    // Run in Bar::foo(42) sequentially for all objects of type Bar. Note that
+    // Foo::baz may run in parallel though.
+    device_allocator->template device_do<Bar>(&Bar::foo, 42);
   }
 };
 
