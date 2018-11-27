@@ -4,8 +4,6 @@
 #include "example/nbody/soa/nbody.h"
 #include "example/nbody/soa/rendering.h"
 
-#define OPTION_DRAW false
-
 namespace nbody {
 
 __device__ AllocatorT* device_allocator;
@@ -54,11 +52,11 @@ __DEV__ void Body::update() {
   pos_x_ += vel_x_*kDt;
   pos_y_ += vel_y_*kDt;
 
-  if (pos_x_ < -kScalingFactor || pos_x_ > kScalingFactor) {
+  if (pos_x_ < -1 || pos_x_ > 1) {
     vel_x_ = -vel_x_;
   }
 
-  if (pos_y_ < -kScalingFactor || pos_y_ > kScalingFactor) {
+  if (pos_y_ < -1 || pos_y_ > 1) {
     vel_y_ = -vel_y_;
   }
 }
@@ -90,11 +88,11 @@ __global__ void kernel_initialize_bodies() {
 
   for (int i = tid; i < kNumBodies; i += blockDim.x * gridDim.x) {
     device_allocator->make_new<Body>(
-        /*pos_x=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
-        /*pos_y=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
-        /*vel_x=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
-        /*vel_y=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
-        /*mass=*/ kScalingFactor * (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
+        /*pos_x=*/ 2 * curand_uniform(&rand_state) - 1,
+        /*pos_y=*/ 2 * curand_uniform(&rand_state) - 1,
+        /*vel_x=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
+        /*vel_y=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
+        /*mass=*/ (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
   }
 }
 

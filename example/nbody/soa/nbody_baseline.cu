@@ -5,8 +5,6 @@
 #include "example/nbody/soa/configuration.h"
 #include "example/nbody/soa/rendering.h"
 
-#define OPTION_DRAW false
-
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -67,11 +65,11 @@ __device__ void Body_update(int id) {
   dev_Body_pos_x[id] += dev_Body_vel_x[id]*kDt;
   dev_Body_pos_y[id] += dev_Body_vel_y[id]*kDt;
 
-  if (dev_Body_pos_x[id] < -kScalingFactor || dev_Body_pos_x[id] > kScalingFactor) {
+  if (dev_Body_pos_x[id] < -1 || dev_Body_pos_x[id] > 1) {
     dev_Body_vel_x[id] = -dev_Body_vel_x[id];
   }
 
-  if (dev_Body_pos_y[id] < -kScalingFactor || dev_Body_pos_y[id] > kScalingFactor) {
+  if (dev_Body_pos_y[id] < -1 || dev_Body_pos_y[id] > 1) {
     dev_Body_vel_y[id] = -dev_Body_vel_y[id];
   }
 }
@@ -103,11 +101,11 @@ __global__ void kernel_initialize_bodies(float* pos_x, float* pos_y,
 
     // Create new Body object.
     new_Body(/*id=*/ i,
-             /*pos_x=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
-             /*pos_y=*/ kScalingFactor * (2 * curand_uniform(&rand_state) - 1),
-             /*vel_x=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
-             /*vel_y=*/ kScalingFactor * (curand_uniform(&rand_state) - 0.5) / 100000,
-             /*mass=*/ kScalingFactor * (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
+             /*pos_x=*/ 2 * curand_uniform(&rand_state) - 1,
+             /*pos_y=*/ 2 * curand_uniform(&rand_state) - 1,
+             /*vel_x=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
+             /*vel_y=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
+             /*mass=*/ (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
   }
 }
 
