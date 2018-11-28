@@ -2,6 +2,7 @@
 #define ALLOCATOR_SOA_BASE_H
 
 #include "allocator/soa_helper.h"
+#include "allocator/soa_field.h"
 
 // User-defined classes should inherit from this class.
 template<class AllocatorT>
@@ -18,6 +19,12 @@ class SoaBase {
     SoaClassHelper<ScanClassT>::template dev_for_all<ClassIterT::FieldUpdater,
                                                      /*IterateBase=*/ true>(
         allocator, static_cast<ScanClassT*>(this), num_records);
+  }
+
+  __DEV__ void DBG_print_ptr_decoding() const {
+    char* block_ptr = PointerHelper::block_base_from_obj_ptr(this);
+    int obj_id = PointerHelper::obj_id_from_obj_ptr(this);
+    printf("%p = Block %p  |  Object %i\n", this, block_ptr, obj_id);
   }
 };
 

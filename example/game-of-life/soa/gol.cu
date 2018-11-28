@@ -35,6 +35,9 @@ __device__ Agent::Agent(int cell_id)
     : cell_id_(cell_id), action_(kActionNone) {}
 
 
+__device__ int Agent::cell_id() { return cell_id_; }
+
+
 __device__ int Agent::num_alive_neighbors() {
   int cell_x = cell_id_ % SIZE_X;
   int cell_y = cell_id_ / SIZE_X;
@@ -73,6 +76,8 @@ __device__ void Alive::prepare() {
 
 
 __device__ void Alive::update() {
+  int cid = cell_id_;
+
   // TODO: Consider splitting in two classes for less divergence.
   if (is_new_) {
     // Create candidates in neighborhood.
@@ -80,8 +85,8 @@ __device__ void Alive::update() {
   } else {
     if (action_ == kActionDie) {
       // Replace with Candidate. Or should we?
-      cells[cell_id_]->agent_ =
-          device_allocator->make_new<Candidate>(cell_id_);
+      cells[cid]->agent_ =
+          device_allocator->make_new<Candidate>(cid);
       device_allocator->free<Alive>(this);
     }
   }
@@ -121,7 +126,6 @@ __device__ void Alive::maybe_create_candidate(int x, int y) {
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
         if (cells[ny*SIZE_X + nx]->is_alive()) {
           Alive* alive = static_cast<Alive*>(cells[ny*SIZE_X + nx]->agent());
-          printf("CHECK: %i --> %i\n", ny*SIZE_X + nx, (int) alive->is_new_);
           if (alive->is_new_) {
             if (alive == this) {
               // Create candidate now.
@@ -155,11 +159,14 @@ __device__ void Candidate::prepare() {
 
 
 __device__ void Candidate::update() {
+  // TODO: Why is this necessary?
+  int cid = cell_id_;
+
   if (action_ == kActionSpawnAlive) {
-    cells[cell_id_]->agent_ = device_allocator->make_new<Alive>(cell_id_);
+    cells[cid]->agent_ = device_allocator->make_new<Alive>(cid);
     device_allocator->free<Candidate>(this);
   } else if (action_ == kActionDie) {
-    cells[cell_id_]->agent_ = nullptr;
+    cells[cid]->agent_ = nullptr;
     device_allocator->free<Candidate>(this);
   }
 }
@@ -179,6 +186,7 @@ __global__ void load_game(int* cell_ids, int num_cells) {
        i < num_cells; i += blockDim.x * gridDim.x) {
     cells[cell_ids[i]]->agent_ =
         device_allocator->make_new<Alive>(cell_ids[i]);
+    assert(cells[cell_ids[i]]->agent()->cell_id() == cell_ids[i]);
   }
 }
 

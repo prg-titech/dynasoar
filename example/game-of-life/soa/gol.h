@@ -51,6 +51,8 @@ class Agent : public SoaBase<AllocatorT> {
   __device__ Agent(int cell_id);
 
   __device__ int num_alive_neighbors();
+
+  __device__ int cell_id();
 };
 
 
@@ -58,6 +60,7 @@ class Alive : public Agent {
  public:
   using FieldTypes = std::tuple<bool>;  // is_new_
 
+  using BaseClass = Agent;
   static const bool kIsAbstract = false;
 
  private:
@@ -81,6 +84,7 @@ class Candidate : public Agent {
   // TODO: This should be empty but it cannot be at the moment.
   using FieldTypes = std::tuple<bool>;  // no additional fields
 
+  using BaseClass = Agent;
   static const bool kIsAbstract = false;
 
   __device__ Candidate(int cell_id);

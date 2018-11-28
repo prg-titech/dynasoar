@@ -4,13 +4,13 @@
 #include "allocator/configuration.h"
 
 struct PointerHelper {
-  __DEV__ static uint8_t obj_id_from_obj_ptr(void* obj) {
+  __DEV__ static uint8_t obj_id_from_obj_ptr(const void* obj) {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
     return static_cast<uint8_t>(ptr_base)
         & static_cast<uint8_t>(0x3F);  // Truncated.
   }
 
-  __DEV__ static char* block_base_from_obj_ptr(void* obj) {
+  __DEV__ static char* block_base_from_obj_ptr(const void* obj) {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
     return reinterpret_cast<char*>(
         ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0));
