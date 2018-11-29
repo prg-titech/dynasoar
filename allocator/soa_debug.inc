@@ -11,7 +11,7 @@ struct AllocatorWrapperDebug {
   template<typename T>
   struct SoaTypeDbgPrinter {
     bool operator()() {
-      printf("sizeof(%s) = %lu\n", typeid(T).name(), sizeof(T));
+      printf("number of fields(%s) = %lu\n", typeid(T).name(), sizeof(T));
       printf("block size(%s) = %i\n", typeid(T).name(), BlockHelper<T>::kSize);
       printf("leq50 threshold(%s) = %i\n", typeid(T).name(),
              BlockHelper<T>::kLeq50Threshold);

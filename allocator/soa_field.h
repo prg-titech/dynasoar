@@ -76,7 +76,7 @@ class SoaField {
   __DEV__ SoaField() {}
   __DEV__ explicit SoaField(const T& value) { *data_ptr() = value; }
 
-  // Explicit conversion for automatic conversion to base type.
+  // Implicit conversion operator for automatic conversion to base type.
   __DEV__ operator T&() { return *data_ptr(); }
   __DEV__ operator const T&() const { return *data_ptr(); }
 
