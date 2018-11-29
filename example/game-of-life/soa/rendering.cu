@@ -10,28 +10,25 @@ static const int kCellWidth = 2;
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
-static void render_rect(SDL_Renderer* renderer, int x, int, char state) {
+static void render_rect(SDL_Renderer* renderer, int x, int y, char state) {
   SDL_Rect rect;
-  rect.w = rect.h = mass / kMaxMass * kMaxRect;
-  rect.x = (x/2 + 0.5) * kWindowWidth - rect.w/2;
-  rect.y = (y/2 + 0.5) * kWindowHeight - rect.h/2;
+  rect.w = rect.h = kCellWidth;
+  rect.x = x*kCellWidth;
+  rect.y = y*kCellWidth;
   SDL_RenderDrawRect(renderer, &rect);
 }
 
 
 // Render simulation. Return value indicates if similation should continue.
-void draw(float* host_cells) {
+void draw(char* host_cells) {
   // Clear scene.
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
   SDL_RenderClear(renderer);
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
 
   // Draw all bodies.
-  for (int i = 0; i < kNumBodies; ++i) {
-    render_rect(renderer,
-                host_Body_pos_x[i],
-                host_Body_pos_y[i],
-                host_Body_mass[i]);
+  for (int i = 0; i < SIZE_X*SIZE_Y; ++i) {
+    render_rect(renderer, i%SIZE_X, i/SIZE_X, host_cells[i]);
   }
 
   SDL_RenderPresent(renderer);
@@ -53,7 +50,7 @@ void init_renderer() {
     exit(1);
   }
 
-  if (SDL_CreateWindowAndRenderer(kWindowWidth, kWindowHeight, 0,
+  if (SDL_CreateWindowAndRenderer(kCellWidth*SIZE_X, kCellWidth*SIZE_Y, 0,
         &window, &renderer) != 0) {
     printf("Could not create window/render!\n");
     exit(1);

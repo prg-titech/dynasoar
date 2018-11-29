@@ -1,5 +1,6 @@
 #include "example/game-of-life/soa/gol.h"
 #include "example/game-of-life/soa/configuration.h"
+#include "example/game-of-life/soa/rendering.h"
 
 
 // Allocator handles.
