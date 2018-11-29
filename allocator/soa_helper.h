@@ -123,12 +123,12 @@ struct SoaFieldHelper<void, -1> {
 template<typename SoaFieldHelperT>
 struct SoaFieldDbgPrinter {
   bool operator()() {
-    printf("%s[%i]: type = %s, offset = %i, size = %lu\n",
-           typeid(typename SoaFieldHelperT::OwnerClass).name(),
+    printf("│ %5i │ %15s │ %21s │ %8i │ %8i │\n",
            SoaFieldHelperT::kIndex,
+           typeid(typename SoaFieldHelperT::OwnerClass).name(),
            typeid(typename SoaFieldHelperT::type).name(),
-           SoaFieldHelperT::kOffset,
-           sizeof(typename SoaFieldHelperT::type));
+           (int) sizeof(typename SoaFieldHelperT::type),
+           (int) SoaFieldHelperT::kOffset);
     return true;  // true means "continue processing".
   }
 };
@@ -151,11 +151,18 @@ struct SoaClassHelper {
   };
 
   static void DBG_print_stats() {
-    printf("----------------------------------------------------------\n");
-    printf("Class %s: data_segment_size(1) = %i\n",
-           typeid(C).name(), BlockConfig<1>::kDataSegmentSize);
+    printf("│ aligned obj. size  │ %8i bytes                                   │\n",
+           (int) BlockConfig<1>::kDataSegmentSize);
+
+    printf("├────────────────────┴──────────────────────────────────────────────────┤\n");
+    printf("│ Fields                                                                │\n");
+    printf("├───────┬─────────────────┬───────────────────────┬──────────┬──────────┤\n");
+    printf("│ Index │ Def. Class      │ Type                  │ Size     │ Offset   │\n");
+    printf("├───────┼─────────────────┼───────────────────────┼──────────┼──────────┤\n");
+
     for_all<SoaFieldDbgPrinter, /*IterateBase=*/ true>();
-    printf("----------------------------------------------------------\n");
+
+    printf("└───────┴─────────────────┴───────────────────────┴──────────┴──────────┘\n");
   }
 
   template<template<class> typename F, bool IterateBase, typename... Args>

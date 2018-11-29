@@ -11,14 +11,25 @@ struct AllocatorWrapperDebug {
   template<typename T>
   struct SoaTypeDbgPrinter {
     bool operator()() {
-      printf("number of fields(%s) = %lu\n", typeid(T).name(), sizeof(T));
-      printf("block size(%s) = %i\n", typeid(T).name(), BlockHelper<T>::kSize);
-      printf("leq50 threshold(%s) = %i\n", typeid(T).name(),
-             BlockHelper<T>::kLeq50Threshold);
-      printf("data segment bytes(%s) = %i\n", typeid(T).name(),
-             BlockHelper<T>::kBytes);
-      printf("block bytes(%s) = %lu\n", typeid(T).name(),
-             sizeof(typename BlockHelper<T>::BlockType));
+      printf("┌───────────────────────────────────────────────────────────────────────┐\n");
+      printf("│ Block stats for %37s (type ID %5i) │\n",
+             typeid(T).name(), BlockHelper<T>::kIndex);
+      printf("├────────────────────┬──────────────────────────────────────────────────┤\n");
+      printf("│ #fields            │ %8i                                         │\n",
+             (int) sizeof(T));
+      printf("│ #objects / block   │ %8i                                         │\n",
+             (int) BlockHelper<T>::kSize);
+      printf("│ leq50 threshold    │ %8i                                         │\n",
+             (int) BlockHelper<T>::kLeq50Threshold);
+      printf("│ data segment size  │ %8i bytes                                   │\n",
+             (int) BlockHelper<T>::kBytes);
+      printf("│ block size         │ %8i bytes                                   │\n",
+             (int) sizeof(typename BlockHelper<T>::BlockType));
+      printf("│ base class         │ %48s │\n",
+              typeid(typename T::BaseClass).name());
+      printf("│ is abstract        │ %8i                                         │\n",
+             (int) T::kIsAbstract);
+
       SoaClassHelper<T>::DBG_print_stats();
       return true;  // true means "continue processing".
     }
@@ -93,15 +104,17 @@ __DEV__ uint32_t SoaAllocator<N_Objects, Types...>::DBG_used_slots() {
 
 template<uint32_t N_Objects, class... Types>
 void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
-  printf("----------------------------------------------------------\n");
-  TupleHelper<Types...>::template for_all<
-      AllocatorWrapperDebug<ThisAllocator>::template SoaTypeDbgPrinter>();
-  printf("Smallest block type: %s at %i bytes.\n",
+  printf("┌───────────────────────────────────────────────────────────────────────┐\n");
+  printf("│ Smallest block type:  %s @ %i bytes.\n",
          typeid(typename TupleHelper<Types...>::Type64BlockSizeMin).name(),
          TupleHelper<Types...>::kPadded64BlockMinSize);
-  printf("Block size bytes: %i\n", kBlockSizeBytes);
-  printf("Data buffer size (MB): %f\n", kDataBufferSize/1024.0/1024.0);
-  printf("----------------------------------------------------------\n");
+  printf("│ Max. #objects:        %i\n", (int) N_Objects);
+  printf("│ Block size:           %i bytes\n", kBlockSizeBytes);
+  printf("│ Data buffer size:     %f MB\n", kDataBufferSize/1024.0/1024.0);
+  printf("└───────────────────────────────────────────────────────────────────────┘\n");
+
+  TupleHelper<Types...>::template for_all<
+      AllocatorWrapperDebug<ThisAllocator>::template SoaTypeDbgPrinter>();
 }
 
 template<uint32_t N_Objects, class... Types>
