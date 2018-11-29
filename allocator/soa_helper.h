@@ -41,14 +41,14 @@ struct SoaFieldHelper {
 
   using ThisClass = SoaFieldHelper<C, Index>;
 
+  // Required alignment of SOA array.
+  static const int kAlignment = ObjectAlignment<type>::value;
   // Index of this field.
   static const int kIndex = Index;
   // Offset of this field.
   static const int kOffset = PrevHelper::kOffsetWithField;
   // End-offset of this field.
   static const int kOffsetWithField = kOffset + sizeof(type);
-  // Required alignment of SOA array.
-  static const int kAlignment = ObjectAlignment<type>::value;
 
   static_assert(SoaFieldHelper<C, Index - 1>::kAlignment % kAlignment == 0,
                 "Fields in class must be sorted by size.");

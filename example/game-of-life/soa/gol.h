@@ -76,6 +76,9 @@ class Alive : public Agent {
   __device__ void prepare();
 
   __device__ void update();
+
+  // Only for rendering.
+  __device__ void update_render_array();
 };
 
 

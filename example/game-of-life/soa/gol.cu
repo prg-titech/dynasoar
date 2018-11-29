@@ -1,12 +1,15 @@
 #include "example/game-of-life/soa/gol.h"
-
-#define SIZE_X 1000
-#define SIZE_Y 500
+#include "example/game-of-life/soa/configuration.h"
 
 
 // Allocator handles.
 AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ AllocatorT* device_allocator;
+
+
+// Rendering array.
+__device__ char device_render_cells[SIZE_X*SIZE_Y];
+char host_render_cells[SIZE_X*SIZE_Y];
 
 
 __device__ Cell* cells[SIZE_X*SIZE_Y];
@@ -144,6 +147,11 @@ __device__ void Alive::maybe_create_candidate(int x, int y) {
 }
 
 
+__device__ void Alive::update_render_array() {
+  device_render_cells[cell_id_] = 1;
+}
+
+
 __device__ Candidate::Candidate(int cell_id) : Agent(cell_id) {}
 
 
@@ -191,6 +199,14 @@ __global__ void load_game(int* cell_ids, int num_cells) {
 }
 
 
+__global__ void initialize_render_arrays() {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < SIZE_X*SIZE_Y; i += blockDim.x * gridDim.x) {
+    device_render_cells[i] = 0;
+  }
+}
+
+
 int encode_cell_coords(int x, int y) {
   return SIZE_X*y + x;
 }
@@ -217,7 +233,22 @@ void load_glider() {
 }
 
 
+void render() {
+  initialize_render_arrays<<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  allocator_handle->parallel_do<Alive, &Alive::update_render_array>();
+
+  cudaMemcpyFromSymbol(host_render_cells, device_render_cells,
+                       sizeof(char)*SIZE_X*SIZE_Y, 0, cudaMemcpyDeviceToHost);
+  draw(host_render_cells);
+}
+
+
 int main(int argc, char** argv) {
+  if (OPTION_DRAW) {
+    init_renderer();
+  }
+
   AllocatorT::DBG_print_stats();
   
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 2*1024U*1024*1024);
@@ -244,5 +275,15 @@ int main(int argc, char** argv) {
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
     allocator_handle->parallel_do<Candidate, &Candidate::update>();
     allocator_handle->parallel_do<Alive, &Alive::update>();
+
+    if (OPTION_DRAW) {
+      render();
+    }
   }
+
+  if (OPTION_DRAW) {
+    close_renderer();
+  }
+
+  return 0;
 }
