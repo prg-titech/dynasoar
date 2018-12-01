@@ -4,18 +4,20 @@
 #include "example/game-of-life/soa/rendering.h"
 
 // Constants for rendering.
-static const int kCellWidth = 2;
+static const int kCellWidth = 4;
 
 // SDL rendering variables.
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
 static void render_rect(SDL_Renderer* renderer, int x, int y, char state) {
-  SDL_Rect rect;
-  rect.w = rect.h = kCellWidth;
-  rect.x = x*kCellWidth;
-  rect.y = y*kCellWidth;
-  SDL_RenderDrawRect(renderer, &rect);
+  if (state == 1) {
+    SDL_Rect rect;
+    rect.w = rect.h = kCellWidth;
+    rect.x = x*kCellWidth;
+    rect.y = y*kCellWidth;
+    SDL_RenderDrawRect(renderer, &rect);
+  }
 }
 
 
@@ -40,6 +42,8 @@ void draw(char* host_cells) {
       exit(1);
     }
   }
+
+  SDL_Delay(50);
 }
 
 

@@ -271,7 +271,7 @@ int main(int argc, char** argv) {
 
   // Run simulation.
   for (int i = 0; i < 500; ++i) {
-    printf("Iteration %i\n", i);
+    // printf("Iteration %i\n", i);
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
     allocator_handle->parallel_do<Candidate, &Candidate::update>();
