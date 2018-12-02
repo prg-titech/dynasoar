@@ -263,9 +263,13 @@ int checksum() {
 
 
 int main(int argc, char** argv) {
-  // Load data set.
-  // dataset = load_glider();
-  dataset = load_from_file("/home/matthias/Downloads/tm.pgm");
+  if (argc != 2) {
+    printf("Usage: %s filename.pgm\n", argv[0]);
+    exit(1);
+  } else {
+    // Load data set.
+    dataset = load_from_file(argv[1]);
+  }
 
   cudaMemcpyToSymbol(SIZE_X, &dataset.x, sizeof(int), 0,
                      cudaMemcpyHostToDevice);

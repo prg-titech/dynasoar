@@ -5,7 +5,7 @@
 
 #define OPTION_DRAW false
 
-using CellT = char;
+using CellT = int;
 
 extern dataset_t dataset;
 

@@ -105,7 +105,15 @@ void render() {
   cudaMemcpy(render_cells, host_cells, sizeof(CellT)*dataset.x*dataset.y,
              cudaMemcpyDeviceToHost);
   gpuErrchk(cudaDeviceSynchronize());
-  draw(render_cells);
+
+  // Make a copy of array because CellT might not be char.
+  char* char_render_cells = new char[dataset.x*dataset.y];
+  for (int i = 0; i < dataset.x*dataset.y; ++i) {
+    char_render_cells[i] = render_cells[i];
+  }
+
+  draw(char_render_cells);
+  delete[] char_render_cells;
 }
 
 
@@ -125,8 +133,13 @@ int checksum() {
 
 
 int main(int argc, char** argv) {
-  //dataset = load_glider();
-  dataset = load_from_file("/home/matthias/Downloads/tm.pgm");
+  if (argc != 2) {
+    printf("Usage: %s filename.pgm\n", argv[0]);
+    exit(1);
+  } else {
+    // Load data set.
+    dataset = load_from_file(argv[1]);
+  }
 
   if (OPTION_DRAW) {
     init_renderer();
