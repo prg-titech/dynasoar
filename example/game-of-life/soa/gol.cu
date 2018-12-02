@@ -1,3 +1,5 @@
+#include <chrono>
+
 #include "example/game-of-life/soa/gol.h"
 #include "example/game-of-life/soa/configuration.h"
 #include "example/game-of-life/soa/dataset_loader.h"
@@ -310,6 +312,8 @@ int main(int argc, char** argv) {
 
   transfer_dataset();
 
+  auto time_start = std::chrono::system_clock::now();
+
   // Run simulation.
   for (int i = 0; i < 100; ++i) {
     printf("Iteration %i\n", i);
@@ -326,6 +330,13 @@ int main(int argc, char** argv) {
   if (OPTION_DRAW) {
     close_renderer();
   }
+
+  auto time_end = std::chrono::system_clock::now();
+  auto elapsed = time_end - time_start;
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      .count();
+
+  printf("Time: %lu ms\n", millis);
 
   printf("Checksum: %i\n", checksum());
 
