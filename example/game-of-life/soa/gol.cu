@@ -122,12 +122,11 @@ __device__ void Alive::create_candidates() {
         if (cells[ny*SIZE_X + nx]->is_empty()) {
           // Candidate should be created here.
           //maybe_create_candidate(nx, ny);
-          Agent** agent_addr = &cells[ny*SIZE_X + nx]->agent_;
+          Agent** agent_addr = cells[ny*SIZE_X + nx]->agent_.data_ptr();
 
-          if (atomicCAS(reinterpret_cast<unsigned long long int*>(&agent_addr),
-                        /*compare=*/ 0,
-                        /*val=*/ 1)) {
-            printf("A!\n");
+          if (atomicCAS(reinterpret_cast<unsigned long long int*>(agent_addr),
+                        /*compare=*/ 0ULL,
+                        /*val=*/ 1ULL) == 0ULL) {
             cells[ny*SIZE_X + nx]->agent_ = device_allocator->make_new<Candidate>(ny*SIZE_X + nx);
           }
         }

@@ -36,7 +36,7 @@ struct PointerHelper {
 // identifier.
 template<typename C, int Field>
 class SoaField {
- private:
+ public:
   using T = typename SoaFieldHelper<C, Field>::type;
 
   // Calculate data pointer from address.
