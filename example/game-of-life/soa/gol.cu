@@ -1,5 +1,6 @@
 #include "example/game-of-life/soa/gol.h"
 #include "example/game-of-life/soa/configuration.h"
+#include "example/game-of-life/soa/dataset_loader.h"
 #include "example/game-of-life/soa/rendering.h"
 
 
@@ -9,11 +10,17 @@ __device__ AllocatorT* device_allocator;
 
 
 // Rendering array.
-__device__ char device_render_cells[SIZE_X*SIZE_Y];
-char host_render_cells[SIZE_X*SIZE_Y];
+// TODO: Fix variable names.
+__device__ char* device_render_cells;
+char* host_render_cells;
+char* d_device_render_cells;
 
 
-__device__ Cell* cells[SIZE_X*SIZE_Y];
+// Dataset.
+__device__ int SIZE_X;
+__device__ int SIZE_Y;
+__device__ Cell** cells;
+dataset_t dataset;
 
 
 __device__ Cell::Cell() : agent_(nullptr) {}
@@ -208,44 +215,63 @@ __global__ void initialize_render_arrays() {
 }
 
 
-int encode_cell_coords(int x, int y) {
-  return SIZE_X*y + x;
-}
-
-
-void load_glider() {
-  // Create data set.
-  int cell_ids[5];
-  cell_ids[0] = encode_cell_coords(1, 0);
-  cell_ids[1] = encode_cell_coords(2, 1);
-  cell_ids[2] = encode_cell_coords(0, 2);
-  cell_ids[3] = encode_cell_coords(1, 2);
-  cell_ids[4] = encode_cell_coords(2, 2);
-
-  int* dev_cell_ids;
-  cudaMalloc(&dev_cell_ids, sizeof(int)*5);
-  cudaMemcpy(dev_cell_ids, cell_ids, sizeof(int)*5, cudaMemcpyHostToDevice);
-
-  load_game<<<1, 5>>>(dev_cell_ids, 5);
-  gpuErrchk(cudaDeviceSynchronize());
-  cudaFree(dev_cell_ids);
-
-  allocator_handle->parallel_do<Alive, &Alive::update>();
-}
-
-
 void render() {
   initialize_render_arrays<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
   allocator_handle->parallel_do<Alive, &Alive::update_render_array>();
 
-  cudaMemcpyFromSymbol(host_render_cells, device_render_cells,
-                       sizeof(char)*SIZE_X*SIZE_Y, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpy(host_render_cells, d_device_render_cells,
+             sizeof(char)*dataset.x*dataset.y, cudaMemcpyDeviceToHost);
   draw(host_render_cells);
 }
 
 
+void transfer_dataset() {
+  int* dev_cell_ids;
+  cudaMalloc(&dev_cell_ids, sizeof(int)*dataset.num_alive);
+  cudaMemcpy(dev_cell_ids, dataset.alive_cells, sizeof(int)*dataset.num_alive,
+             cudaMemcpyHostToDevice);
+
+  printf("Loading on GPU: %i alive cells.\n", dataset.num_alive);
+  load_game<<<128, 128>>>(dev_cell_ids, dataset.num_alive);
+  gpuErrchk(cudaDeviceSynchronize());
+  cudaFree(dev_cell_ids);
+  printf("Done.\n");
+
+  allocator_handle->parallel_do<Alive, &Alive::update>();
+}
+
+
+__device__ int device_checksum;
+
+__device__ void Alive::update_checksum() {
+  atomicAdd(&device_checksum, 1);
+}
+
+
+int checksum() {
+  int host_checksum = 0;
+  cudaMemcpyToSymbol(device_checksum, &host_checksum, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
+
+  allocator_handle->parallel_do<Alive, &Alive::update_checksum>();
+
+  cudaMemcpyFromSymbol(&host_checksum, device_checksum, sizeof(int), 0,
+                       cudaMemcpyDeviceToHost);
+  return host_checksum;
+}
+
+
 int main(int argc, char** argv) {
+  // Load data set.
+  // dataset = load_glider();
+  dataset = load_from_file("/home/matthias/Downloads/tm.pgm");
+
+  cudaMemcpyToSymbol(SIZE_X, &dataset.x, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
+  cudaMemcpyToSymbol(SIZE_Y, &dataset.y, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
+
   if (OPTION_DRAW) {
     init_renderer();
   }
@@ -262,16 +288,27 @@ int main(int argc, char** argv) {
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
 
+  // Allocate memory.
+  Cell** host_cells;
+  cudaMalloc(&host_cells, sizeof(Cell*)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(cells, &host_cells, sizeof(Cell**), 0,
+                     cudaMemcpyHostToDevice);
+
+  cudaMalloc(&d_device_render_cells, sizeof(char)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(device_render_cells, &d_device_render_cells,
+                     sizeof(char*), 0, cudaMemcpyHostToDevice);
+
+  host_render_cells = new char[dataset.x*dataset.y];
+
   // Initialize cells.
   create_cells<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  // Load data set.
-  load_glider();
+  transfer_dataset();
 
   // Run simulation.
-  for (int i = 0; i < 500; ++i) {
-    // printf("Iteration %i\n", i);
+  for (int i = 0; i < 100; ++i) {
+    printf("Iteration %i\n", i);
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
     allocator_handle->parallel_do<Candidate, &Candidate::update>();
@@ -285,6 +322,12 @@ int main(int argc, char** argv) {
   if (OPTION_DRAW) {
     close_renderer();
   }
+
+  printf("Checksum: %i\n", checksum());
+
+  delete[] host_render_cells;
+  cudaFree(host_cells);
+  cudaFree(d_device_render_cells);
 
   return 0;
 }

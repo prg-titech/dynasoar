@@ -79,6 +79,9 @@ class Alive : public Agent {
 
   // Only for rendering.
   __device__ void update_render_array();
+
+  // Only for checksum computation.
+  __device__ void update_checksum();
 };
 
 

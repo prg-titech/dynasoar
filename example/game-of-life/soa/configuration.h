@@ -1,8 +1,12 @@
 #ifndef EXAMPLE_GAME_OF_LIFE_SOA_CONFIGURATION_H
 #define EXAMPLE_GAME_OF_LIFE_SOA_CONFIGURATION_H
 
-#define OPTION_DRAW true
-#define SIZE_X 200
-#define SIZE_Y 100
+#include "example/game-of-life/soa/dataset_loader.h"
+
+#define OPTION_DRAW false
+
+using CellT = char;
+
+extern dataset_t dataset;
 
 #endif  // EXAMPLE_GAME_OF_LIFE_SOA_CONFIGURATION_H

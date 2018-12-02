@@ -1,7 +1,10 @@
 #include <SDL2/SDL.h>
 
 #include "example/game-of-life/soa/configuration.h"
+#include "example/game-of-life/soa/dataset_loader.h"
 #include "example/game-of-life/soa/rendering.h"
+
+extern dataset_t dataset;
 
 // Constants for rendering.
 static const int kCellWidth = 4;
@@ -29,8 +32,8 @@ void draw(char* host_cells) {
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
 
   // Draw all bodies.
-  for (int i = 0; i < SIZE_X*SIZE_Y; ++i) {
-    render_rect(renderer, i%SIZE_X, i/SIZE_X, host_cells[i]);
+  for (int i = 0; i < dataset.x*dataset.y; ++i) {
+    render_rect(renderer, i%dataset.x, i/dataset.x, host_cells[i]);
   }
 
   SDL_RenderPresent(renderer);
@@ -54,8 +57,8 @@ void init_renderer() {
     exit(1);
   }
 
-  if (SDL_CreateWindowAndRenderer(kCellWidth*SIZE_X, kCellWidth*SIZE_Y, 0,
-        &window, &renderer) != 0) {
+  if (SDL_CreateWindowAndRenderer(kCellWidth*dataset.x, kCellWidth*dataset.y,
+        0, &window, &renderer) != 0) {
     printf("Could not create window/render!\n");
     exit(1);
   }
