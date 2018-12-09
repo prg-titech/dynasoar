@@ -39,6 +39,16 @@ class Cell : public SoaBase<AllocatorT> {
                   int cell_id);
 
   __device__ void decide_permission();
+
+  __device__ bool is_free();
+
+  __device__ void enter(Agent* agent);
+
+  __device__ void leave();
+
+  __device__ int sugar();
+
+  __device__ void take_sugar(int amount);
 };
 
 
@@ -77,6 +87,12 @@ class Agent : public SoaBase<AllocatorT> {
   __device__ void prepare_move();
 
   __device__ void give_permission();
+
+  __device__ void age_and_metabolize();
+
+  __device__ void harvest_sugar();
+
+  __device__ bool ready_to_mate();
 };
 
 
@@ -84,10 +100,23 @@ class Male : public Agent {
  public:
   static const bool kIsAbstract = false;
   using BaseClass = Agent;
-  using FieldTypes = std::tuple<char>;  // dummy_
+  using FieldTypes = std::tuple<
+      Female*,    // female_request_
+      bool>;      // proposal_accepted_
 
+ private:
+  SoaField<Male, 0> female_request_;
+  SoaField<Male, 1> proposal_accepted_;
+
+ public:
   __device__ Male(Cell* cell, int vision, int age, int max_age, int endowment,
                   int metabolism);
+
+  __device__ void accept_proposal();
+
+  __device__ void propose();
+
+  __device__ void propose_offspring_target();
 };
 
 
@@ -99,6 +128,8 @@ class Female : public Agent {
 
   __device__ Female(Cell* cell, int vision, int age, int max_age,
                     int endowment, int metabolism);
+
+  __device__ void decide_proposal();
 };
 
 

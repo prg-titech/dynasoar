@@ -81,11 +81,11 @@ __device__ void Cell::enter(Agent* agent) {
 }
 
 __device__ bool Cell::has_fish() const {
-  return agent_ != nullptr && agent_->get_type() == TYPE_ID(AllocatorT, Fish);
+  return agent_ != nullptr && agent_->cast<Fish>() != nullptr;
 }
 
 __device__ bool Cell::has_shark() const {
-  return agent_ != nullptr && agent_->get_type() == TYPE_ID(AllocatorT, Shark);
+  return agent_ != nullptr && agent_->cast<Shark>() != nullptr;
 }
 
 __device__ bool Cell::is_free() const { return agent_ == nullptr; }
@@ -335,7 +335,7 @@ __global__ void find_fish() {
   if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
     if (cells[tid]->has_fish()) {
       uint32_t idx = atomicAdd(&num_fish, 1);
-      fish[idx] = reinterpret_cast<Fish*>(cells[tid]->agent());
+      fish[idx] = cells[tid]->agent()->cast<Fish>();
     }
   }
 }
@@ -347,7 +347,7 @@ __global__ void find_sharks() {
   if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
     if (cells[tid]->has_shark()) {
       uint32_t idx = atomicAdd(&num_sharks, 1);
-      sharks[idx] = reinterpret_cast<Shark*>(cells[tid]->agent());
+      sharks[idx] = cells[tid]->agent()->cast<Shark>();
     }
   }
 }

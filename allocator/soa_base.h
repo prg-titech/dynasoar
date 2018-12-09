@@ -26,6 +26,16 @@ class SoaBase {
     int obj_id = PointerHelper::obj_id_from_obj_ptr(this);
     printf("%p = Block %p  |  Object %i\n", this, block_ptr, obj_id);
   }
+
+  template<typename T>
+  __DEV__ T* cast() {
+    if (this != nullptr
+        && get_type() == AllocatorT::template BlockHelper<T>::kIndex) {
+      return static_cast<T*>(this);
+    } else {
+      return nullptr;
+    }
+  }
 };
 
 #endif  // ALLOCATOR_SOA_BASE_H
