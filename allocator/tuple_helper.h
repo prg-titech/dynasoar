@@ -17,7 +17,8 @@ struct TupleHelper<T, Types...> {
       /*F=*/ typename TupleHelper<Types...>::NonAbstractType>::type;
 
   // Runs a functor for all types in the tuple.
-  // Returns true if F returned false for one type.
+  // Returns true if F returned false for one type. Returns true if iteration
+  // terminated early, without processing all elements.
   template<template<class> typename F, typename... Args>
   static bool for_all(Args... args) {
     F<T> func;
@@ -100,10 +101,10 @@ struct TupleHelper<> {
   using NonAbstractType = void;
 
   template<template<class> typename F, typename... Args>
-  static bool for_all(Args... args) { return false; }
+  static bool for_all(Args... /*args*/) { return false; }
 
   template<template<class> typename F, typename... Args>
-  __DEV__ static bool dev_for_all(Args... args) { return false; }
+  __DEV__ static bool dev_for_all(Args... /*args*/) { return false; }
 
   static const int kThisClass64BlockSize = std::numeric_limits<int>::max();
   static const int k64BlockMinSize = kThisClass64BlockSize;

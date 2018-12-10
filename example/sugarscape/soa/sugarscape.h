@@ -138,6 +138,8 @@ class Male : public Agent {
   __device__ Male(Cell* cell, int vision, int age, int max_age, int endowment,
                   int metabolism);
 
+  __device__ Female* female_request();
+
   __device__ void accept_proposal();
 
   __device__ void propose();

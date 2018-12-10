@@ -29,6 +29,12 @@ struct PointerHelper {
 
     return reinterpret_cast<T*>(ptr_as_int);
   }
+
+  __DEV__ static uint8_t get_type(const void* ptr) {
+    auto ptr_base = reinterpret_cast<uintptr_t>(ptr);
+    uint8_t type_id = ptr_base >> 56;  // Truncated.
+    return type_id;
+  }
 };
 
 // Wrapper type for fields of SOA-structured classes. This class contains the
@@ -52,6 +58,16 @@ class SoaField {
  public:
   __DEV__ static T* data_ptr_from_obj_ptr(C* obj) {
     uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
+
+#ifndef NDEBUG
+    // Check for nullptr.
+    uintptr_t null_pointer_dereferenced = ptr_base;  // For better error msg.
+    assert(null_pointer_dereferenced != 0);
+
+    // Check if encoded type ID is consistent with type of pointer.
+    assert(C::Allocator::template is_type<C>(obj));
+#endif  // NDEBUG
+
     // Block size (N_T), i.e., number of object slots in this block.
     uint8_t block_size = ptr_base >> 48;  // Truncated.
     // Object slot ID.

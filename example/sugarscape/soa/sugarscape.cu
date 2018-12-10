@@ -15,6 +15,7 @@ static const float kProbMale = 0.12;
 static const float kProbFemale = 0.15;
 
 // Simulation constants.
+static const int kNumIterations = 100;
 static const int kMaxVision = 10;
 static const int kMaxAge = 100;
 static const int kMaxEndowment = 200;
@@ -187,7 +188,7 @@ __device__ void Cell::decide_permission() {
         Cell* n_cell = cells[n_id];
         Agent* n_agent = n_cell->agent_;
 
-        if (n_agent->cell_request() == this) {
+        if (n_agent != nullptr && n_agent->cell_request() == this) {
           ++turn;
 
           // Select cell with probability 1/turn.
@@ -275,6 +276,9 @@ __device__ void Male::accept_proposal() {
 }
 
 
+__device__ Female* Male::female_request() { return female_request_; }
+
+
 __device__ void Male::propose_offspring_target() {
   if (proposal_accepted_) {
     // Select a random cell.
@@ -312,6 +316,8 @@ __device__ void Male::propose_offspring_target() {
 
 __device__ void Male::mate() {
   if (proposal_accepted_ && permission_) {
+    assert(female_request_ != nullptr);
+
     // Take sugar from endowment.
     int c_endowment = (endowment_ + female_request_->endowment()) / 2;
     sugar_ -= endowment_ / 2;
@@ -360,7 +366,8 @@ __device__ void Female::decide_proposal() {
         Male* n_male = n_cell->agent()->cast<Male>();
 
         if (n_male != nullptr) {
-          if (n_male->sugar() > selected_sugar) {
+          if (n_male->female_request() == this
+              && n_male->sugar() > selected_sugar) {
             selected_agent = n_male;
             selected_sugar = n_male->sugar();
           }
@@ -451,6 +458,10 @@ int main(int argc, char** argv) {
                      cudaMemcpyHostToDevice);
 
   initialize_simulation();
+
+  for (int i = 0; i < kNumIterations; ++i) {
+    step();
+  }
 
   return 0;
 }

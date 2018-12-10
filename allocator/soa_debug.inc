@@ -156,3 +156,44 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_print_state_stats() {
          total_num_obj_alloc, total_num_obj_used, total_obj_frag);
   printf("└────┴──────────┴──────────┴──────────┴┴──────────┴──────────┴──────────┘\n");
 }
+
+// Helper data structure for checking if a pointer (encoded type ID) belongs
+// to BaseClass or one of its subclasses.
+template<typename ThisAllocator, typename BaseClass>
+struct PointerTypeChecker {
+  // Iterating over all types T in the allocator.
+  template<typename T>
+  struct InnerHelper {
+    // T is a subclass of BaseClass. Check if same type.
+    template<bool Check, int Dummy>
+    struct ClassSelector {
+      __DEV__ static bool call(const BaseClass* obj) {
+        if (obj->get_type() == ThisAllocator::template BlockHelper<T>::kIndex) {
+          return false;  // No need to check other types.
+        } else {
+          return true;   // true means "continue processing".
+        }
+      }
+    };
+
+    // T is not a subclass of BaseClass. Skip.
+    template<int Dummy>
+    struct ClassSelector<false, Dummy> {
+      __DEV__ static bool call(const BaseClass* obj) {
+        return true;
+      }
+    };
+
+    __DEV__ bool operator()(const BaseClass* obj) {
+      return ClassSelector<std::is_base_of<BaseClass, T>::value, 0>::call(obj);
+    }
+  };
+};
+
+// Check type of pointer.
+template<uint32_t N_Objects, class... Types>
+template<class T>
+__DEV__ bool SoaAllocator<N_Objects, Types...>::is_type(const T* ptr) {
+  return TupleHelper<Types...>::template dev_for_all<PointerTypeChecker<
+      ThisAllocator, T>::InnerHelper>(ptr);
+}
