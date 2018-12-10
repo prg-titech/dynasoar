@@ -6,7 +6,6 @@
 #include "example/configuration/soa_alloc.h"
 //#include "example/configuration/cuda_allocator.h"
 
-static const int kMaxVision = 10;
 
 // Pre-declare all classes.
 class Agent;
@@ -49,6 +48,16 @@ class Cell : public SoaBase<AllocatorT> {
   __device__ int sugar();
 
   __device__ void take_sugar(int amount);
+
+  __device__ void grow_sugar();
+
+  __device__ float random_float();
+
+  __device__ int random_int(int a, int b);
+
+  __device__ int cell_id();
+
+  __device__ Agent* agent();
 };
 
 
@@ -68,7 +77,7 @@ class Agent : public SoaBase<AllocatorT> {
       int,              // endowment_
       bool>;            // permission_
 
- private:
+ protected:
   SoaField<Agent, 0> random_state_;
   SoaField<Agent, 1> cell_;
   SoaField<Agent, 2> cell_request_;
@@ -86,6 +95,8 @@ class Agent : public SoaBase<AllocatorT> {
 
   __device__ void prepare_move();
 
+  __device__ void update_move();
+
   __device__ void give_permission();
 
   __device__ void age_and_metabolize();
@@ -93,6 +104,22 @@ class Agent : public SoaBase<AllocatorT> {
   __device__ void harvest_sugar();
 
   __device__ bool ready_to_mate();
+
+  __device__ Cell* cell_request();
+
+  __device__ int sugar();
+
+  __device__ int endowment();
+
+  __device__ int vision();
+
+  __device__ int max_age();
+
+  __device__ int metabolism();
+
+  __device__ void take_sugar(int amount);
+
+  __device__ float random_float();
 };
 
 
@@ -117,6 +144,8 @@ class Male : public Agent {
   __device__ void propose();
 
   __device__ void propose_offspring_target();
+
+  __device__ void mate();
 };
 
 
