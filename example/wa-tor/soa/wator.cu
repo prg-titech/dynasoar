@@ -3,14 +3,14 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#include "example/wa-tor/soa/wator.h"
+#include "wator.h"
 
 #define SPAWN_THRESHOLD 4
 #define ENERGY_BOOST 4
 #define ENERGY_START 2
 
 #define GRID_SIZE_X 2048
-//#define GRID_SIZE_Y 300
+#define GRID_SIZE_Y 512
 
 #define OPTION_SHARK_DIE true
 #define OPTION_SHARK_SPAWN true
@@ -436,7 +436,7 @@ void print_stats() {
   printf("           ");
 }
 
-int main(int argc, char* arvg[]) {
+int main(int /*argc*/, char*[] /*arvg[]*/) {
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 2*1024U*1024*1024);
   size_t heap_size;
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
@@ -474,6 +474,6 @@ int main(int argc, char* arvg[]) {
 
 }  // namespace wa_tor
 
-int main(int argc, char* arvg[]) {
+int main(int /*argc*/, char*[] /*arvg[]*/) {
   return wa_tor::main(0, nullptr);
 }
