@@ -13,7 +13,16 @@ SMMO (Single-Method Multiple-Objects) is a wide-spread pattern of parallel, obje
 * Matthias Springer. [A C++/CUDA DSL for Object-oriented Programming with Structure-of-Arrays Data Layout](http://m-sp.org/downloads/cgo2018-src-abstract.pdf). ACM Student Research Competition (CGO 2018).
 
 ## Prerequisites
-Tested with CUDA Toolkit 9.1 on a Nvidia Titan Xp machine (Ubuntu 16.04.1).
+Tested with CUDA Toolkit 9.1 on a Nvidia Titan Xp machine (Ubuntu 16.04.1). A device with a minimum compute capability of 6.x is required. CMake version 3.2 or higher is required for building the examples.
+
+```bash
+# Build types: Debug, Release
+cmake -DCMAKE_BUILD_TYPE=Debug .
+make
+
+# Examples are located in example directory.
+bin/nbody_soa
+```
 
 ## API Overview
 All classes/structs that should be managed by SoaAlloc must inherit from `SoaBase<AllocatorT>`, where `AllocatorT` is the fully configured typed of the allocator. The first template argument to `SoaAllocator` is the maximum number of objects that can exist within the allocator at any given time; this number determines the memory usage of the allocator. The following arguments are all classes/structs that are managed by SoaAlloc.

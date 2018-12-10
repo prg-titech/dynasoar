@@ -48,8 +48,10 @@ class AllocatorHandle {
     assert(allocator_ != nullptr);
 
     cudaMalloc(&data_buffer_, AllocatorT::kDataBufferSize);
+#ifndef NDEBUG
     void* maybe_out_of_memory = nullptr;  // To show OOM text...
     assert(data_buffer_ != maybe_out_of_memory);
+#endif  // NDEBUG
 
     init_allocator_kernel<<<256, 256>>>(allocator_, data_buffer_);
     gpuErrchk(cudaDeviceSynchronize());
