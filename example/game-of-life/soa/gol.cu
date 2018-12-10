@@ -1,9 +1,9 @@
 #include <chrono>
 
-#include "example/game-of-life/soa/gol.h"
-#include "example/game-of-life/soa/configuration.h"
-#include "example/game-of-life/soa/dataset_loader.h"
-#include "example/game-of-life/soa/rendering.h"
+#include "gol.h"
+#include "configuration.h"
+#include "dataset_loader.h"
+#include "rendering.h"
 
 
 // Allocator handles.

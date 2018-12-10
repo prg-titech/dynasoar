@@ -6,7 +6,7 @@
 #include <sstream>
 #include <vector>
 
-#include "example/game-of-life/soa/dataset_loader.h"
+#include "dataset_loader.h"
 
 using namespace std;
 

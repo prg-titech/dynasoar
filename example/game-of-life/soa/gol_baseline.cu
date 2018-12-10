@@ -5,8 +5,8 @@
 #include <stdio.h>
 
 #include "example/game-of-life/soa/configuration.h"
-#include "example/game-of-life/soa/dataset_loader.h"
-#include "example/game-of-life/soa/rendering.h"
+#include "dataset_loader.h"
+#include "rendering.h"
 
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }

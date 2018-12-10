@@ -1,6 +1,6 @@
 #include <chrono>
 
-#include "example/sugarscape/soa/sugarscape.h"
+#include "sugarscape.h"
 
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
@@ -140,6 +140,9 @@ __device__ int Agent::sugar() { return sugar_; }
 
 
 __device__ int Agent::vision() { return vision_; }
+
+
+__device__ int Agent::max_age() { return max_age_; }
 
 
 __device__ int Agent::endowment() { return endowment_; }

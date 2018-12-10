@@ -1,8 +1,8 @@
 #include <chrono>
 
-#include "example/nbody/soa/configuration.h"
-#include "example/nbody/soa/nbody.h"
-#include "example/nbody/soa/rendering.h"
+#include "configuration.h"
+#include "nbody.h"
+#include "rendering.h"
 
 namespace nbody {
 

@@ -1,7 +1,7 @@
 #include <SDL2/SDL.h>
 
-#include "example/nbody/soa/configuration.h"
-#include "example/nbody/soa/rendering.h"
+#include "configuration.h"
+#include "rendering.h"
 
 namespace nbody {
 

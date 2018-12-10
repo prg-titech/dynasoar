@@ -3,7 +3,7 @@
 
 #include <curand_kernel.h>
 
-#include "example/configuration/soa_alloc.h"
+#include "allocator_config.h"
 
 namespace nbody {
 

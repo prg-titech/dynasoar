@@ -1,7 +1,7 @@
 #ifndef EXAMPLE_GAME_OF_LIFE_SOA_GOL_H
 #define EXAMPLE_GAME_OF_LIFE_SOA_GOL_H
 
-#include "example/configuration/soa_alloc.h"
+#include "allocator_config.h"
 
 // Pre-declare all classes.
 class Cell;

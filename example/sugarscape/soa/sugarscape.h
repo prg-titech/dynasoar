@@ -3,8 +3,7 @@
 
 #include <curand_kernel.h>
 
-#include "example/configuration/soa_alloc.h"
-//#include "example/configuration/cuda_allocator.h"
+#include "allocator_config.h"
 
 
 // Pre-declare all classes.

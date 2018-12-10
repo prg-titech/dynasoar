@@ -3,7 +3,7 @@ project(soa-alloc)
 
 # Set up CUDA
 find_package(CUDA 9.0 REQUIRED)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -std=c++11 --expt-extended-lambda -gencode arch=compute_50,code=sm_50 -gencode arch=compute_61,code=sm_61)
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -std=c++11 --expt-extended-lambda -gencode arch=compute_50,code=sm_50 -gencode arch=compute_61,code=sm_61 -maxrregcount=64)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 

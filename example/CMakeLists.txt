@@ -1,2 +1,5 @@
 add_subdirectory(configuration)
+add_subdirectory(game-of-life)
+add_subdirectory(nbody)
+add_subdirectory(sugarscape)
 add_subdirectory(wa-tor)
