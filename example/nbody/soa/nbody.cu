@@ -107,8 +107,6 @@ int main(int argc, char** argv) {
     init_renderer();
   }
 
-  AllocatorT::DBG_print_stats();
-
   // Host-side variables for rendering.
   float host_Body_pos_x[kNumBodies];
   float host_Body_pos_y[kNumBodies];

@@ -21,15 +21,28 @@ struct AllocatorWrapperDebug {
              (int) BlockHelper<T>::kSize);
       printf("│ leq50 threshold    │ %8i                                         │\n",
              (int) BlockHelper<T>::kLeq50Threshold);
-      printf("│ data segment size  │ %8i bytes                                   │\n",
-             (int) BlockHelper<T>::kBytes);
       printf("│ block size         │ %8i bytes                                   │\n",
              (int) sizeof(typename BlockHelper<T>::BlockType));
       printf("│ base class         │ %48s │\n",
               typeid(typename T::BaseClass).name());
       printf("│ is abstract        │ %8i                                         │\n",
              (int) T::kIsAbstract);
+      printf("│ data seg. [%2i] sz  │ %8i bytes                                   │\n",
+             (int) BlockHelper<T>::kSize, (int) BlockHelper<T>::kBytes);
+      printf("│         (unpadded) │ %8i bytes                                   │\n",
+             (int) SoaClassHelper<T>::template BlockConfig<BlockHelper<T>::kSize>
+                 ::kDataSegmentSizeUnpadded);
 
+      // Compute waste due to padding of data segment and within data segment.
+      int simple_ds_size =
+          SoaClassHelper<T>::template BlockConfig<BlockHelper<T>::kSize>
+              ::kSimpleSize;
+      printf("│        (simple sz) │ %8i bytes                                   │\n",
+             simple_ds_size);
+      printf("│    (padding waste) │ %8i bytes                                   │\n",
+             (int) BlockHelper<T>::kBytes - simple_ds_size);
+
+      // More stats...
       SoaClassHelper<T>::DBG_print_stats();
       return true;  // true means "continue processing".
     }
@@ -105,12 +118,12 @@ __DEV__ uint32_t SoaAllocator<N_Objects, Types...>::DBG_used_slots() {
 template<uint32_t N_Objects, class... Types>
 void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
   printf("┌───────────────────────────────────────────────────────────────────────┐\n");
-  printf("│ Smallest block type:  %s @ %i bytes.\n",
-         typeid(typename TupleHelper<Types...>::Type64BlockSizeMin).name(),
-         TupleHelper<Types...>::kPadded64BlockMinSize);
-  printf("│ Max. #objects:        %i\n", (int) N_Objects);
-  printf("│ Block size:           %i bytes\n", kBlockSizeBytes);
-  printf("│ Data buffer size:     %f MB\n", kDataBufferSize/1024.0/1024.0);
+  printf("│ Smallest block type:  %47s │\n",
+         typeid(typename TupleHelper<Types...>::Type64BlockSizeMin).name());
+  printf("│ Max. #objects:        %11i                                     │\n",
+         (int) N_Objects);
+  printf("│ Block size:           %11i bytes                               │\n", kBlockSizeBytes);
+  printf("│ Data buffer size:     %6.6f MB                                  │\n", kDataBufferSize/1024.0/1024.0);
   printf("└───────────────────────────────────────────────────────────────────────┘\n");
 
   TupleHelper<Types...>::template for_all<

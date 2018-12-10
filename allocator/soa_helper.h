@@ -49,6 +49,8 @@ struct SoaFieldHelper {
   static const int kOffset = PrevHelper::kOffsetWithField;
   // End-offset of this field.
   static const int kOffsetWithField = kOffset + sizeof(type);
+  // Count bytes of all fields without padding and alignment.
+  static const int kSimpleSize = PrevHelper::kSimpleSize + sizeof(type);
 
   static_assert(SoaFieldHelper<C, Index - 1>::kAlignment % kAlignment == 0,
                 "Fields in class must be sorted by size.");
@@ -87,6 +89,7 @@ struct SoaFieldHelper<C, -1> {
       ((BaseLastFieldHelper::kOffsetWithField + 8 - 1) / 8) * 8;
   static const int kOffsetWithField = kOffset;
   static const int kAlignment = SoaFieldHelper<C, 0>::kAlignment;
+  static const int kSimpleSize = BaseLastFieldHelper::kSimpleSize;
 
   template<template<class> typename F, bool IterateBase, typename... Args>
   static bool for_all(Args... args) {
@@ -111,6 +114,7 @@ template<>
 struct SoaFieldHelper<void, -1> {
   static const int kOffset = 0;
   static const int kOffsetWithField = 0;
+  static const int kSimpleSize = 0;
 
   template<template<class> typename F, bool IterateBase, typename... Args>
   static bool for_all(Args... args) { return false; }
@@ -146,13 +150,25 @@ struct SoaClassHelper {
   struct BlockConfig {
     using LastFieldHelper = SoaFieldHelper<C, kNumFieldThisClass - 1>;
 
-    static const int kDataSegmentSize =
+    static const int kDataSegmentSizeUnpadded =
         LastFieldHelper::kOffsetWithField * BlockSize;
+
+    static const int kSimpleSize = LastFieldHelper::kSimpleSize * BlockSize;
+
+    // Data segment size must be a multiple of 64.
+    static const int kDataSegmentSize =
+        ((kDataSegmentSizeUnpadded + 64 - 1) / 64) * 64;
   };
 
   static void DBG_print_stats() {
-    printf("│ aligned obj. size  │ %8i bytes                                   │\n",
+    printf("│ data seg. [ 1] sz  │ %8i bytes                                   │\n",
            (int) BlockConfig<1>::kDataSegmentSize);
+    printf("│         (unpadded) │ %8i bytes                                   │\n",
+           (int) BlockConfig<1>::kDataSegmentSizeUnpadded);
+    printf("│ data seg. [64] sz  │ %8i bytes                                   │\n",
+           (int) BlockConfig<64>::kDataSegmentSize);
+    printf("│         (unpadded) │ %8i bytes                                   │\n",
+           (int) BlockConfig<64>::kDataSegmentSizeUnpadded);
 
     printf("├────────────────────┴──────────────────────────────────────────────────┤\n");
     printf("│ Fields                                                                │\n");
@@ -162,6 +178,10 @@ struct SoaClassHelper {
 
     for_all<SoaFieldDbgPrinter, /*IterateBase=*/ true>();
 
+    //Σ
+    printf("├───────┼─────────────────┼───────────────────────┼──────────┼──────────┤\n");
+    printf("│     Σ │                 │                       │ %8i │          │\n",
+           (int) BlockConfig<1>::kSimpleSize);
     printf("└───────┴─────────────────┴───────────────────────┴──────────┴──────────┘\n");
   }
 

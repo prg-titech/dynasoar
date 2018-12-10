@@ -75,6 +75,7 @@ struct TupleHelper<T, Types...> {
   struct Element<0, Dummy> { using type = T; };
 
   // Size of a block of size 64 of type T.
+  // TODO: This is actually the data segment size. Rename.
   static const int kThisClass64BlockSize =
       SoaClassHelper<T>::template BlockConfig<64>::kDataSegmentSize;
 
@@ -86,10 +87,7 @@ struct TupleHelper<T, Types...> {
   // Ignore abstract classes.
   static const int k64BlockMinSize = kIsThisClassMinBlock
       ? kThisClass64BlockSize : TupleHelper<Types...>::k64BlockMinSize;
-
-  // Smallest block size, padded to multiple of 64 bytes.
-  static const int kPadded64BlockMinSize =
-      ((k64BlockMinSize + 64 - 1) / 64) * 64;
+  static_assert(k64BlockMinSize % 64 == 0, "Invalid data segment size.");
 
   using Type64BlockSizeMin = typename std::conditional<
       kIsThisClassMinBlock,
@@ -112,6 +110,8 @@ struct TupleHelper<> {
   using Type64BlockSizeMin = void;
 };
 
+// This helper calculates the size and #objects of a block of type T,
+// given the target block size BlockBytes (should be k64BlockMinSize).
 template<class T, int MaxSize, int BlockBytes>
 struct SoaBlockSizeCalculator {
   static const int kThisSizeBlockBytes =
@@ -120,6 +120,7 @@ struct SoaBlockSizeCalculator {
   static const int kBytes =
       kThisSizeBlockBytes <= BlockBytes ? kThisSizeBlockBytes
       : SoaBlockSizeCalculator<T, MaxSize - 1, BlockBytes>::kBytes;
+  static_assert(kBytes <= BlockBytes, "Invalid block size.");
 
   static const int kSize =
       kThisSizeBlockBytes <= BlockBytes ? MaxSize

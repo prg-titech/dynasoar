@@ -281,8 +281,6 @@ int main(int argc, char** argv) {
   if (OPTION_DRAW) {
     init_renderer();
   }
-
-  AllocatorT::DBG_print_stats();
   
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, 2*1024U*1024*1024);
   size_t heap_size;

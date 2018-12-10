@@ -67,13 +67,14 @@ class SoaAllocator {
 
     static const int kSize =
         SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
-            ::kPadded64BlockMinSize>::kSize;
+            ::k64BlockMinSize>::kSize;
 
+    // Data segment size. TODO: Rename.
     static const int kBytes =
         SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
-            ::kPadded64BlockMinSize>::kBytes;
+            ::k64BlockMinSize>::kBytes;
 
-    using BlockType = SoaBlock<T, kIndex, kSize, 64>;
+    using BlockType = SoaBlock<T, kIndex, kSize>;
 
     static const int kLeq50Threshold = BlockType::kLeq50Threshold;
   };
@@ -527,8 +528,9 @@ class SoaAllocator {
 
   static const int kNumTypes = sizeof...(Types);
 
-  static const int kBlockSizeBytes = sizeof(typename BlockHelper<
-      typename TupleHelper<Types...>::NonAbstractType>::BlockType);
+  static const int kBlockSizeBytes =
+      sizeof(typename BlockHelper<typename TupleHelper<Types...>
+             ::Type64BlockSizeMin>::BlockType);
 
   Bitmap<uint32_t, N> global_free_;
 

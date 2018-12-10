@@ -17,10 +17,8 @@ enum DeallocationState : int8_t {
 // TODO: Fix visibility.
 // A SOA block containing objects.
 // T: Base type of the block.
-// N_Max: Maximum number of objects per block (regardless of type). Currently
-//        fixed at 64.
 // N: Maximum number of objects in a block of type T.
-template<class T, int TypeId, int N, int N_Max>
+template<class T, int TypeId, int N>
 class SoaBlock {
  public:
   using BitmapT = unsigned long long int;
@@ -28,15 +26,13 @@ class SoaBlock {
   // TODO: Should measure free level instead of fill level.
   static const int kLeq50Threshold = N / 2;
 
-  static_assert(N_Max == 64, "Not implemented: Custom N_Max.");
-
   // Bitmap initializer: N_T bits set to 1.
   static const BitmapT kBitmapInitState =
-      N == N_Max ? (~0ULL) : ((1ULL << N) - 1);
+      N == 64 ? (~0ULL) : ((1ULL << N) - 1);
 
   // Initializes a new block.
   __DEV__ SoaBlock() {
-    assert(reinterpret_cast<uintptr_t>(this) % N_Max == 0);   // Alignment.
+    assert(reinterpret_cast<uintptr_t>(this) % 64 == 0);   // Alignment.
     type_id = TypeId;
     __threadfence();  // Initialize bitmap after type_id is visible.
     free_bitmap = kBitmapInitState;
@@ -119,13 +115,10 @@ class SoaBlock {
   volatile uint8_t type_id;
 
   // Size of data segment.
-  static const int kRawStorageBytes =
+  static const int kStorageBytes =
       SoaClassHelper<T>::template BlockConfig<N>::kDataSegmentSize;
 
-  // Object size must be multiple of 64 bytes.
-  static const int kStorageBytes = ((kRawStorageBytes + N_Max - 1) / N_Max) * N_Max;
-
-  static_assert(N <= N_Max, "Assertion failed: N <= N_Max");
+  static_assert(N <= 64, "Assertion failed: N <= 64");
 
   // Data storage.
   char data_[kStorageBytes];

@@ -55,9 +55,6 @@ __global__ void create_objects() {
 }
 
 int main(int argc, char** argv) {
-  // Optional, for debugging.
-  AllocatorT::DBG_print_stats();
-  
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
