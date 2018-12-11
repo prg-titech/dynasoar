@@ -24,6 +24,7 @@ __device__ Agent::Agent(Cell* cell, int vision, int age, int max_age,
     : cell_(cell), cell_request_(nullptr), vision_(vision), age_(age),
       max_age_(max_age), sugar_(endowment), endowment_(endowment),
       metabolism_(metabolism), permission_(false) {
+  assert(cell != nullptr);
   curand_init(cell->random_int(0, kSizeX*kSizeY), 0, 0, &random_state_);
 }
 
@@ -60,8 +61,9 @@ __device__ void Agent::age_and_metabolize() {
 
 
 __device__ void Agent::prepare_move() {
-  printf("PREPARE!\n");
   // Move to cell with the most sugar.
+  assert(cell_ != nullptr);
+
   Cell* target_cell = nullptr;
   int target_sugar = 0;
 
@@ -73,9 +75,10 @@ __device__ void Agent::prepare_move() {
       int nx = this_x + dx;
       int ny = this_y + dy;
       if ((dx != 0 || dy != 0)
-          && nx > 0 && nx < kSizeX && ny > 0 && ny < kSizeY) {
+          && nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
         int n_id = nx + ny*kSizeX;
         Cell* n_cell = cells[n_id];
+        assert(n_cell != nullptr);
 
         if (n_cell->is_free()) {
           if (n_cell->sugar() > target_sugar) {
@@ -94,6 +97,7 @@ __device__ void Agent::prepare_move() {
 __device__ void Agent::update_move() {
   if (permission_ == true) {
     // Have permission to enter the cell.
+    assert(cell_request_ != nullptr);
     assert(cell_request_->is_free());
     cell_->leave();
     cell_request_->enter(this);
@@ -171,7 +175,7 @@ __device__ void Cell::decide_permission() {
     for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
       int nx = this_x + dx;
       int ny = this_y + dy;
-      if (nx > 0 && nx < kSizeX && ny > 0 && ny < kSizeY) {
+      if (nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
         int n_id = nx + ny*kSizeX;
         Cell* n_cell = cells[n_id];
         Agent* n_agent = n_cell->agent_;
@@ -182,6 +186,8 @@ __device__ void Cell::decide_permission() {
           // Select cell with probability 1/turn.
           if (random_float() <= 1.0f/turn) {
             selected_agent = n_agent;
+          } else {
+            assert(turn > 1);
           }
         }
       }
@@ -238,7 +244,7 @@ __device__ void Male::propose() {
       for (int dy = -vision_; dy < vision_ + 1; ++dy) {
         int nx = this_x + dx;
         int ny = this_y + dy;
-        if (nx > 0 && nx < kSizeX && ny > 0 && ny < kSizeY) {
+        if (nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
           int n_id = nx + ny*kSizeX;
           Cell* n_cell = cells[n_id];
           Female* n_female = n_cell->agent()->cast<Female>();
@@ -269,6 +275,8 @@ __device__ Female* Male::female_request() { return female_request_; }
 
 __device__ void Male::propose_offspring_target() {
   if (proposal_accepted_) {
+    assert(female_request_ != nullptr);
+
     // Select a random cell.
     Cell* target_cell = nullptr;
     int turn = 0;
@@ -281,7 +289,7 @@ __device__ void Male::propose_offspring_target() {
         int nx = this_x + dx;
         int ny = this_y + dy;
         if ((dx != 0 || dy != 0)
-            && nx > 0 && nx < kSizeX && ny > 0 && ny < kSizeY) {
+            && nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
           int n_id = nx + ny*kSizeX;
           Cell* n_cell = cells[n_id];
 
@@ -297,6 +305,7 @@ __device__ void Male::propose_offspring_target() {
       }
     }
 
+    assert((turn == 0) == (target_cell == nullptr));
     cell_request_ = target_cell;
   }
 }
@@ -305,6 +314,7 @@ __device__ void Male::propose_offspring_target() {
 __device__ void Male::mate() {
   if (proposal_accepted_ && permission_) {
     assert(female_request_ != nullptr);
+    assert(cell_request_ != nullptr);
 
     // Take sugar from endowment.
     int c_endowment = (endowment_ + female_request_->endowment()) / 2;
@@ -317,21 +327,27 @@ __device__ void Male::mate() {
     int c_metabolism = (metabolism_ + female_request_->metabolism()) / 2;
 
     // Create agent.
+    // TODO: Check why type cast is necessary here.
+    // Otherwise: unspecified launch failure.
     Agent* child;
     if (random_float() <= 0.5f) {
       child = device_allocator->make_new<Male>(
-          cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
+          (Cell*) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism);
     } else {
       child = device_allocator->make_new<Female>(
-          cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
+          (Cell*) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism);
     }
 
     // Add agent to target cell.
+    assert(cell_request_ != nullptr);
+    assert(child != nullptr);
+    assert(cell_request_->is_free());
     cell_request_->enter(child);
   }
 
+  permission_ = false;
   proposal_accepted_ = false;
   female_request_ = nullptr;
   cell_request_ = nullptr;
@@ -348,7 +364,7 @@ __device__ void Female::decide_proposal() {
     for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
       int nx = this_x + dx;
       int ny = this_y + dy;
-      if (nx > 0 && nx < kSizeX && ny > 0 && ny < kSizeY) {
+      if (nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
         int n_id = nx + ny*kSizeX;
         Cell* n_cell = cells[n_id];
         Male* n_male = n_cell->agent()->cast<Male>();
@@ -479,7 +495,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
   initialize_simulation();
 
-  for (int i = 0; i < kNumIterations; ++i) {
+  for (int i = 0; i < kNumIterations*10; ++i) {
     printf("%i\n", i);
     step();
   }

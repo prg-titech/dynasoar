@@ -76,16 +76,19 @@ struct ParallelExecutor {
 
       // Determine number of CUDA threads.
       uint32_t* d_num_soa_blocks_ptr =
-          &allocator->allocated_[AllocatorT::template BlockHelper<T>::kIndex]
+          &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
               .data_.enumeration_result_size;
       uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
-      uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
 
-      kernel_parallel_do<ThisClass>
-          <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
-            kCudaBlockSize,
-            shared_mem_size>>>(allocator, args...);
-      gpuErrchk(cudaDeviceSynchronize());
+      if (num_soa_blocks > 0) {
+        uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
+
+        kernel_parallel_do<ThisClass>
+            <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
+              kCudaBlockSize,
+              shared_mem_size>>>(allocator, args...);
+        gpuErrchk(cudaDeviceSynchronize());
+      }
     }
 
     template<void(AllocatorT::*pre_func)(Args...)>
@@ -98,16 +101,19 @@ struct ParallelExecutor {
 
         // Determine number of CUDA threads.
         uint32_t* d_num_soa_blocks_ptr =
-            &allocator->allocated_[AllocatorT::template BlockHelper<T>::kIndex]
+            &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
                 .data_.enumeration_result_size;
         uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
-        uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
 
-        kernel_parallel_do_with_pre<ThisClass, PreClass>
-            <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
-              kCudaBlockSize,
-              shared_mem_size>>>(allocator, args...);
-        gpuErrchk(cudaDeviceSynchronize());
+        if (num_soa_blocks > 0) {
+          uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
+
+          kernel_parallel_do_with_pre<ThisClass, PreClass>
+              <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
+                kCudaBlockSize,
+                shared_mem_size>>>(allocator, args...);
+          gpuErrchk(cudaDeviceSynchronize());
+        }
       }
 
       __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {
@@ -129,7 +135,7 @@ struct ParallelExecutor {
           int block_idx = allocator->allocated_[kTypeIndex].scan_get_index(j);
 
           // TODO: Consider doing a scan over "allocated" bitmap.
-          auto* block = allocator->template get_block<T>(block_idx);
+          auto* block = allocator->template get_block<IterT>(block_idx);
           auto iteration_bitmap = block->iteration_bitmap;
 
           int thread_offset = tid % kSize;
@@ -140,7 +146,8 @@ struct ParallelExecutor {
           }
           int obj_bit = __ffsll(iteration_bitmap);
           if (obj_bit > 0) {
-            T* obj = allocator->template get_object<T>(block, obj_bit - 1);
+            IterT* obj = allocator->template get_object<IterT>(
+                block, obj_bit - 1);
             // call the function.
             (obj->*func)(args...);
           }
