@@ -122,9 +122,9 @@ __device__ void Agent::update_move() {
     cell_->leave();
     cell_request_->enter(this);
     cell_ = cell_request_;
-
-    harvest_sugar();
   }
+
+  harvest_sugar();
 
   cell_request_ = nullptr;
   permission_ = false;
