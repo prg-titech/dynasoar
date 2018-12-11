@@ -17,9 +17,11 @@ static void render_rect(SDL_Renderer* renderer, int x, int y, CellInfo& info) {
   rect.y = y*kCellWidth;
 
   float sugar_level = static_cast<float>(info.sugar) / kSugarCapacity;
+  int sugar_level_int = sugar_level*255;
+  if (sugar_level_int > 255) sugar_level_int = 255;
 
-  SDL_SetRenderDrawColor(renderer, sugar_level*255,
-                         sugar_level*255, 0, SDL_ALPHA_OPAQUE);
+  SDL_SetRenderDrawColor(renderer, sugar_level_int,
+                         sugar_level_int, 0, SDL_ALPHA_OPAQUE);
   SDL_RenderFillRect(renderer, &rect);
 
   if (info.agent_type != 0) {

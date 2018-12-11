@@ -11,11 +11,24 @@ AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ Cell* cells[kSizeX*kSizeY];
 
 
-__device__ Cell::Cell(int seed, int sugar, int sugar_capacity, int grow_rate,
-                      int cell_id)
+__device__ Cell::Cell(int seed, int sugar, int sugar_capacity,
+                      int max_grow_rate, int cell_id)
     : agent_(nullptr), sugar_(sugar), sugar_capacity_(sugar_capacity),
-      grow_rate_(grow_rate), cell_id_(cell_id) {
+      cell_id_(cell_id) {
   curand_init(seed, cell_id, 0, &random_state_);
+
+  // Set random grow rate.
+  float r = curand_uniform(&random_state_);
+
+  if (r <= 0.01) {
+    grow_rate_ = max_grow_rate;
+  } else if (r <= 0.05) {
+    grow_rate_ = 0.5*max_grow_rate;
+  } else if (r <= 0.07) {
+    grow_rate_ = 0.25*max_grow_rate;
+  } else {
+    grow_rate_ = 0;
+  }
 }
 
 
@@ -64,6 +77,7 @@ __device__ void Agent::prepare_move() {
   // Move to cell with the most sugar.
   assert(cell_ != nullptr);
 
+  int turn = 0;
   Cell* target_cell = nullptr;
   int target_sugar = 0;
 
@@ -84,6 +98,12 @@ __device__ void Agent::prepare_move() {
           if (n_cell->sugar() > target_sugar) {
             target_cell = n_cell;
             target_sugar = n_cell->sugar();
+            turn = 1;
+          } else if (n_cell->sugar() == target_sugar) {
+            // Select cell with probability 1/turn.
+            if (random_float() <= 1.0f/(++turn)) {
+              target_cell = n_cell;
+            }
           }
         }
       }
@@ -149,6 +169,41 @@ __device__ void Agent::take_sugar(int amount) { sugar_ -= amount; }
 
 __device__ float Agent::random_float() {
   return curand_uniform(&random_state_);
+}
+
+
+__device__ void Cell::prepare_diffuse() {
+  sugar_diffusion_ = kSugarDiffusionRate * sugar_;
+  int max_diff = kMaxSugarDiffusion;
+  if (sugar_diffusion_ > max_diff) {
+    sugar_diffusion_ = max_diff;
+  }
+
+  sugar_ -= sugar_diffusion_;
+}
+
+
+__device__ void Cell::update_diffuse() {
+  int new_sugar = 0;
+  int this_x = cell_id_ % kSizeX;
+  int this_y = cell_id_ / kSizeY;
+
+  for (int dx = -kMaxVision; dx < kMaxVision + 1; ++dx) {
+    for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
+      int nx = this_x + dx;
+      int ny = this_y + dy;
+        if ((dx != 0 || dy != 0)
+            && nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
+        int n_id = nx + ny*kSizeX;
+        Cell* n_cell = cells[n_id];
+
+        // Add sugar from neighboring 8 cells.
+        new_sugar += 0.125f * n_cell->sugar_diffusion_;
+      }
+    }
+  }
+
+  sugar_ += new_sugar;
 }
 
 
@@ -407,6 +462,8 @@ __device__ void Cell::add_to_draw_array() {
 
 void step() {
   allocator_handle->parallel_do<Cell, &Cell::grow_sugar>();
+  allocator_handle->parallel_do<Cell, &Cell::prepare_diffuse>();
+  allocator_handle->parallel_do<Cell, &Cell::update_diffuse>();
 
   allocator_handle->parallel_do<Agent, &Agent::age_and_metabolize>();
   allocator_handle->parallel_do<Agent, &Agent::prepare_move>();
@@ -437,7 +494,7 @@ __global__ void create_cells() {
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
     cells[i] = device_allocator->make_new<Cell>(
         kSeed, /*sugar=*/ 0, /*sugar_capacity=*/ kSugarCapacity,
-        /*grow_rate=*/ 5, /*cell_id=*/ i);
+        /*max_grow_rate=*/ 50, /*cell_id=*/ i);
   }
 }
 
@@ -450,8 +507,8 @@ __global__ void create_agents() {
     int c_max_age = kMaxAge*2/3 + cells[i]->random_int(0, kMaxAge/3);
     int c_endowment = kMaxEndowment/4
                       + cells[i]->random_int(0, kMaxEndowment*3/4);
-    int c_metabolism = kMaxMetabolism/2
-                       + cells[i]->random_int(0, kMaxMetabolism/2);
+    int c_metabolism = kMaxMetabolism/3
+                       + cells[i]->random_int(0, kMaxMetabolism*2/3);
     Agent* agent = nullptr;
 
     if (r < kProbMale) {

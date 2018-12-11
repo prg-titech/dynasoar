@@ -17,24 +17,30 @@ using AllocatorT = SoaAllocator<64*64*64*64, Agent, Male, Female, Cell>;
 class Cell : public SoaBase<AllocatorT> {
  public:
   using FieldTypes = std::tuple<
-      curandState_t,    // random_state_
-      Agent*,           // agent_
-      int,              // sugar_
-      int,              // sugar_capacity_
-      int,              // grow_rate_
-      int>;             // cell_id_
+      curandState_t,        // random_state_
+      Agent*,               // agent_
+      int,                  // sugar_diffusion_ (alignment 4 bytes)
+      int,                  // sugar_
+      int,                  // sugar_capacity_
+      int,                  // grow_rate_
+      int>;                 // cell_id_
 
  private:
   SoaField<Cell, 0> random_state_;
   SoaField<Cell, 1> agent_;
-  SoaField<Cell, 2> sugar_;
-  SoaField<Cell, 3> sugar_capacity_;
-  SoaField<Cell, 4> grow_rate_;
-  SoaField<Cell, 5> cell_id_;
+  SoaField<Cell, 2> sugar_diffusion_;
+  SoaField<Cell, 3> sugar_;
+  SoaField<Cell, 4> sugar_capacity_;
+  SoaField<Cell, 5> grow_rate_;
+  SoaField<Cell, 6> cell_id_;
 
  public:
-  __device__ Cell(int seed, int sugar, int sugar_capacity, int grow_rate,
+  __device__ Cell(int seed, int sugar, int sugar_capacity, int max_grow_rate,
                   int cell_id);
+
+  __device__ void prepare_diffuse();
+
+  __device__ void update_diffuse();
 
   __device__ void decide_permission();
 
