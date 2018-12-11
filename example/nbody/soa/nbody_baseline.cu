@@ -134,7 +134,7 @@ __global__ void kernel_compute_checksum() {
 }
 
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
   if (OPTION_DRAW) {
     init_renderer();
   }

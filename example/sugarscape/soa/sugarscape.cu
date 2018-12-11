@@ -450,7 +450,7 @@ void initialize_simulation() {
 }
 
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();

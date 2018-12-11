@@ -211,16 +211,25 @@ class SoaAllocator {
     free(typed);
   }
 
-  // Call a member functions on all objects of a type.
-  template<class T, void(T::*func)()>
-  void parallel_do() {
-    ParallelExecutor<ThisAllocator, T, void, T>
+  // Call a member functions on all objects of type IterT.
+  template<class IterT, class T, void(T::*func)()>
+  void parallel_do_single_type() {
+    ParallelExecutor<ThisAllocator, IterT, T, void, T>
         ::template FunctionWrapper<func>
         ::parallel_do(this, /*shared_mem_size=*/ 0);
   }
 
+  // Call a member function on all objects of type T and its subclasses.
+  template<class T, void(T::*func)()>
+  void parallel_do() {
+    TupleHelper<Types...>
+        ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func>
+        ::template InnerHelper>(this);
+  }
+
   // Call a member function on all objects of type.
   // Device version (sequential).
+  // TODO: This does not enumerate subtypes.
   template<class T, typename F, typename... Args>
   __DEV__ void device_do(F func, Args... args) {
     // device_do iterates over objects in a block.

@@ -1,6 +1,7 @@
 #ifndef ALLOCATOR_ALLOCATOR_HANDLE_H
 #define ALLOCATOR_ALLOCATOR_HANDLE_H
 
+#include "allocator/tuple_helper.h"
 #include "allocator/util.h"
 
 template<typename AllocatorT>
@@ -69,10 +70,6 @@ class AllocatorHandle {
   // Runs a member function T::func for all objects of a type on device.
   template<class T, void(T::*func)()>
   void parallel_do() {
-    // Initialize iteration: Perform scan operation on bitmap.
-    kernel_init_iteration<AllocatorT, T><<<128, 128>>>(allocator_);
-
-    gpuErrchk(cudaDeviceSynchronize());
     allocator_->parallel_do<T, func>();
   }
 

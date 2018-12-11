@@ -102,7 +102,7 @@ __global__ void kernel_reset_draw_counters() {
 }
 
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
   if (OPTION_DRAW) {
     init_renderer();
   }

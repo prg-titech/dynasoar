@@ -164,7 +164,7 @@ struct AllocatorWrapperDefrag {
           kernel_init_iteration<AllocatorT, ScanClassT><<<128, 128>>>(allocator);
           gpuErrchk(cudaDeviceSynchronize());
 
-          ParallelExecutor<AllocatorT, ScanClassT, void,
+          ParallelExecutor<AllocatorT, ScanClassT, ScanClassT, void,
                            SoaBase<AllocatorT>, /*Args...=*/ AllocatorT*, int>
               ::template FunctionWrapper<&SoaBase<AllocatorT>
                   ::template rewrite_object<ThisClass, ScanClassT>>

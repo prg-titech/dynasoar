@@ -23,12 +23,47 @@ __global__ void kernel_parallel_do_with_pre(AllocatorT* allocator, Args... args)
   WrapperT::parallel_do_cuda(allocator, args...);
 }
 
-template<typename AllocatorT, typename T, typename R,
+// Helper data structure for running parallel_do on all subtypes.
+template<typename AllocatorT, class BaseClass, void(BaseClass::*func)()>
+struct ParallelDoTypeHelper {
+  // Iterating over all types T in the allocator.
+  template<typename IterT>
+  struct InnerHelper {
+    // IterT is a subclass of BaseClass. Check if same type.
+    template<bool Check, int Dummy>
+    struct ClassSelector {
+      static bool call(AllocatorT* allocator) {
+        // Initialize iteration: Perform scan operation on bitmap.
+        kernel_init_iteration<AllocatorT, IterT><<<128, 128>>>(allocator);
+        gpuErrchk(cudaDeviceSynchronize());
+
+        allocator->template parallel_do_single_type<IterT, BaseClass, func>();
+
+        return true;  // true means "continue processing".
+      }
+    };
+
+    // IterT is not a subclass of BaseClass. Skip.
+    template<int Dummy>
+    struct ClassSelector<false, Dummy> {
+      static bool call(AllocatorT* /*allocator*/) {
+        return true;
+      }
+    };
+
+    bool operator()(AllocatorT* allocator) {
+      return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
+          ::call(allocator);
+    }
+  };
+};
+
+template<typename AllocatorT, typename IterT, typename T, typename R,
          typename Base, typename... Args>
 struct ParallelExecutor {
-  using BlockHelperT = typename AllocatorT::template BlockHelper<T>;
-  static const int kTypeIndex = BlockHelperT::kIndex;
-  static const int kSize = BlockHelperT::kSize;
+  using BlockHelperIterT = typename AllocatorT::template BlockHelper<IterT>;
+  static const int kTypeIndex = BlockHelperIterT::kIndex;
+  static const int kSize = BlockHelperIterT::kSize;
   static const int kCudaBlockSize = 256;
 
   template<R (Base::*func)(Args...)>
@@ -44,7 +79,7 @@ struct ParallelExecutor {
           &allocator->allocated_[AllocatorT::template BlockHelper<T>::kIndex]
               .data_.enumeration_result_size;
       uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
-      uint32_t total_threads = num_soa_blocks * BlockHelperT::kSize;
+      uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
 
       kernel_parallel_do<ThisClass>
           <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
@@ -66,7 +101,7 @@ struct ParallelExecutor {
             &allocator->allocated_[AllocatorT::template BlockHelper<T>::kIndex]
                 .data_.enumeration_result_size;
         uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
-        uint32_t total_threads = num_soa_blocks * BlockHelperT::kSize;
+        uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
 
         kernel_parallel_do_with_pre<ThisClass, PreClass>
             <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
