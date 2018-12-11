@@ -4,7 +4,7 @@
 #include <curand_kernel.h>
 
 #include "allocator_config.h"
-
+#include "configuration.h"
 
 // Pre-declare all classes.
 class Agent;
@@ -57,6 +57,9 @@ class Cell : public SoaBase<AllocatorT> {
   __device__ int cell_id();
 
   __device__ Agent* agent();
+
+  // Only for rendering.
+  __device__ void add_to_draw_array();
 };
 
 

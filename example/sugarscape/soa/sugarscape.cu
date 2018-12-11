@@ -1,25 +1,12 @@
 #include <chrono>
 
+#include "configuration.h"
+#include "rendering.h"
 #include "sugarscape.h"
 
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
-
-static const int kSizeX = 400;
-static const int kSizeY = 400;
-static const int kSeed = 42;
-
-// For initialization only.
-static const float kProbMale = 0.12;
-static const float kProbFemale = 0.15;
-
-// Simulation constants.
-static const int kNumIterations = 100;
-static const int kMaxVision = 10;
-static const int kMaxAge = 100;
-static const int kMaxEndowment = 200;
-static const int kMaxMetabolism = 20;
 
 __device__ Cell* cells[kSizeX*kSizeY];
 
@@ -73,6 +60,7 @@ __device__ void Agent::age_and_metabolize() {
 
 
 __device__ void Agent::prepare_move() {
+  printf("PREPARE!\n");
   // Move to cell with the most sugar.
   Cell* target_cell = nullptr;
   int target_sugar = 0;
@@ -384,6 +372,23 @@ __device__ void Female::decide_proposal() {
 }
 
 
+// Only for rendering purposes.
+__device__ CellInfo cell_info[kSizeX * kSizeY];
+CellInfo host_cell_info[kSizeX * kSizeY];
+
+__device__ void Cell::add_to_draw_array() {
+  cell_info[cell_id_].sugar = sugar_;
+
+  if (agent_ == nullptr) {
+    cell_info[cell_id_].agent_type = 0;
+  } else if (agent_->cast<Male>() != nullptr) {
+    cell_info[cell_id_].agent_type = 1;
+  } else if (agent_->cast<Female>() != nullptr) {
+    cell_info[cell_id_].agent_type = 2;
+  }
+}
+
+
 void step() {
   allocator_handle->parallel_do<Cell, &Cell::grow_sugar>();
 
@@ -397,6 +402,17 @@ void step() {
   allocator_handle->parallel_do<Male, &Male::propose_offspring_target>();
   allocator_handle->parallel_do<Cell, &Cell::decide_permission>();
   allocator_handle->parallel_do<Male, &Male::mate>();
+
+  if (kOptionRender) {
+    allocator_handle->parallel_do<Cell, &Cell::add_to_draw_array>();
+
+    cudaMemcpyFromSymbol(host_cell_info, cell_info,
+                         sizeof(CellInfo)*kSizeX*kSizeY, 0,
+                        cudaMemcpyDeviceToHost);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    draw(host_cell_info);
+  }
 }
 
 
@@ -404,8 +420,8 @@ __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
     cells[i] = device_allocator->make_new<Cell>(
-        kSeed, /*sugar=*/ 0, /*sugar_capacity=*/ 250, /*grow_rate=*/ 5,
-        /*cell_id=*/ i);
+        kSeed, /*sugar=*/ 0, /*sugar_capacity=*/ kSugarCapacity,
+        /*grow_rate=*/ 5, /*cell_id=*/ i);
   }
 }
 
@@ -451,6 +467,10 @@ void initialize_simulation() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
+  if (kOptionRender) {
+    init_renderer();
+  }
+
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
@@ -460,7 +480,12 @@ int main(int /*argc*/, char** /*argv*/) {
   initialize_simulation();
 
   for (int i = 0; i < kNumIterations; ++i) {
+    printf("%i\n", i);
     step();
+  }
+
+  if (kOptionRender) {
+    close_renderer();
   }
 
   return 0;

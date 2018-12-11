@@ -3,5 +3,5 @@ include_directories(${SDL2_INCLUDE_DIRS})
 string(STRIP "${SDL2_LIBRARIES}" SDL2_LIBRARIES)
 
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration)
-cuda_add_executable(sugarscape_soa sugarscape.cu)
+cuda_add_executable(sugarscape_soa sugarscape.cu rendering.cu)
 target_link_libraries(sugarscape_soa SDL2)
