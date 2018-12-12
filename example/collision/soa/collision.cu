@@ -22,7 +22,7 @@ class Body : public SoaBase<AllocatorT> {
       float,          // force_x_,
       float,          // force_y_,
       float,          // mass_
-      int,            // has_incoming_merge_
+      bool,           // has_incoming_merge_
       bool>;          // successful_merge_
 
  private:
@@ -86,6 +86,10 @@ __DEV__ Body::Body(float pos_x, float pos_y,
 
 
 __DEV__ void Body::compute_force() {
+  if(threadIdx.x == 0 && blockIdx.x == 0) {
+    device_allocator->DBG_print_state_stats();
+  }
+
   force_x_ = 0.0f;
   force_y_ = 0.0f;
   device_allocator->template device_do<Body>(&Body::apply_force, this);
@@ -124,17 +128,17 @@ __DEV__ void Body::update() {
 
 __DEV__ void Body::check_merge_into_this(Body* other) {
   // Only merge into larger body.
-  if (mass_ > other->mass_) {
+  if (!other->has_incoming_merge_ && mass_ > other->mass_) {
     float dx = pos_x_ - other->pos_x_;
     float dy = pos_y_ - other->pos_y_;
     float dist_square = dx*dx + dy*dy;
 
     if (dist_square < kMergeThreshold*kMergeThreshold) {
       // Try to merge this one.
-      if (atomicCAS(&has_incoming_merge_, 0, 1) == 0) {
-        // No other body merged yet.
-        other->merge_target_ = this;
-      }
+      // There is a race condition here: Multiple threads may try to merge
+      // this body.
+      this->merge_target_ = other;
+      other->has_incoming_merge_ = true;
     }
   }
 }
@@ -142,7 +146,7 @@ __DEV__ void Body::check_merge_into_this(Body* other) {
 
 __DEV__ void Body::initialize_merge() {
   merge_target_ = nullptr;
-  has_incoming_merge_ = 0;
+  has_incoming_merge_ = false;
   successful_merge_ = false;
 }
 
@@ -269,6 +273,9 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
+    // allocator_handle->parallel_defrag<Body>(/*max_records=*/ 32,
+    //                                         /*min_records=*/ 1);
+
     allocator_handle->parallel_do<Body, &Body::compute_force>();
     allocator_handle->parallel_do<Body, &Body::update>();
     allocator_handle->parallel_do<Body, &Body::initialize_merge>();
