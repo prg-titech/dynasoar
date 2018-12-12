@@ -163,7 +163,7 @@ class Female : public Agent {
  public:
   static const bool kIsAbstract = false;
   using BaseClass = Agent;
-  using FieldTypes = std::tuple<char>;  // dummy_
+  using FieldTypes = std::tuple<>;
 
   __device__ Female(Cell* cell, int vision, int age, int max_age,
                     int endowment, int metabolism);

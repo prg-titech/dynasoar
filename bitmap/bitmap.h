@@ -260,6 +260,8 @@ class Bitmap {
     using BitmapT = Bitmap<SizeT, NumContainers, ContainerT>;
     BitmapT nested;
 
+    static const int kLevels = 1 + BitmapT::kLevels;
+
     __DEV__ SizeT DBG_count_num_ones() {
       SizeT result = 0;
       for (int i = 0; i < NumContainers; ++i) {
@@ -315,6 +317,8 @@ class Bitmap {
     using ThisClass = BitmapData<NumContainers, false>;
 
     static const uint8_t kBitsize = 8*sizeof(ContainerT);
+
+    static const int kLevels = 1;
 
     // Bitmaps without a nested bitmap have exactly one container.
     ContainerT containers[NumContainers];
@@ -423,6 +427,9 @@ class Bitmap {
   // Nested bitmap structure.
   using BitmapDataT = BitmapData<kNumContainers, kHasNested>;
   BitmapDataT data_;
+
+  // Number of bitmap levels, including this one.
+  static const int kLevels = BitmapDataT::kLevels;
 
   // Type of outer bitmap.
   using OuterBitmapT = Bitmap<SizeT, N*kBitsize, ContainerT>;

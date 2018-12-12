@@ -123,7 +123,10 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
   printf("│ Max. #objects:        %11i                                     │\n",
          (int) N_Objects);
   printf("│ Block size:           %11i bytes                               │\n", kBlockSizeBytes);
-  printf("│ Data buffer size:     %6.6f MB                                  │\n", kDataBufferSize/1024.0/1024.0);
+  printf("│ #Blocks:              %11i                                     │\n", N);
+  printf("│ #Bitmap levels:       %11i                                     │\n",
+          decltype(global_free_)::kLevels);
+  printf("│ Data buffer size:      %6.6f MB                                  │\n", kDataBufferSize/1024.0/1024.0);
   printf("└───────────────────────────────────────────────────────────────────────┘\n");
 
   TupleHelper<Types...>::template for_all<
