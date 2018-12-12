@@ -1,7 +1,7 @@
 #ifndef EXAMPLE_CONFIGURATION_ALLOCATOR_CONFIG_H
 #define EXAMPLE_CONFIGURATION_ALLOCATOR_CONFIG_H
 
-//#include "soa_alloc.h"
-#include "cuda_allocator.h"
+#include "soa_alloc.h"
+//#include "cuda_allocator.h"
 
 #endif  // EXAMPLE_CONFIGURATION_ALLOCATOR_CONFIG_H

@@ -7,7 +7,7 @@
 template<typename AllocatorT>
 __global__ void init_allocator_kernel(AllocatorT* allocator,
                                       char* data_buffer) {
-  new(allocator) AllocatorT(data_buffer);
+  allocator->initialize(data_buffer);
 }
 
 // A wrapper class for accessing the allocator from host side.

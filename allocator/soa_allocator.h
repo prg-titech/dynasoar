@@ -97,7 +97,7 @@ class SoaAllocator {
     return type_id;
   }
 
-  __DEV__ SoaAllocator(char* data_buffer) : data_(data_buffer) {
+  __DEV__ void initialize(char* data_buffer) {
     // Check alignment of data storage buffer.
     assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
 
@@ -106,12 +106,22 @@ class SoaAllocator {
       allocated_[i].initialize(false);
       active_[i].initialize(false);
       leq_50_[i].initialize(false);
-      num_leq_50_[i] = 0;
-      num_allocated_[i] = 0;
+
+      if (threadIdx.x == 0 && blockIdx.x == 0) {
+        num_leq_50_[i] = 0;
+        num_allocated_[i] = 0;
+      }
+    }
+
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+      data_ = data_buffer;
     }
   }
 
   __DEV__ SoaAllocator(const ThisAllocator&) = delete;
+
+  // Use initialize() instead of constructor to avoid zero-initialization.
+  __DEV__ SoaAllocator() = delete;
 
   // Try to allocate everything in the same block.
   template<class T, typename... Args>

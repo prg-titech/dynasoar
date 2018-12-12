@@ -35,12 +35,6 @@ __global__ void kernel_update_object_count(AllocatorT* allocator) {
 }
 
 
-template<typename AllocatorT>
-__global__ void init_allocator_kernel(AllocatorT* allocator) {
-  new(allocator) AllocatorT();
-}
-
-
 template<typename AllocatorT, typename T, void(T::*func)()>
 __global__ void kernel_parallel_do(AllocatorT* allocator,
                                    unsigned int num_obj) {
@@ -53,6 +47,9 @@ template<uint32_t N_Objects, class... Types>
 class SoaAllocator {
  public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
+
+  // Zero-initialization of arrays can take a long time.
+  __DEV__ SoaAllocator() = delete;
 
   template<typename T>
   struct TypeId {
@@ -196,9 +193,6 @@ class AllocatorHandle {
   AllocatorHandle() {
     cudaMalloc(&allocator_, sizeof(AllocatorT));
     assert(allocator_ != nullptr);
-
-    init_allocator_kernel<<<256, 256>>>(allocator_);
-    gpuErrchk(cudaDeviceSynchronize());
 
     for (int i = 0; i < kNumTypes; ++i) {
       cudaMalloc(&dev_ptr_objects_[i], sizeof(void*)*kMaxObjects);
