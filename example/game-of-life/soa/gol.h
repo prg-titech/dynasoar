@@ -28,10 +28,6 @@ class Cell : public SoaBase<AllocatorT> {
   __device__ Agent* agent();
 
   __device__ bool is_empty();
-
-  __device__ bool is_alive();
-
-  __device__ bool is_candidate();
 };
 
 
@@ -88,7 +84,7 @@ class Alive : public Agent {
 class Candidate : public Agent {
  public:
   // TODO: This should be empty but it cannot be at the moment.
-  using FieldTypes = std::tuple<bool>;  // no additional fields
+  using FieldTypes = std::tuple<>;  // no additional fields
 
   using BaseClass = Agent;
   static const bool kIsAbstract = false;

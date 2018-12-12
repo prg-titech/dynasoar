@@ -34,16 +34,6 @@ __device__ Agent* Cell::agent() { return agent_; }
 __device__ bool Cell::is_empty() { return agent_ == nullptr; }
 
 
-__device__ bool Cell::is_alive() {
-  return !is_empty() && agent_->get_type() == TYPE_ID(AllocatorT, Alive);
-}
-
-
-__device__ bool Cell::is_candidate() {
-  return !is_empty() && agent_->get_type() == TYPE_ID(AllocatorT, Candidate);
-}
-
-
 __device__ Agent::Agent(int cell_id)
     : cell_id_(cell_id), action_(kActionNone) {}
 
@@ -62,7 +52,7 @@ __device__ int Agent::num_alive_neighbors() {
       int ny = cell_y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        if (cells[ny*SIZE_X + nx]->is_alive()) {
+        if (cells[ny*SIZE_X + nx]->agent()->cast<Alive>() != nullptr) {
           result++;
         }
       }
@@ -137,8 +127,8 @@ __device__ void Alive::maybe_create_candidate(int x, int y) {
       int ny = y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        if (cells[ny*SIZE_X + nx]->is_alive()) {
-          Alive* alive = static_cast<Alive*>(cells[ny*SIZE_X + nx]->agent());
+        Alive* alive = cells[ny*SIZE_X + nx]->agent()->cast<Alive>();
+        if (alive != nullptr) {
           if (alive->is_new_) {
             if (alive == this) {
               // Create candidate now.
