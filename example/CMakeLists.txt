@@ -1,3 +1,4 @@
+add_subdirectory(collision)
 add_subdirectory(configuration)
 add_subdirectory(game-of-life)
 add_subdirectory(nbody)

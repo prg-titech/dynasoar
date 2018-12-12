@@ -42,7 +42,7 @@ class Bitmap {
     SizeT offset;
   };
 
-  __DEV__ Bitmap() {}
+  Bitmap() = default;
 
   // Delete copy constructor.
   __DEV__ Bitmap(const Bitmap&) = delete;
