@@ -8,7 +8,7 @@
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
-__device__ Cell* cells[kSizeX*kSizeY];
+__device__ Cell* cells[kSize*kSize];
 
 
 __device__ Cell::Cell(int seed, int sugar, int sugar_capacity,
@@ -38,7 +38,7 @@ __device__ Agent::Agent(Cell* cell, int vision, int age, int max_age,
       max_age_(max_age), sugar_(endowment), endowment_(endowment),
       metabolism_(metabolism), permission_(false) {
   assert(cell != nullptr);
-  curand_init(cell->random_int(0, kSizeX*kSizeY), 0, 0, &random_state_);
+  curand_init(cell->random_int(0, kSize*kSize), 0, 0, &random_state_);
 }
 
 
@@ -81,16 +81,16 @@ __device__ void Agent::prepare_move() {
   Cell* target_cell = nullptr;
   int target_sugar = 0;
 
-  int this_x = cell_->cell_id() % kSizeX;
-  int this_y = cell_->cell_id() / kSizeY;
+  int this_x = cell_->cell_id() % kSize;
+  int this_y = cell_->cell_id() / kSize;
 
   for (int dx = -vision_; dx < vision_ + 1; ++dx) {
     for (int dy = -vision_; dy < vision_ + 1; ++dy) {
       int nx = this_x + dx;
       int ny = this_y + dy;
       if ((dx != 0 || dy != 0)
-          && nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
-        int n_id = nx + ny*kSizeX;
+          && nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
+        int n_id = nx + ny*kSize;
         Cell* n_cell = cells[n_id];
         assert(n_cell != nullptr);
 
@@ -185,16 +185,16 @@ __device__ void Cell::prepare_diffuse() {
 
 __device__ void Cell::update_diffuse() {
   int new_sugar = 0;
-  int this_x = cell_id_ % kSizeX;
-  int this_y = cell_id_ / kSizeY;
+  int this_x = cell_id_ % kSize;
+  int this_y = cell_id_ / kSize;
 
   for (int dx = -kMaxVision; dx < kMaxVision + 1; ++dx) {
     for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
       int nx = this_x + dx;
       int ny = this_y + dy;
         if ((dx != 0 || dy != 0)
-            && nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
-        int n_id = nx + ny*kSizeX;
+            && nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
+        int n_id = nx + ny*kSize;
         Cell* n_cell = cells[n_id];
 
         // Add sugar from neighboring 8 cells.
@@ -223,15 +223,15 @@ __device__ int Cell::random_int(int a, int b) {
 __device__ void Cell::decide_permission() {
   Agent* selected_agent = nullptr;
   int turn = 0;
-  int this_x = cell_id_ % kSizeX;
-  int this_y = cell_id_ / kSizeY;
+  int this_x = cell_id_ % kSize;
+  int this_y = cell_id_ / kSize;
 
   for (int dx = -kMaxVision; dx < kMaxVision + 1; ++dx) {
     for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
       int nx = this_x + dx;
       int ny = this_y + dy;
-      if (nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
-        int n_id = nx + ny*kSizeX;
+      if (nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
+        int n_id = nx + ny*kSize;
         Cell* n_cell = cells[n_id];
         Agent* n_agent = n_cell->agent_;
 
@@ -279,6 +279,10 @@ __device__ void Cell::take_sugar(int amount) { sugar_ -= amount; }
 
 
 __device__ void Cell::grow_sugar() {
+  // if(threadIdx.x == 0 && blockIdx.x == 0) {
+  //   device_allocator->DBG_print_state_stats();
+  // }
+
   sugar_ += min(sugar_capacity_ - sugar_, grow_rate_);
 }
 
@@ -292,15 +296,15 @@ __device__ void Male::propose() {
     Female* target_agent = nullptr;
     int target_sugar = -1;
 
-    int this_x = cell_->cell_id() % kSizeX;
-    int this_y = cell_->cell_id() / kSizeY;
+    int this_x = cell_->cell_id() % kSize;
+    int this_y = cell_->cell_id() / kSize;
 
     for (int dx = -vision_; dx < vision_ + 1; ++dx) {
       for (int dy = -vision_; dy < vision_ + 1; ++dy) {
         int nx = this_x + dx;
         int ny = this_y + dy;
-        if (nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
-          int n_id = nx + ny*kSizeX;
+        if (nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
+          int n_id = nx + ny*kSize;
           Cell* n_cell = cells[n_id];
           Female* n_female = n_cell->agent()->cast<Female>();
 
@@ -336,16 +340,16 @@ __device__ void Male::propose_offspring_target() {
     Cell* target_cell = nullptr;
     int turn = 0;
 
-    int this_x = cell_->cell_id() % kSizeX;
-    int this_y = cell_->cell_id() / kSizeY;
+    int this_x = cell_->cell_id() % kSize;
+    int this_y = cell_->cell_id() / kSize;
 
     for (int dx = -vision_; dx < vision_ + 1; ++dx) {
       for (int dy = -vision_; dy < vision_ + 1; ++dy) {
         int nx = this_x + dx;
         int ny = this_y + dy;
         if ((dx != 0 || dy != 0)
-            && nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
-          int n_id = nx + ny*kSizeX;
+            && nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
+          int n_id = nx + ny*kSize;
           Cell* n_cell = cells[n_id];
 
           if (n_cell->is_free()) {
@@ -412,15 +416,15 @@ __device__ void Male::mate() {
 __device__ void Female::decide_proposal() {
   Male* selected_agent = nullptr;
   int selected_sugar = -1;
-  int this_x = cell_->cell_id() % kSizeX;
-  int this_y = cell_->cell_id() / kSizeY;
+  int this_x = cell_->cell_id() % kSize;
+  int this_y = cell_->cell_id() / kSize;
 
   for (int dx = -kMaxVision; dx < kMaxVision + 1; ++dx) {
     for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
       int nx = this_x + dx;
       int ny = this_y + dy;
-      if (nx >= 0 && nx < kSizeX && ny >= 0 && ny < kSizeY) {
-        int n_id = nx + ny*kSizeX;
+      if (nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
+        int n_id = nx + ny*kSize;
         Cell* n_cell = cells[n_id];
         Male* n_male = n_cell->agent()->cast<Male>();
 
@@ -444,8 +448,8 @@ __device__ void Female::decide_proposal() {
 
 
 // Only for rendering purposes.
-__device__ CellInfo cell_info[kSizeX * kSizeY];
-CellInfo host_cell_info[kSizeX * kSizeY];
+__device__ CellInfo cell_info[kSize * kSize];
+CellInfo host_cell_info[kSize * kSize];
 
 __device__ void Cell::add_to_draw_array() {
   cell_info[cell_id_].sugar = sugar_;
@@ -457,6 +461,25 @@ __device__ void Cell::add_to_draw_array() {
   } else if (agent_->cast<Female>() != nullptr) {
     cell_info[cell_id_].agent_type = 2;
   }
+}
+
+
+void copy_data() {
+  cudaMemcpyFromSymbol(host_cell_info, cell_info,
+                       sizeof(CellInfo)*kSize*kSize, 0,
+                      cudaMemcpyDeviceToHost);
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+
+int checksum() {
+  copy_data();
+  int result = 0;
+  for (int i = 0; i < kSize*kSize; ++i) {
+    result += (host_cell_info[i].sugar * i) % 1234567;
+    result %= 12456789;
+  }
+  return result;
 }
 
 
@@ -478,12 +501,7 @@ void step() {
 
   if (kOptionRender) {
     allocator_handle->parallel_do<Cell, &Cell::add_to_draw_array>();
-
-    cudaMemcpyFromSymbol(host_cell_info, cell_info,
-                         sizeof(CellInfo)*kSizeX*kSizeY, 0,
-                        cudaMemcpyDeviceToHost);
-    gpuErrchk(cudaDeviceSynchronize());
-
+    copy_data();
     draw(host_cell_info);
   }
 }
@@ -491,7 +509,7 @@ void step() {
 
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
-       i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
+       i < kSize*kSize; i += blockDim.x * gridDim.x) {
     cells[i] = device_allocator->make_new<Cell>(
         kSeed, /*sugar=*/ 0, /*sugar_capacity=*/ kSugarCapacity,
         /*max_grow_rate=*/ 50, /*cell_id=*/ i);
@@ -501,7 +519,7 @@ __global__ void create_cells() {
 
 __global__ void create_agents() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
-       i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
+       i < kSize*kSize; i += blockDim.x * gridDim.x) {
     float r = cells[i]->random_float();
     int c_vision = kMaxVision/2 + cells[i]->random_int(0, kMaxVision/2);
     int c_max_age = kMaxAge*2/3 + cells[i]->random_int(0, kMaxAge/3);
@@ -552,8 +570,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
   initialize_simulation();
 
-  for (int i = 0; i < kNumIterations*10; ++i) {
-    printf("%i\n", i);
+  for (int i = 0; i < kNumIterations; ++i) {
     step();
   }
 
@@ -561,5 +578,6 @@ int main(int /*argc*/, char** /*argv*/) {
     close_renderer();
   }
 
+  printf("Checksum: %i\n", checksum());
   return 0;
 }

@@ -50,8 +50,8 @@ void draw(CellInfo* cell_info) {
   SDL_RenderClear(renderer);
 
   // Draw all bodies.
-  for (int i = 0; i < kSizeX * kSizeY; ++i) {
-    render_rect(renderer, i%kSizeX, i/kSizeX, cell_info[i]);
+  for (int i = 0; i < kSize * kSize; ++i) {
+    render_rect(renderer, i%kSize, i/kSize, cell_info[i]);
   }
 
   SDL_RenderPresent(renderer);
@@ -75,7 +75,7 @@ void init_renderer() {
     exit(1);
   }
 
-  if (SDL_CreateWindowAndRenderer(kCellWidth*kSizeX, kCellWidth*kSizeY,
+  if (SDL_CreateWindowAndRenderer(kCellWidth*kSize, kCellWidth*kSize,
         0, &window, &renderer) != 0) {
     printf("Could not create window/render!\n");
     exit(1);
