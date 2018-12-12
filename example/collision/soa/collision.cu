@@ -86,9 +86,9 @@ __DEV__ Body::Body(float pos_x, float pos_y,
 
 
 __DEV__ void Body::compute_force() {
-  if(threadIdx.x == 0 && blockIdx.x == 0) {
-    device_allocator->DBG_print_state_stats();
-  }
+  // if(threadIdx.x == 0 && blockIdx.x == 0) {
+  //   device_allocator->DBG_print_state_stats();
+  // }
 
   force_x_ = 0.0f;
   force_y_ = 0.0f;
@@ -158,21 +158,18 @@ __DEV__ void Body::prepare_merge() {
 
 
 __DEV__ void Body::update_merge() {
-  if (merge_target_ != nullptr) {
-    if (merge_target_->merge_target_ == nullptr) {
+  Body* m = merge_target_;
+  if (m != nullptr) {
+    if (m->merge_target_ == nullptr) {
       // Perform merge.
-      float new_mass = mass_ + merge_target_->mass_;
-      float new_vel_x = (vel_x_*mass_
-                         + merge_target_->vel_x_*merge_target_->mass_)
-                            / new_mass;
-      float new_vel_y = (vel_y_*mass_
-                         + merge_target_->vel_y_*merge_target_->mass_)
-                            / new_mass;
-      merge_target_->mass_ = new_mass;
-      merge_target_->vel_x_ = new_vel_x;
-      merge_target_->vel_y_ = new_vel_y;
-      merge_target_->pos_x_ = (pos_x_ + merge_target_->pos_x_) / 2;
-      merge_target_->pos_y_ = (pos_y_ + merge_target_->pos_y_) / 2;
+      float new_mass = mass_ + m->mass_;
+      float new_vel_x = (vel_x_*mass_ + m->vel_x_*m->mass_) / new_mass;
+      float new_vel_y = (vel_y_*mass_ + m->vel_y_*m->mass_) / new_mass;
+      m->mass_ = new_mass;
+      m->vel_x_ = new_vel_x;
+      m->vel_y_ = new_vel_y;
+      m->pos_x_ = (pos_x_ + m->pos_x_) / 2;
+      m->pos_y_ = (pos_y_ + m->pos_y_) / 2;
 
       successful_merge_ = true;
     }
@@ -273,6 +270,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
+    printf("%i\n", i);
     // allocator_handle->parallel_defrag<Body>(/*max_records=*/ 32,
     //                                         /*min_records=*/ 1);
 
@@ -298,6 +296,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
   printf("Time: %lu ms\n", millis);
   printf("Checksum: %i\n", checksum());
+  printf("#bodies: %i\n", host_draw_counter);
 
   if (kOptionRender) {
     close_renderer();
