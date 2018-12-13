@@ -81,9 +81,12 @@ class SoaAllocator {
   }
 
   template<class T, typename... Args>
+  __DEV__ T* external_allocator_make_new(Args... args);
+
+  template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
     // Add object to pointer array.
-    T* result =  new T(args...);
+    T* result = external_allocator_make_new<T>(args...);
     result->set_type(TYPE_INDEX(Types..., T));
     auto pos = atomicAdd(&num_objects_[TYPE_INDEX(Types..., T)], 1);
     objects_[TYPE_INDEX(Types..., T)][pos] = result;
@@ -91,13 +94,26 @@ class SoaAllocator {
   }
 
   template<class T>
+  __DEV__ void external_allocator_free(T* obj);
+
+  template<class T>
   __DEV__ void free(T* obj) {
     auto pos = atomicAdd(&num_deleted_objects_[TYPE_INDEX(Types..., T)], 1);
     deleted_objects_[TYPE_INDEX(Types..., T)][pos] = obj;
-    delete obj;
+    external_allocator_free<T>(obj);
   }
 
-  // TODO: Implement.
+  // TODO: Implement missing DBG functions.
+  template<class T>
+  __DEV__ uint32_t DBG_allocated_slots() { return 0; }
+
+  template<class T>
+  __DEV__ uint32_t DBG_used_slots() { 
+    return num_objects_[TYPE_INDEX(Types..., T)];
+  }
+
+  static void DBG_print_stats() {}
+
   __DEV__ void DBG_print_state_stats() {}
 
   template<typename T>
@@ -212,6 +228,7 @@ class AllocatorHandle {
     cudaFree(allocator_);
   }
 
+  // TODO: This function does not enumerate subtypes.
   template<class T, void(T::*func)()>
   void parallel_do() {
     kernel_init_stream_compaction<AllocatorT, T><<<128, 128>>>(allocator_);
@@ -251,7 +268,7 @@ class AllocatorHandle {
 
   // This is a no-op.
   template<class T>
-  void parallel_defrag(int max_records, int min_records = 1) {}
+  void parallel_defrag(int /*max_records*/, int /*min_records = 1*/) {}
 
   // Returns a device pointer to the allocator.
   AllocatorT* device_pointer() { return allocator_; }
@@ -290,11 +307,11 @@ class SoaField {
 
   // Custom address-of operator.
   __DEV__ T* operator&() { return &data_; }
-  __DEV__ T* operator&() const { return &data_; }
+  __DEV__ const T* operator&() const { return &data_; }
 
   // Support member function calls.
   __DEV__ T& operator->() { return data_; }
-  __DEV__ T& operator->() const { return data_; }
+  __DEV__ const T& operator->() const { return data_; }
 
   // Dereference type in case of pointer type.
   __DEV__ typename std::remove_pointer<T>::type& operator*() {
