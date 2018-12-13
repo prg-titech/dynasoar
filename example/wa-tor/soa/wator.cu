@@ -437,11 +437,6 @@ void print_stats() {
 }
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 2*1024U*1024*1024);
-  size_t heap_size;
-  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
-  //printf("CUDA heap size: %lu\n", heap_size);
-
   initialize();
 
   int total_time = 0;

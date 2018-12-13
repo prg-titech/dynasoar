@@ -262,6 +262,7 @@ __device__ bool Cell::is_free() { return agent_ == nullptr; }
 
 __device__ void Cell::enter(Agent* agent) {
   assert(agent_ == nullptr);
+  assert(agent != nullptr);
   agent_ = agent;
 }
 

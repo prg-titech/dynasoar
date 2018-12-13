@@ -7,6 +7,10 @@
 #include "allocator/tuple_helper.h"
 
 
+// Defined by custom allocator.
+void initialize_custom_allocator();
+
+
 // Reads value at a device address and return it.
 template<typename T>
 T read_from_device(T* ptr) {
@@ -35,11 +39,43 @@ __global__ void kernel_update_object_count(AllocatorT* allocator) {
 }
 
 
-template<typename AllocatorT, typename T, void(T::*func)()>
-__global__ void kernel_parallel_do(AllocatorT* allocator,
-                                   unsigned int num_obj) {
-  allocator->template parallel_do<T, func>(num_obj);
+template<typename AllocatorT, class T, class BaseClass,
+         void(BaseClass::*func)()>
+__global__ void kernel_parallel_do_single_type(AllocatorT* allocator,
+                                               unsigned int num_obj) {
+  allocator->template parallel_do_single_type<T, BaseClass, func>(num_obj);
 }
+
+
+// Helper data structure for running parallel_do on all subtypes.
+template<typename AllocatorT, class BaseClass, void(BaseClass::*func)()>
+struct ParallelDoTypeHelper {
+  // Iterating over all types T in the allocator.
+  template<typename IterT>
+  struct InnerHelper {
+    // IterT is a subclass of BaseClass. Check if same type.
+    template<bool Check, int Dummy>
+    struct ClassSelector {
+      static bool call(AllocatorT* allocator) {
+        allocator->template parallel_do_single_type<IterT, BaseClass, func>();
+        return true;  // true means "continue processing".
+      }
+    };
+
+    // IterT is not a subclass of BaseClass. Skip.
+    template<int Dummy>
+    struct ClassSelector<false, Dummy> {
+      static bool call(AllocatorT* /*allocator*/) {
+        return true;
+      }
+    };
+
+    bool operator()(AllocatorT* allocator) {
+      return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
+          ::call(allocator);
+    }
+  };
+};
 
 
 // TODO: Fix visiblity.
@@ -56,10 +92,53 @@ class SoaAllocator {
     static const uint8_t value = TYPE_INDEX(Types..., T);
   };
 
+  template<class T, void(T::*func)()>
+  void parallel_do() {
+    TupleHelper<Types...>
+        ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func>
+        ::template InnerHelper>(this);
+  }
+
+  template<class T, class BaseClass, void(BaseClass::*func)()>
+  void parallel_do_single_type() {
+    // Get total number of objects.
+    unsigned int num_objects = this->template num_objects<T>();
+
+    if (num_objects > 0) {
+      kernel_init_stream_compaction<ThisAllocator, T><<<128, 128>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+      // Run prefix sum algorithm.
+      // TODO: Prefix sum broken for num_objects < 256.
+      auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
+      size_t temp_size = 3*prefix_sum_size;
+      cub::DeviceScan::ExclusiveSum(stream_compaction_temp_,
+                                    temp_size,
+                                    stream_compaction_array_,
+                                    stream_compaction_output_,
+                                    prefix_sum_size);
+      gpuErrchk(cudaDeviceSynchronize());
+
+      // Compact array.
+      kernel_compact_object_array<ThisAllocator, T><<<128, 128>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+
+      // Update arrays and counts.
+      kernel_update_object_count<ThisAllocator, T><<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+
+      num_objects = this->template num_objects<T>();
+
+      kernel_parallel_do_single_type<ThisAllocator, T, BaseClass, func><<<
+          (num_objects + kCudaBlockSize - 1)/kCudaBlockSize,
+          kCudaBlockSize>>>(this, num_objects);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
+  }
+
   // Pass in num_obj as parameter because this kernel might create new
   // objects and thus change the number of objects.
-  template<class T, void(T::*func)()>
-  __DEV__ void parallel_do(unsigned int num_obj) {
+  template<class T, class BaseClass, void(BaseClass::*func)()>
+  __DEV__ void parallel_do_single_type(unsigned int num_obj) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x;
          i < num_obj; i += blockDim.x * gridDim.x) {
       T* obj = reinterpret_cast<T*>(objects_[TYPE_INDEX(Types..., T)][i]);
@@ -93,11 +172,58 @@ class SoaAllocator {
     return result;
   }
 
+  // Helper data structure for freeing objects whose types are subtypes of the
+  // declared type. BaseClass is the declared type.
+  template<typename BaseClass>
+  struct FreeHelper {
+    // Iterating over all types T in the allocator.
+    template<typename T>
+    struct InnerHelper {
+      // T is a subclass of BaseClass. Check if same type.
+      template<bool Check, int Dummy>
+      struct ClassSelector {
+        __DEV__ static bool call(ThisAllocator* allocator, BaseClass* obj) {
+          if (obj->get_type() == TYPE_INDEX(Types..., T)) {
+            allocator->free_typed(static_cast<T*>(obj));
+            return false;  // No need to check other types.
+          } else {
+            return true;   // true means "continue processing".
+          }
+        }
+      };
+
+      // T is not a subclass of BaseClass. Skip.
+      template<int Dummy>
+      struct ClassSelector<false, Dummy> {
+        __DEV__ static bool call(ThisAllocator* allocator, BaseClass* obj) {
+          return true;
+        }
+      };
+
+      __DEV__ bool operator()(ThisAllocator* allocator, BaseClass* obj) {
+        return ClassSelector<std::is_base_of<BaseClass, T>::value, 0>::call(
+            allocator, obj);
+      }
+    };
+  };
+
   template<class T>
   __DEV__ void external_allocator_free(T* obj);
 
   template<class T>
   __DEV__ void free(T* obj) {
+    uint8_t type_id = obj->get_type();
+    if (type_id == TYPE_INDEX(Types..., T)) {
+      free_typed(obj);
+    } else {
+      bool result = TupleHelper<Types...>
+          ::template dev_for_all<FreeHelper<T>::InnerHelper>(this, obj);
+      assert(result);  // true means type was found.
+    }
+  }
+
+  template<class T>
+  __DEV__ void free_typed(T* obj) {
     auto pos = atomicAdd(&num_deleted_objects_[TYPE_INDEX(Types..., T)], 1);
     deleted_objects_[TYPE_INDEX(Types..., T)][pos] = obj;
     external_allocator_free<T>(obj);
@@ -158,9 +284,14 @@ class SoaAllocator {
   __DEV__ void update_object_count() {
     // Update counts.
     auto num_obj = num_objects_[TYPE_INDEX(Types..., T)];
-    auto new_new_obj = stream_compaction_array_[num_obj - 1]
+    assert(num_obj < kMaxObjects);
+    assert(num_obj > 0);
+
+    auto new_num_obj = stream_compaction_array_[num_obj - 1]
                        + stream_compaction_output_[num_obj - 1];
-    num_objects_[TYPE_INDEX(Types..., T)] = new_new_obj;
+    assert(new_num_obj < kMaxObjects);
+
+    num_objects_[TYPE_INDEX(Types..., T)] = new_num_obj;
     num_deleted_objects_[TYPE_INDEX(Types..., T)] = 0;
 
     // Swap arrays.
@@ -176,6 +307,7 @@ class SoaAllocator {
   }
 
 
+  static const int kCudaBlockSize = 256;
   static const int kNumTypes = sizeof...(Types);
   static const int kMaxObjects = N_Objects;
   static const unsigned int kInvalidObject =
@@ -207,14 +339,20 @@ template<typename AllocatorT>
 class AllocatorHandle {
  public:
   AllocatorHandle() {
-    cudaMalloc(&allocator_, sizeof(AllocatorT));
+    initialize_custom_allocator();
+    size_t allocated_bytes = 0;
+
+    gpuErrchk(cudaMalloc(&allocator_, sizeof(AllocatorT)));
     assert(allocator_ != nullptr);
+    allocated_bytes += sizeof(AllocatorT);
 
     for (int i = 0; i < kNumTypes; ++i) {
-      cudaMalloc(&dev_ptr_objects_[i], sizeof(void*)*kMaxObjects);
+      gpuErrchk(cudaMalloc(&dev_ptr_objects_[i], sizeof(void*)*kMaxObjects));
       assert(dev_ptr_objects_[i] != nullptr);
-      cudaMalloc(&dev_ptr_new_objects_[i], sizeof(void*)*kMaxObjects);
+      gpuErrchk(cudaMalloc(&dev_ptr_new_objects_[i],
+                           sizeof(void*)*kMaxObjects));
       assert(dev_ptr_new_objects_[i] != nullptr);
+      allocated_bytes += 2*sizeof(void*)*kMaxObjects;
     }
 
     cudaMemcpy(allocator_->objects_, dev_ptr_objects_,
@@ -222,6 +360,11 @@ class AllocatorHandle {
     cudaMemcpy(allocator_->new_objects_, dev_ptr_new_objects_,
                sizeof(void**)*kNumTypes, cudaMemcpyHostToDevice);
     gpuErrchk(cudaDeviceSynchronize());
+
+#ifndef NDEBUG
+    printf("Allocated bytes for do-all helper: %f MB\n",
+           allocated_bytes / 1024.0f / 1024.0f);
+#endif
   }
 
   ~AllocatorHandle() {
@@ -231,39 +374,7 @@ class AllocatorHandle {
   // TODO: This function does not enumerate subtypes.
   template<class T, void(T::*func)()>
   void parallel_do() {
-    kernel_init_stream_compaction<AllocatorT, T><<<128, 128>>>(allocator_);
-    gpuErrchk(cudaDeviceSynchronize());
-
-    // Get total number of objects.
-    unsigned int num_objects = allocator_->template num_objects<T>();
-
-    // Run prefix sum algorithm.
-    // TODO: Prefix sum broken for num_objects < 256.
-    auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
-    size_t temp_size = 3*prefix_sum_size;
-    cub::DeviceScan::ExclusiveSum(allocator_->stream_compaction_temp_,
-                                  temp_size,
-                                  allocator_->stream_compaction_array_,
-                                  allocator_->stream_compaction_output_,
-                                  prefix_sum_size);
-    gpuErrchk(cudaDeviceSynchronize());
-
-    // Compact array.
-    kernel_compact_object_array<AllocatorT, T><<<128, 128>>>(allocator_);
-    gpuErrchk(cudaDeviceSynchronize());
-
-    // Update arrays and counts.
-    kernel_update_object_count<AllocatorT, T><<<1, 1>>>(allocator_);
-    gpuErrchk(cudaDeviceSynchronize());
-
-    num_objects = allocator_->template num_objects<T>();
-
-    if (num_objects > 0) {
-      kernel_parallel_do<AllocatorT, T, func><<<
-          (num_objects + kCudaBlockSize - 1)/kCudaBlockSize,
-          kCudaBlockSize>>>(allocator_, num_objects);
-      gpuErrchk(cudaDeviceSynchronize());
-    }
+    allocator_->parallel_do<T, func>();
   }
 
   // This is a no-op.
@@ -276,7 +387,6 @@ class AllocatorHandle {
  private:
   static const int kNumTypes = AllocatorT::kNumTypes;
   static const int kMaxObjects = AllocatorT::kMaxObjects;
-  static const int kCudaBlockSize = 256;
 
   AllocatorT* allocator_;
 
