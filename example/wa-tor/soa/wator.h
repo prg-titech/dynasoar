@@ -1,11 +1,10 @@
-#ifndef WA_TOR_SOA_WATOR_H
-#define WA_TOR_SOA_WATOR_H
+#ifndef EXAMPLE_WA_TOR_SOA_WATOR_H
+#define EXAMPLE_WA_TOR_SOA_WATOR_H
 
 #include <curand_kernel.h>
 
 #include "allocator_config.h"
 
-namespace wa_tor {
 
 // Pre-declare all classes.
 class Agent;
@@ -38,7 +37,7 @@ class Cell : public SoaBase<AllocatorT> {
   SoaField<Cell, 3> neighbor_request_;
 
  public:
-  __device__ Cell();
+  __device__ Cell(int cell_id);
 
   __device__ Agent* agent() const;
 
@@ -69,7 +68,10 @@ class Cell : public SoaBase<AllocatorT> {
 
   template<bool(Cell::*predicate)() const>
   __device__ bool request_random_neighbor(curandState_t& random_state);
+
+  __device__ void add_to_checksum();
 };
+
 
 class Agent : public SoaBase<AllocatorT> {
  public:
@@ -97,6 +99,7 @@ class Agent : public SoaBase<AllocatorT> {
   __device__ void set_position(Cell* cell);
 };
 
+
 class Fish : public Agent {
  public:
   using FieldTypes = std::tuple<
@@ -115,6 +118,7 @@ class Fish : public Agent {
 
   __device__ void update();
 };
+
 
 class Shark : public Agent {
  public:
@@ -137,6 +141,4 @@ class Shark : public Agent {
   __device__ void update();
 };
 
-}  // namespace wa_tor
-
-#endif  // WA_TOR_SOA_WATOR_H
+#endif  // EXAMPLE_WA_TOR_SOA_WATOR_H

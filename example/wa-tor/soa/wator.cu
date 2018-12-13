@@ -3,40 +3,17 @@
 #include <assert.h>
 #include <inttypes.h>
 
+#include "configuration.h"
 #include "wator.h"
 
-#define SPAWN_THRESHOLD 4
-#define ENERGY_BOOST 4
-#define ENERGY_START 2
 
-#define GRID_SIZE_X 2048
-#define GRID_SIZE_Y 512
-
-#define OPTION_SHARK_DIE true
-#define OPTION_SHARK_SPAWN true
-#define OPTION_FISH_SPAWN true
-#define OPTION_DEFRAG false
-#define OPTION_PRINT_STATS false
-
-#define THREADS_PER_BLOCK 256
-#define NUM_BLOCKS 1024
-
-namespace wa_tor {
-
-static const int kSeed = 42;
-
+// Allocator handles.
 __device__ AllocatorT* device_allocator;
-
-// Host side pointer.
 AllocatorHandle<AllocatorT>* allocator_handle;
 
 
-__global__ void DBG_stats_kernel() {
-  device_allocator->DBG_print_state_stats();
-}
-
-__device__ Cell::Cell() : agent_(nullptr) {
-  curand_init(kSeed, threadIdx.x + blockIdx.x * blockDim.x, 0, &random_state_);
+__device__ Cell::Cell(int cell_id) : agent_(nullptr) {
+  curand_init(kSeed, cell_id, 0, &random_state_);
   prepare();
 }
 
@@ -67,25 +44,18 @@ __device__ void Cell::decide() {
 
 __device__ void Cell::enter(Agent* agent) {
   assert(agent_ == nullptr);
+  assert(agent != nullptr);
 
-//#ifndef NDEBUG
-//  // Ensure that no two agents are trying to enter this cell at the same time.
-//  uint64_t old_val = atomicExch(reinterpret_cast<unsigned long long int*>(&agent_),
-//                                reinterpret_cast<unsigned long long int>(agent));
-//  assert(old_val == 0);
-//#else
   agent_ = agent;
-//#endif
-
   agent->set_position(this);
 }
 
 __device__ bool Cell::has_fish() const {
-  return agent_ != nullptr && agent_->cast<Fish>() != nullptr;
+  return agent_->cast<Fish>() != nullptr;
 }
 
 __device__ bool Cell::has_shark() const {
-  return agent_ != nullptr && agent_->cast<Shark>() != nullptr;
+  return agent_->cast<Shark>() != nullptr;
 }
 
 __device__ bool Cell::is_free() const { return agent_ == nullptr; }
@@ -167,7 +137,7 @@ __device__ Cell* Agent::position() const { return position_; }
 __device__ void Agent::set_position(Cell* cell) { position_ = cell; }
 
 __device__ Fish::Fish(int seed)
-    : Agent(seed), egg_timer_(seed % SPAWN_THRESHOLD) {}
+    : Agent(seed), egg_timer_(seed % kSpawnThreshold) {}
 
 __device__ void Fish::prepare() {
   egg_timer_++;
@@ -185,7 +155,7 @@ __device__ void Fish::update() {
     old_position->leave();
     new_position_->enter(this);
 
-    if (OPTION_FISH_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
+    if (kOptionFishSpawn && egg_timer_ > kSpawnThreshold) {
       auto* new_fish = device_allocator->make_new<Fish>(curand(&random_state_));
       assert(new_fish != nullptr);
       old_position->enter(new_fish);
@@ -196,14 +166,14 @@ __device__ void Fish::update() {
 
 
 __device__ Shark::Shark(int seed)
-    : Agent(seed), energy_(ENERGY_START), egg_timer_(seed % SPAWN_THRESHOLD) {}
+    : Agent(seed), energy_(kEngeryStart), egg_timer_(seed % kSpawnThreshold) {}
 
 __device__ void Shark::prepare() {
   egg_timer_++;
   energy_--;
 
   assert(position_ != nullptr);
-  if (OPTION_SHARK_DIE && energy_ == 0) {
+  if (kOptionSharkDie && energy_ == 0) {
     // Do nothing. Shark will die.
   } else {
     // Fallback: Stay on current cell.
@@ -213,21 +183,21 @@ __device__ void Shark::prepare() {
 }
 
 __device__ void Shark::update() {
-  if (OPTION_SHARK_DIE && energy_ == 0) {
+  if (kOptionSharkDie && energy_ == 0) {
     position_->kill();
   } else {
     Cell* old_position = position_;
 
     if (old_position != new_position_) {
       if (new_position_->has_fish()) {
-        energy_ += ENERGY_BOOST;
+        energy_ += kEngeryBoost;
         new_position_->kill();
       }
 
       old_position->leave();
       new_position_->enter(this);
 
-      if (OPTION_SHARK_SPAWN && egg_timer_ > SPAWN_THRESHOLD) {
+      if (kOptionSharkSpawn && egg_timer_ > kSpawnThreshold) {
         auto* new_shark =
             device_allocator->make_new<Shark>(curand(&random_state_));
         assert(new_shark != nullptr);
@@ -247,126 +217,73 @@ __device__ void Cell::kill() {
 
 // ----- KERNELS -----
 
-__device__ Cell* cells[GRID_SIZE_X * GRID_SIZE_Y];
+__device__ Cell* cells[kSizeX * kSizeY];
+__device__ int d_checksum;
+
+__device__ void Cell::add_to_checksum() {
+  if (has_fish()) {
+    atomicAdd(&d_checksum, 3);
+  } else if (has_shark()) {
+    atomicAdd(&d_checksum, 7);
+  }
+}
+
+__global__ void reset_checksum() {
+  d_checksum = 0;
+}
 
 __global__ void create_cells() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
-    Cell* new_cell = device_allocator->make_new<Cell>();
+  for (int i = threadIdx.x + blockDim.x*blockIdx.x;
+       i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
+    Cell* new_cell = device_allocator->make_new<Cell>(i);
     assert(new_cell != nullptr);
-    cells[tid] = new_cell;
+    cells[i] = new_cell;
   }
 }
 
 __global__ void setup_cells() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
+  for (int i = threadIdx.x + blockDim.x*blockIdx.x;
+       i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
+    int x = i % kSizeX;
+    int y = i / kSizeX;
 
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
-    int x = tid % GRID_SIZE_X;
-    int y = tid / GRID_SIZE_X;
-
-    Cell* left = x > 0 ? cells[y*GRID_SIZE_X + x - 1]
-                       : cells[y*GRID_SIZE_X + GRID_SIZE_X - 1];
-    Cell* right = x < GRID_SIZE_X - 1 ? cells[y*GRID_SIZE_X + x + 1]
-                                      : cells[y*GRID_SIZE_X];
-    Cell* top = y > 0 ? cells[(y - 1)*GRID_SIZE_X + x]
-                      : cells[(GRID_SIZE_Y - 1)*GRID_SIZE_X + x];
-    Cell* bottom = y < GRID_SIZE_Y - 1 ? cells[(y + 1)*GRID_SIZE_X + x]
+    Cell* left = x > 0 ? cells[y*kSizeX + x - 1]
+                       : cells[y*kSizeX + kSizeX - 1];
+    Cell* right = x < kSizeX - 1 ? cells[y*kSizeX + x + 1]
+                                      : cells[y*kSizeX];
+    Cell* top = y > 0 ? cells[(y - 1)*kSizeX + x]
+                      : cells[(kSizeY - 1)*kSizeX + x];
+    Cell* bottom = y < kSizeY - 1 ? cells[(y + 1)*kSizeX + x]
                                        : cells[x];
 
     // left, top, right, bottom
-    cells[tid]->set_neighbors(left, top, right, bottom);
+    cells[i]->set_neighbors(left, top, right, bottom);
 
     // Initialize with random agent.
-    auto& rand_state = cells[tid]->random_state();
+    auto& rand_state = cells[i]->random_state();
     uint32_t agent_type = curand(&rand_state) % 4;
     if (agent_type == 0) {
       auto* agent = device_allocator->make_new<Fish>(curand(&rand_state));
       assert(agent != nullptr);
-      cells[tid]->enter(agent);
+      cells[i]->enter(agent);
     } else if (agent_type == 1) {
       auto* agent = device_allocator->make_new<Shark>(curand(&rand_state));
       assert(agent != nullptr);
-      cells[tid]->enter(agent);
+      cells[i]->enter(agent);
     } else {
       // Free cell.
     }
   }
 }
 
-// Problem: It is not easy to keep track of all objects of a class if they are
-// dynamically allocated. But we want to benchmark the performance of new/
-// delete in CUDA.
-// Solution: Fill these arrays in a separate kernel by iterating over all
-// cells, storing agents in the respective array slots, and compacting the
-// arrays. We do not measure the performance of these steps.
-__device__ uint32_t num_sharks = 0;
-__device__ Shark* sharks[GRID_SIZE_Y * GRID_SIZE_X];
-__device__ uint32_t num_fish = 0;
-__device__ Fish*  fish[GRID_SIZE_Y * GRID_SIZE_X];
-
 __global__ void print_checksum() {
-  uint64_t chksum = 0;
-
-  // Sorting of the array does not matter in the calculation here.
-  for (int i = 0; i < num_sharks; ++i) {
-    chksum += curand(&sharks[i]->position()->random_state()) % 601;
-  }
-
-  for (int i = 0; i < num_fish; ++i) {
-    chksum += curand(&fish[i]->position()->random_state()) % 601;
-  }
-
   uint32_t fish_use = device_allocator->DBG_used_slots<Fish>();
   uint32_t fish_num = device_allocator->DBG_allocated_slots<Fish>();
   uint32_t shark_use = device_allocator->DBG_used_slots<Shark>();
   uint32_t shark_num = device_allocator->DBG_allocated_slots<Shark>();
 
-  printf("%" PRIu64, chksum);
-  printf(",%u,%u,%u,%u\n",
-         fish_use, fish_num, shark_use, shark_num);
-}
-
-// One thread per cell.
-__global__ void find_fish() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
-    if (cells[tid]->has_fish()) {
-      uint32_t idx = atomicAdd(&num_fish, 1);
-      fish[idx] = cells[tid]->agent()->cast<Fish>();
-    }
-  }
-}
-
-// One thread per cell.
-__global__ void find_sharks() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
-    if (cells[tid]->has_shark()) {
-      uint32_t idx = atomicAdd(&num_sharks, 1);
-      sharks[idx] = cells[tid]->agent()->cast<Shark>();
-    }
-  }
-}
-
-__global__ void reset_fish_array() { num_fish = 0; }
-__global__ void reset_shark_array() { num_sharks = 0; }
-
-void generate_fish_array() {
-  reset_fish_array<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  find_fish<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
-void generate_shark_array() {
-  reset_shark_array<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  find_sharks<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  printf("%i,%u,%u,%u,%u\n",
+         d_checksum, fish_use, fish_num, shark_use, shark_num);
 }
 
 void defrag() {
@@ -397,19 +314,19 @@ void initialize() {
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
 
-  create_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  create_cells<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  setup_cells<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  setup_cells<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-__device__ uint32_t d_gui_map[GRID_SIZE_Y * GRID_SIZE_X];
-uint32_t gui_map[GRID_SIZE_Y * GRID_SIZE_X];
+__device__ uint32_t d_gui_map[kSizeY * kSizeX];
+uint32_t gui_map[kSizeY * kSizeX];
 
 __global__ void fill_gui_map() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
-  if (tid < GRID_SIZE_Y*GRID_SIZE_X) {
+  if (tid < kSizeY*kSizeX) {
     if (cells[tid]->agent() != nullptr) {
       d_gui_map[tid] = cells[tid]->agent()->get_type();
     } else {
@@ -419,21 +336,23 @@ __global__ void fill_gui_map() {
 }
 
 void update_gui_map() {
-  fill_gui_map<<<GRID_SIZE_X*GRID_SIZE_Y/1024 + 1, 1024>>>();
+  fill_gui_map<<<kSizeX*kSizeY/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*GRID_SIZE_X*GRID_SIZE_Y,
+  cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*kSizeX*kSizeY,
                        0, cudaMemcpyDeviceToHost);
   gpuErrchk(cudaDeviceSynchronize());
 }
 
 
 void print_stats() {
-  generate_fish_array();
-  generate_shark_array();
+  reset_checksum<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<Cell, &Cell::add_to_checksum>();
+
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
-  printf("           ");
 }
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
@@ -441,34 +360,27 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 
   int total_time = 0;
   for (int i = 0; i < 500; ++i) {
-    if (OPTION_PRINT_STATS) {
-      printf("ITERATION: %i\n", i);
-      DBG_stats_kernel<<<1, 1>>>();
-      gpuErrchk(cudaDeviceSynchronize());
+    printf("ITERATION: %i\n", i);
+    if (kOptionPrintStats) {
+      print_stats();
     }
 
     auto time_before = std::chrono::system_clock::now();
     step();
 
-    if (OPTION_DEFRAG) {
+    if (kOptionDefrag) {
       for (int j = 0; j < 000; ++j) {
         defrag();
       }
     }
 
     auto time_after = std::chrono::system_clock::now();
-    int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
+    int time_running = std::chrono::duration_cast<std::chrono::milliseconds>(
         time_after - time_before).count();
     total_time += time_running;
   }
 
-  printf("%i,%i,", GRID_SIZE_Y, total_time);
+  printf("%i,%i,", kSizeY, total_time);
   print_stats();
   return 0;
-}
-
-}  // namespace wa_tor
-
-int main(int /*argc*/, char*[] /*arvg[]*/) {
-  return wa_tor::main(0, nullptr);
 }

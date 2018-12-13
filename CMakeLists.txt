@@ -20,6 +20,6 @@ set(CMAKE_CXX_FLAGS_DEBUG    "-g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE  "-O3 -DNDEBUG")
 
 include_directories(lib/cub)
-include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/cuda_alloc)
+include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/soa_alloc)
 
 add_subdirectory(example)
