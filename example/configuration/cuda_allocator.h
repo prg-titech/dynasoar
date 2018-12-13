@@ -133,7 +133,7 @@ class SoaAllocator {
       if (stream_compaction_array_[i] == 1) {
         // Retain element.
         new_objects_[TYPE_INDEX(Types..., T)][stream_compaction_output_[i]] =
-            objects_[i];
+            objects_[TYPE_INDEX(Types..., T)][i];
       }
     }
   }
@@ -221,12 +221,14 @@ class AllocatorHandle {
     unsigned int num_objects = allocator_->template num_objects<T>();
 
     // Run prefix sum algorithm.
-    size_t temp_size = 3*num_objects;
+    // TODO: Prefix sum broken for num_objects < 256.
+    auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
+    size_t temp_size = 3*prefix_sum_size;
     cub::DeviceScan::ExclusiveSum(allocator_->stream_compaction_temp_,
                                   temp_size,
                                   allocator_->stream_compaction_array_,
                                   allocator_->stream_compaction_output_,
-                                  num_objects);
+                                  prefix_sum_size);
     gpuErrchk(cudaDeviceSynchronize());
 
     // Compact array.
