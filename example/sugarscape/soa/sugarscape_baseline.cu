@@ -694,6 +694,11 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(dev_Cell_Agent_random_state, &host_Cell_Agent_random_state,
                      sizeof(curandState_t*), 0, cudaMemcpyHostToDevice);
 
+  int* host_Cell_Agent_cell_request;
+  cudaMalloc(&host_Cell_Agent_cell_request, sizeof(int)*kSize*kSize);
+  cudaMemcpyToSymbol(dev_Cell_Agent_cell_request, &host_Cell_Agent_cell_request,
+                     sizeof(int*), 0, cudaMemcpyHostToDevice);
+
   int* host_Cell_Agent_vision;
   cudaMalloc(&host_Cell_Agent_vision, sizeof(int)*kSize*kSize);
   cudaMemcpyToSymbol(dev_Cell_Agent_vision, &host_Cell_Agent_vision,
