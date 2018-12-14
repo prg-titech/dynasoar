@@ -360,7 +360,6 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 
   int total_time = 0;
   for (int i = 0; i < 500; ++i) {
-    printf("ITERATION: %i\n", i);
     if (kOptionPrintStats) {
       print_stats();
     }

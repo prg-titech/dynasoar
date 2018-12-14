@@ -242,6 +242,14 @@ class SoaAllocator {
 
   __DEV__ void DBG_print_state_stats() {}
 
+  __DEV__ void* atomiCasPtr(void** addr, void* assumed, void* value) {
+    auto* a_addr = reinterpret_cast<unsigned long long int*>(addr);
+    auto a_assumed = reinterpret_cast<unsigned long long int>(assumed);
+    auto a_value = reinterpret_cast<unsigned long long int>(value);
+
+    return reinterpret_cast<void*>(atomicCAS(a_addr, a_assumed, a_value));
+  }
+
   template<typename T>
   __DEV__ void initialize_stream_compaction_array() {
     auto num_obj = num_objects_[TYPE_INDEX(Types..., T)];
@@ -251,13 +259,17 @@ class SoaAllocator {
       void* ptr = objects_[TYPE_INDEX(Types..., T)][i];
       bool object_deleted = false;
 
-      // Check if ptr is in deleted object set (binary search).
-      // TODO: Store deleted set in shared memory if possible.
-      // TODO: Implement binary search.
+      // TODO: Can use binary search?
       for (int j = 0; j < num_deleted_objects_[TYPE_INDEX(Types..., T)]; ++j) {
-        if (ptr == deleted_objects_[TYPE_INDEX(Types..., T)][j]) {
-          object_deleted = true;
-          break;
+        void*& deleted_obj_ptr = deleted_objects_[TYPE_INDEX(Types..., T)][j];
+        if (ptr == deleted_obj_ptr) {
+          // Remove pointer from deleted set with CAS because new objects can
+          // be allocated in the location of deleted objects in the same
+          // iteration.
+          if (atomiCasPtr(&deleted_obj_ptr, ptr, nullptr) == ptr) {
+            object_deleted = true;
+            break;
+          }
         }
       }
 
@@ -290,6 +302,8 @@ class SoaAllocator {
     auto new_num_obj = stream_compaction_array_[num_obj - 1]
                        + stream_compaction_output_[num_obj - 1];
     assert(new_num_obj < kMaxObjects);
+    assert(new_num_obj
+           == num_obj - num_deleted_objects_[TYPE_INDEX(Types..., T)]);
 
     num_objects_[TYPE_INDEX(Types..., T)] = new_num_obj;
     num_deleted_objects_[TYPE_INDEX(Types..., T)] = 0;
