@@ -4,3 +4,6 @@ string(STRIP "${SDL2_LIBRARIES}" SDL2_LIBRARIES)
 
 cuda_add_executable(sugarscape_soa sugarscape.cu rendering.cu)
 target_link_libraries(sugarscape_soa SDL2)
+
+cuda_add_executable(sugarscape_baseline sugarscape_baseline.cu)
+target_link_libraries(sugarscape_soa SDL2)
