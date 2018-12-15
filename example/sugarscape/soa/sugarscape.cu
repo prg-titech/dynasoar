@@ -115,16 +115,18 @@ __device__ void Agent::prepare_move() {
 
 
 __device__ void Agent::update_move() {
+  harvest_sugar();
+  Cell* new_cell = cell_;
+
   if (permission_ == true) {
     // Have permission to enter the cell.
-    assert(cell_request_ != nullptr);
-    assert(cell_request_->is_free());
+    new_cell = cell_request_;
+    assert(new_cell != nullptr);
+    assert(new_cell->is_free());
     cell_->leave();
-    cell_request_->enter(this);
-    cell_ = cell_request_;
+    new_cell->enter(this);
+    cell_ = new_cell;
   }
-
-  harvest_sugar();
 
   cell_request_ = nullptr;
   permission_ = false;
@@ -142,7 +144,7 @@ __device__ void Agent::harvest_sugar() {
 __device__ bool Agent::ready_to_mate() {
   // Half of endowment of sugar will go to the child. And the parent still
   // needs some sugar to survive.
-  return (sugar_ >= endowment_ * 2 / 3) && age_ >= 18;
+  return (sugar_ >= endowment_ * 2 / 3) && age_ >= kMinMatingAge;
 }
 
 
@@ -223,8 +225,9 @@ __device__ int Cell::random_int(int a, int b) {
 __device__ void Cell::decide_permission() {
   Agent* selected_agent = nullptr;
   int turn = 0;
-  int this_x = cell_id_ % kSize;
-  int this_y = cell_id_ / kSize;
+  int cell_id = cell_id_;
+  int this_x = cell_id % kSize;
+  int this_y = cell_id / kSize;
 
   for (int dx = -kMaxVision; dx < kMaxVision + 1; ++dx) {
     for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
@@ -392,7 +395,7 @@ __device__ void Male::mate() {
     Agent* child;
     if (random_float() <= 0.5f) {
       child = device_allocator->make_new<Male>(
-          (Cell*) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
+          (Cell*) cell_request_, 2*c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism);
     } else {
       child = device_allocator->make_new<Female>(
@@ -478,8 +481,8 @@ int checksum() {
   copy_data();
   int result = 0;
   for (int i = 0; i < kSize*kSize; ++i) {
-    result += (host_cell_info[i].sugar * i) % 1234567;
-    result %= 12456789;
+    result += host_cell_info[i].agent_type;
+    //result %= 12456789;
   }
   return result;
 }
@@ -533,7 +536,7 @@ __global__ void create_agents() {
     if (r < kProbMale) {
       // Create male agent.
       agent = device_allocator->make_new<Male>(
-          cells[i], c_vision, /*age=*/ 0, c_max_age, c_endowment,
+          cells[i], 2*c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism);
     } else if (r < kProbMale + kProbFemale) {
       // Create female agent.
@@ -558,6 +561,15 @@ void initialize_simulation() {
 }
 
 
+void defrag() {
+  allocator_handle->parallel_defrag<Male>(/*max_records=*/ 128,
+                                          /*min_records=*/ 8);
+  allocator_handle->parallel_defrag<Female>(/*max_records=*/ 128,
+                                           /*min_records=*/ 8);
+}
+
+
+
 int main(int /*argc*/, char** /*argv*/) {
   if (kOptionRender) {
     init_renderer();
@@ -571,9 +583,26 @@ int main(int /*argc*/, char** /*argv*/) {
 
   initialize_simulation();
 
+  auto time_start = std::chrono::system_clock::now();
+
   for (int i = 0; i < kNumIterations; ++i) {
+    /*
+    if (i % 10 == 0) {
+      for (int j = 0; j < 10; ++j) {
+        defrag();
+      }
+    }
+    */
+
     step();
   }
+
+  auto time_end = std::chrono::system_clock::now();
+  auto elapsed = time_end - time_start;
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      .count();
+
+  printf("Time: %lu ms\n", millis);
 
   if (kOptionRender) {
     close_renderer();
