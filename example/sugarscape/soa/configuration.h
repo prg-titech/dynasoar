@@ -23,6 +23,6 @@ static const int kMaxSugarDiffusion = 100;
 static const float kSugarDiffusionRate = 0.10;
 
 // Debug/rendering
-static const bool kOptionRender = true;
+static const bool kOptionRender = false;
 
 #endif  // EXAMPLE_SUGARSCAPE_SOA_CONFIGURATION_H

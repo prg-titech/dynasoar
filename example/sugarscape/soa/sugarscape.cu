@@ -466,6 +466,7 @@ __device__ void Cell::add_to_draw_array() {
 
 
 void copy_data() {
+  allocator_handle->parallel_do<Cell, &Cell::add_to_draw_array>();
   cudaMemcpyFromSymbol(host_cell_info, cell_info,
                        sizeof(CellInfo)*kSize*kSize, 0,
                       cudaMemcpyDeviceToHost);
@@ -501,7 +502,6 @@ void step() {
   allocator_handle->parallel_do<Male, &Male::mate>();
 
   if (kOptionRender) {
-    allocator_handle->parallel_do<Cell, &Cell::add_to_draw_array>();
     copy_data();
     draw(host_cell_info);
   }
