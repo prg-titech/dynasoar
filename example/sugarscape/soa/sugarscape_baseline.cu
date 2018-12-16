@@ -221,15 +221,13 @@ __device__ void Agent_prepare_move(int cell_id) {
 
 
 __device__ void Agent_update_move(int cell_id) {
-  if (dev_Cell_Agent_permission[cell_id] == true) {
+  if (dev_Cell_Agent_permission[cell_id]) {
     // Have permission to enter the cell.
     assert(dev_Cell_Agent_cell_request[cell_id] != kNullptr);
     assert(Cell_is_free(dev_Cell_Agent_cell_request[cell_id]));
     Cell_enter(dev_Cell_Agent_cell_request[cell_id], cell_id);
     Cell_leave(cell_id);
   }
-
-  Agent_harvest_sugar(cell_id);
 
   dev_Cell_Agent_cell_request[cell_id] = kNullptr;
   dev_Cell_Agent_permission[cell_id] = false;
@@ -524,6 +522,18 @@ __global__ void kernel_Agent_update_move() {
 }
 
 
+__global__ void kernel_Agent_harvest_sugar() {
+  for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+       i < kSize*kSize; i += blockDim.x * gridDim.x) {
+    if (dev_Cell_Agent_type[i] != kNoType) {
+      // Must be in a separate kernel to avoid race condition.
+      // (Old and new cell could both be processed.)
+      Agent_harvest_sugar(i);
+    }
+  }
+}
+
+
 __global__ void kernel_Male_propose() {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x;
        i < kSize*kSize; i += blockDim.x * gridDim.x) {
@@ -586,6 +596,9 @@ void step() {
   kernel_Agent_update_move<<<kBlocks, kThreads>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+  kernel_Agent_harvest_sugar<<<kBlocks, kThreads>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   kernel_Male_propose<<<kBlocks, kThreads>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
@@ -627,7 +640,7 @@ __global__ void create_agents() {
       new_Male(i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
     } else if (r < kProbMale + kProbFemale) {
       // Create female agent.
-      //new_Female(i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
+      new_Female(i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
     }   // else: Do not create agent.
   }
 }
@@ -751,9 +764,17 @@ int main(int /*argc*/, char** /*argv*/) {
 
   initialize_simulation();
 
+  auto time_start = std::chrono::system_clock::now();
+
   for (int i = 0; i < kNumIterations; ++i) {
     step();
   }
+
+  auto time_end = std::chrono::system_clock::now();
+  auto elapsed = time_end - time_start;
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      .count();
+  printf("Time: %lu ms\n", millis);
 
   printf("Checksum: %i\n", checksum(host_Cell_sugar));
   return 0;

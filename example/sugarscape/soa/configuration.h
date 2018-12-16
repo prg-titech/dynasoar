@@ -2,7 +2,7 @@
 #define EXAMPLE_SUGARSCAPE_SOA_CONFIGURATION_H
 
 // Size of simulation.
-static const int kSize = 600;
+static const int kSize = 1000;
 static const int kSeed = 42;
 
 // For initialization only.
