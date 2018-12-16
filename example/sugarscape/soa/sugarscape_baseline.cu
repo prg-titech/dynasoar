@@ -578,48 +578,53 @@ void step() {
   kernel_Cell_grow_sugar<<<kBlocks, kThreads>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+/*
   kernel_Cell_prepare_diffuse<<<kBlocks, kThreads>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   kernel_Cell_update_diffuse<<<kBlocks, kThreads>>>();
   gpuErrchk(cudaDeviceSynchronize());
+*/
 
-  kernel_Agent_age_and_metabolize<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  if (!kWithoutAgents) {
+    kernel_Agent_age_and_metabolize<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Agent_prepare_move<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Agent_prepare_move<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Cell_decide_permission<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Cell_decide_permission<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Agent_update_move<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Agent_update_move<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Agent_harvest_sugar<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Agent_harvest_sugar<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Male_propose<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Male_propose<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Female_decide_proposal<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Female_decide_proposal<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Male_propose_offspring_target<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Male_propose_offspring_target<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Cell_decide_permission<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Cell_decide_permission<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
 
-  kernel_Male_mate<<<kBlocks, kThreads>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+    kernel_Male_mate<<<kBlocks, kThreads>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+  }
 }
 
 
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kSize*kSize; i += blockDim.x * gridDim.x) {
-    new_Cell(i, kSeed, /*sugar=*/ 0, kSugarCapacity, /*max_grow_rate=*/ 50);
+    new_Cell(i, kSeed, /*sugar=*/ 0, kSugarCapacity,
+             /*max_grow_rate=*/ kMaxGrowRate);
   }
 }
 
@@ -650,8 +655,10 @@ void initialize_simulation() {
   create_cells<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  create_agents<<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  if (!kWithoutAgents) {
+    create_agents<<<128, 128>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+  }
 }
 
 

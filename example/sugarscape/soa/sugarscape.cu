@@ -487,19 +487,24 @@ int checksum() {
 
 void step() {
   allocator_handle->parallel_do<Cell, &Cell::grow_sugar>();
+
+  /*
   allocator_handle->parallel_do<Cell, &Cell::prepare_diffuse>();
   allocator_handle->parallel_do<Cell, &Cell::update_diffuse>();
+*/
 
-  allocator_handle->parallel_do<Agent, &Agent::age_and_metabolize>();
-  allocator_handle->parallel_do<Agent, &Agent::prepare_move>();
-  allocator_handle->parallel_do<Cell, &Cell::decide_permission>();
-  allocator_handle->parallel_do<Agent, &Agent::update_move>();
+  if (!kWithoutAgents) {
+    allocator_handle->parallel_do<Agent, &Agent::age_and_metabolize>();
+    allocator_handle->parallel_do<Agent, &Agent::prepare_move>();
+    allocator_handle->parallel_do<Cell, &Cell::decide_permission>();
+    allocator_handle->parallel_do<Agent, &Agent::update_move>();
 
-  allocator_handle->parallel_do<Male, &Male::propose>();
-  allocator_handle->parallel_do<Female, &Female::decide_proposal>();
-  allocator_handle->parallel_do<Male, &Male::propose_offspring_target>();
-  allocator_handle->parallel_do<Cell, &Cell::decide_permission>();
-  allocator_handle->parallel_do<Male, &Male::mate>();
+    allocator_handle->parallel_do<Male, &Male::propose>();
+    allocator_handle->parallel_do<Female, &Female::decide_proposal>();
+    allocator_handle->parallel_do<Male, &Male::propose_offspring_target>();
+    allocator_handle->parallel_do<Cell, &Cell::decide_permission>();
+    allocator_handle->parallel_do<Male, &Male::mate>();
+  }
 
   if (kOptionRender) {
     copy_data();
@@ -513,7 +518,7 @@ __global__ void create_cells() {
        i < kSize*kSize; i += blockDim.x * gridDim.x) {
     cells[i] = device_allocator->make_new<Cell>(
         kSeed, /*sugar=*/ 0, /*sugar_capacity=*/ kSugarCapacity,
-        /*max_grow_rate=*/ 50, /*cell_id=*/ i);
+        /*max_grow_rate=*/ kMaxGrowRate, /*cell_id=*/ i);
   }
 }
 
@@ -553,8 +558,10 @@ void initialize_simulation() {
   create_cells<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  create_agents<<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  if (!kWithoutAgents) {
+    create_agents<<<128, 128>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+  }
 }
 
 
