@@ -7,3 +7,6 @@ target_link_libraries(sugarscape_soa SDL2)
 
 cuda_add_executable(sugarscape_baseline sugarscape_baseline.cu)
 target_link_libraries(sugarscape_soa SDL2)
+
+cuda_add_executable(sugarscape_no_cell sugarscape_no_cell.cu rendering.cu)
+target_link_libraries(sugarscape_no_cell SDL2)
