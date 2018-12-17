@@ -78,11 +78,11 @@ __device__ void new_Cell(int cell_id, int seed, int sugar, int sugar_capacity,
   // Set random grow rate.
   float r = curand_uniform(&dev_Cell_random_state[cell_id]);
 
-  if (r <= 0.01) {
+  if (r <= 0.02) {
     dev_Cell_grow_rate[cell_id] = max_grow_rate;
-  } else if (r <= 0.05) {
+  } else if (r <= 0.04) {
     dev_Cell_grow_rate[cell_id] = 0.5*max_grow_rate;
-  } else if (r <= 0.07) {
+  } else if (r <= 0.08) {
     dev_Cell_grow_rate[cell_id] = 0.25*max_grow_rate;
   } else {
     dev_Cell_grow_rate[cell_id] = 0;
@@ -198,7 +198,7 @@ __device__ void Agent::harvest_sugar() {
 __device__ bool Agent::ready_to_mate() {
   // Half of endowment of sugar will go to the child. And the parent still
   // needs some sugar to survive.
-  return (sugar_ >= endowment_ * 2 / 3) && age_ >= 18;
+  return (sugar_ >= endowment_ * 2 / 3) && age_ >= kMinMatingAge;
 }
 
 
@@ -525,8 +525,7 @@ int checksum() {
   copy_data();
   int result = 0;
   for (int i = 0; i < kSize*kSize; ++i) {
-    result += (host_cell_info[i].sugar * i) % 1234567;
-    result %= 12456789;
+    result += host_cell_info[i].agent_type; //(host_cell_info[i].sugar * i) % 1234567;
   }
   return result;
 }

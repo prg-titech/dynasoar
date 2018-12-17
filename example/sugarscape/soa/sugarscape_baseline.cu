@@ -101,7 +101,7 @@ __device__ bool Agent_ready_to_mate(int cell_id) {
   // needs some sugar to survive.
   return (dev_Cell_Agent_sugar[cell_id]
           >= dev_Cell_Agent_endowment[cell_id] * 2 / 3)
-      && dev_Cell_Agent_age[cell_id] >= 18;
+      && dev_Cell_Agent_age[cell_id] >= kMinMatingAge;
 }
 
 
@@ -115,11 +115,11 @@ __device__ void new_Cell(int cell_id, int seed, int sugar, int sugar_capacity,
   // Set random grow rate.
   float r = curand_uniform(&dev_Cell_random_state[cell_id]);
 
-  if (r <= 0.01) {
+  if (r <= 0.02) {
     dev_Cell_grow_rate[cell_id] = max_grow_rate;
-  } else if (r <= 0.05) {
+  } else if (r <= 0.04) {
     dev_Cell_grow_rate[cell_id] = 0.5*max_grow_rate;
-  } else if (r <= 0.07) {
+  } else if (r <= 0.08) {
     dev_Cell_grow_rate[cell_id] = 0.25*max_grow_rate;
   } else {
     dev_Cell_grow_rate[cell_id] = 0;
@@ -419,6 +419,8 @@ __device__ void Male_mate(int cell_id) {
       new_Female(dev_Cell_Agent_cell_request[cell_id],
                  c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
     }
+
+    // No Cell::enter necessary.
   }
 
   dev_Cell_Agent_permission[cell_id] = false;
@@ -656,15 +658,17 @@ void initialize_simulation() {
 
 
 int data_Cell_sugar[kSize*kSize];
-int checksum(int* host_Cell_sugar) {
+char data_Cell_agent_types[kSize*kSize];
+int checksum(int* host_Cell_sugar, char* host_Cell_Agent_type) {
   cudaMemcpy(data_Cell_sugar, host_Cell_sugar, sizeof(int)*kSize*kSize,
              cudaMemcpyDeviceToHost);
+  cudaMemcpy(data_Cell_agent_types, host_Cell_Agent_type,
+             sizeof(char)*kSize*kSize, cudaMemcpyDeviceToHost);
   gpuErrchk(cudaDeviceSynchronize());
 
   int result = 0;
   for (int i = 0; i < kSize*kSize; ++i) {
-    result += (data_Cell_sugar[i] * i) % 1234567;
-    result %= 12456789;
+    result += data_Cell_agent_types[i]; //(data_Cell_sugar[i] * i) % 1234567;
   }
   return result;
 }
@@ -776,7 +780,7 @@ int main(int /*argc*/, char** /*argv*/) {
       .count();
   printf("Time: %lu ms\n", millis);
 
-  printf("Checksum: %i\n", checksum(host_Cell_sugar));
+  printf("Checksum: %i\n", checksum(host_Cell_sugar, host_Cell_Agent_type));
   return 0;
 
   // TODO: Free CUDA memory.
