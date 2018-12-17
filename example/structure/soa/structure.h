@@ -59,6 +59,9 @@ class Node : public NodeBase {
   SoaField<Node, 0> vel_x_;
   SoaField<Node, 1> vel_y_;
   SoaField<Node, 2> mass_;
+
+ public:
+  __DEV__ Node(float pos_x, float pos_y);
 };
 
 
@@ -79,6 +82,9 @@ class Spring : public SoaBase<AllocatorT> {
   SoaField<Spring, 3> initial_length_;
   SoaField<Spring, 4> force_x_;
   SoaField<Spring, 5> force_y_;
+
+ public:
+  
 };
 
 }
