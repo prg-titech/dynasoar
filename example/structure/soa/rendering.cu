@@ -13,9 +13,33 @@ SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
 static void render_spring(SDL_Renderer* renderer, const SpringInfo& spring) {
+  float force_ratio = spring.force / spring.max_force;
+  int r = 0; int g = 0; int b = 0;
+
+  if (force_ratio <= 1.0) {
+    r = 255*force_ratio;
+  } else {
+    b = 255;
+  }
+
+  SDL_SetRenderDrawColor(renderer, r, g, b, SDL_ALPHA_OPAQUE);
   SDL_RenderDrawLine(renderer,
                      spring.p1_x*kWindowWidth, spring.p1_y*kWindowWidth,
                      spring.p2_x*kWindowWidth, spring.p2_y*kWindowWidth);
+
+  // Draw endpoints
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+
+  SDL_Rect rect;
+  rect.w = rect.h = 5;
+  rect.x = spring.p1_x*kWindowWidth - 2;
+  rect.y = spring.p1_y*kWindowHeight - 2;
+  SDL_RenderDrawRect(renderer, &rect);
+
+  rect.w = rect.h = 5;
+  rect.x = spring.p2_x*kWindowWidth - 2;
+  rect.y = spring.p2_y*kWindowHeight - 2;
+  SDL_RenderDrawRect(renderer, &rect);
 }
 
 

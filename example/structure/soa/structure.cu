@@ -1,4 +1,5 @@
 #include <chrono>
+#include <curand_kernel.h>
 
 #include "rendering.h"
 #include "structure.h"
@@ -42,6 +43,26 @@ __device__ void NodeBase::add_spring(Spring* spring) {
 }
 
 
+__device__ void NodeBase::remove_spring(Spring* spring) {
+  // TODO: This won't work if two springs break at the same time.
+
+  int i = 0;
+  Spring* s = nullptr;
+
+  do {
+    assert(i < kMaxDegree);
+    s = springs_[i];
+    ++i;
+  } while(s != spring);
+
+  for (; i < num_springs_; ++i) {
+    springs_[i - 1] = springs_[i];
+  }
+
+  --num_springs_;
+}
+
+
 __device__ float NodeBase::distance_to(NodeBase* other) const {
   float dx = pos_x_ - other->pos_x_;
   float dy = pos_y_ - other->pos_y_;
@@ -60,6 +81,12 @@ __device__ void Spring::compute_force() {
   float dist = p1_->distance_to(p2_);
   float displacement = max(0.0f, dist - initial_length_);
   force_ = spring_factor_ * displacement;
+
+  if (force_ > max_force_) {
+    p1_->remove_spring(this);
+    p2_->remove_spring(this);
+    device_allocator->free<Spring>(this);
+  }
 }
 
 
@@ -96,6 +123,8 @@ __device__ void Node::move() {
   // Calculate new velocity and position.
   vel_x_ += force_x*kDt / mass_;
   vel_y_ += force_y*kDt / mass_;
+  vel_x_ *= 1.0f - kVelocityDampening;
+  vel_y_ *= 1.0f - kVelocityDampening;
   pos_x_ += vel_x_*kDt;
   pos_y_ += vel_y_*kDt;
 }
@@ -163,7 +192,7 @@ __global__ void load_example() {
 
   float spring_factor = 5.0f;
   float max_force = 100.0f;
-  float mass = 20.0f;
+  float mass = 500.0f;
 
   auto* a1 = device_allocator->make_new<AnchorPullNode>(0.1, 0.5, 0.0, -0.02);
   auto* a2 = device_allocator->make_new<AnchorPullNode>(0.3, 0.5, 0.0, -0.02);
@@ -196,6 +225,74 @@ __global__ void load_example() {
 }
 
 
+__global__ void load_random() {
+  assert(threadIdx.x == 0 && blockIdx.x == 0);
+
+  curandState rand_state;
+  curand_init(42, 0, 0, &rand_state);
+
+  float spring_min = 3.0f;
+  float spring_max = 5.0f;
+  float spring_delta = spring_max - spring_min;
+  float max_force = 0.5f;
+  float mass_min = 500.0f;
+  float mass_max = 500.0f;
+  float mass_delta = mass_max - mass_min;
+
+  int num_nodes = 200;
+  int num_pull_nodes = 20;
+  int num_springs = 400;
+  int num_total_nodes = num_nodes + num_pull_nodes;
+
+  float border_margin = 0.35f;
+
+  NodeBase** nodes = new NodeBase*[num_total_nodes];
+  int i = 0;
+  for (; i < num_nodes; ++i) {
+    float mass = curand_uniform(&rand_state)*mass_delta + mass_min;
+    float pos_x = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
+    float pos_y = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
+    nodes[i] = device_allocator->make_new<Node>(pos_x, pos_y, mass);
+  }
+
+  for (; i < num_total_nodes; ++i) {
+    float pos_x = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
+    float pos_y = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
+    float vel_x = curand_uniform(&rand_state)*0.1 - 0.05;
+    float vel_y = curand_uniform(&rand_state)*0.1 - 0.05;
+    nodes[i] = device_allocator->make_new<AnchorPullNode>(
+        pos_x, pos_y, vel_x, vel_y);
+  }
+
+  for (i = 0; i < num_springs; ++i) {
+    NodeBase* p1 = nullptr;
+    NodeBase* p2 = nullptr;
+
+    while (p1 == nullptr) {
+      NodeBase* n = nodes[curand(&rand_state) % num_total_nodes];
+
+      if (n->num_springs() < kMaxDegree) {
+        p1 = n;
+      }
+    }
+
+    while (p2 == nullptr) {
+      NodeBase* n = nodes[curand(&rand_state) % num_total_nodes];
+
+      if (n->num_springs() < kMaxDegree && n != p1) {
+        p2 = n;
+      }
+    }
+
+    float spring_factor = curand_uniform(&rand_state)*spring_delta
+                          + spring_min;
+    device_allocator->make_new<Spring>(p1, p2, spring_factor, max_force);
+  }
+
+  delete[] nodes;
+}
+
+
 int main(int /*argc*/, char** /*argv*/) {
   if (kOptionRender) {
     init_renderer();
@@ -207,7 +304,8 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
 
-  load_example<<<1, 1>>>();
+  //load_example<<<1, 1>>>();
+  load_random<<<1, 1>>>();
 
   for (int i = 0; i < 100*kNumSteps; ++i) {
     step();

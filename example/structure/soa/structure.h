@@ -42,6 +42,10 @@ class NodeBase : public SoaBase<AllocatorT> {
   __device__ float pos_y() const { return pos_y_; }
 
   __device__ void add_spring(Spring* spring);
+
+  __device__ int num_springs() const { return num_springs_; }
+
+  __device__ void remove_spring(Spring* spring);
 };
 
 
