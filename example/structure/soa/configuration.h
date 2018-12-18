@@ -7,5 +7,8 @@ static const float kPullY = 1.0f;
 static const float kPullX = 0.0f;
 static const float kDt = 0.1f;
 static const int kNumSteps = 100;
+static const int kMaxNodes = 100;
+static const int kMaxSprings = kMaxNodes*kMaxDegree;
+static const bool kOptionRender = true;
 
 #endif  // EXAMPLE_STRUCTURE_SOA_CONFIGURATION_H

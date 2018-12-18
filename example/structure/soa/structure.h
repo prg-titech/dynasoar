@@ -83,7 +83,8 @@ class Spring : public SoaBase<AllocatorT> {
       NodeBase*,      // p2_
       float,          // spring_factor_
       float,          // initial_length_
-      float>;         // force_
+      float,          // force_
+      float>;         // max_force_
 
  private:
   SoaField<Spring, 0> p1_;
@@ -91,9 +92,11 @@ class Spring : public SoaBase<AllocatorT> {
   SoaField<Spring, 2> spring_factor_;
   SoaField<Spring, 3> initial_length_;
   SoaField<Spring, 4> force_;
+  SoaField<Spring, 5> max_force_;
 
  public:
-  __device__ Spring(NodeBase* p1, NodeBase* p2, float spring_factor);
+  __device__ Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
+                    float max_force);
 
   __device__ void compute_force();
 
@@ -102,6 +105,11 @@ class Spring : public SoaBase<AllocatorT> {
   __device__ NodeBase* p2() const { return p2_; }
 
   __device__ float force() const { return force_; }
+
+  __device__ float max_force() const { return max_force_; }
+
+  // For rendering purposes.
+  __device__ void add_to_rendering_array();
 };
 
 #endif  // EXAMPLE_STRUCTURE_SOA_STRUCTURE_H

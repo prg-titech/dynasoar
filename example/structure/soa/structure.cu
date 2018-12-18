@@ -1,6 +1,6 @@
 #include <chrono>
 
-//#include "rendering.h"
+#include "rendering.h"
 #include "structure.h"
 
 // Allocator handles.
@@ -20,9 +20,10 @@ __device__ Node::Node(float pos_x, float pos_y)
     : NodeBase(pos_x, pos_y) {}
 
 
-__device__ Spring::Spring(NodeBase* p1, NodeBase* p2, float spring_factor)
+__device__ Spring::Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
+                          float max_force)
     : p1_(p1), p2_(p2), spring_factor_(spring_factor), force_(0.0f),
-      initial_length_(p1->distance_to(p2)) {
+      max_force_(max_force), initial_length_(p1->distance_to(p2)) {
   assert(initial_length_ > 0.0f);
 }
 
@@ -86,6 +87,43 @@ __device__ void Node::move() {
 }
 
 
+// Only for rendering.
+__device__ int dev_num_springs;
+__device__ SpringInfo dev_spring_info[kMaxSprings];
+int host_num_springs;
+SpringInfo host_spring_info[kMaxSprings];
+
+__device__ void Spring::add_to_rendering_array() {
+  int idx = atomicAdd(&dev_num_springs, 1);
+  dev_spring_info[idx].p1_x = p1_->pos_x();
+  dev_spring_info[idx].p1_y = p1_->pos_y();
+  dev_spring_info[idx].p2_x = p2_->pos_x();
+  dev_spring_info[idx].p2_y = p2_->pos_y();
+  dev_spring_info[idx].force = force_;
+  dev_spring_info[idx].max_force = max_force_;
+}
+
+
+void transfer_data() {
+  int zero = 0;
+  cudaMemcpyToSymbol(dev_num_springs, &zero, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<Spring, &Spring::add_to_rendering_array>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cudaMemcpyFromSymbol(&host_num_springs, dev_num_springs, sizeof(int), 0,
+                       cudaMemcpyDeviceToHost);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cudaMemcpyFromSymbol(host_spring_info, dev_spring_info,
+                       sizeof(SpringInfo)*host_num_springs, 0,
+                       cudaMemcpyDeviceToHost);
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+
 void compute() {
   allocator_handle->parallel_do<Spring, &Spring::compute_force>();
   allocator_handle->parallel_do<Node, &Node::move>();
@@ -98,10 +136,19 @@ void step() {
   for (int i = 0; i < kNumComputeIterations; ++i) {
     compute();
   }
+
+  if (kOptionRender) {
+    transfer_data();
+    draw(host_num_springs, host_spring_info);
+  }
 }
 
 
 int main(int /*argc*/, char** /*argv*/) {
+  if (kOptionRender) {
+    init_renderer();
+  }
+
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
@@ -110,5 +157,9 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kNumSteps; ++i) {
     step();
+  }
+
+  if (kOptionRender) {
+    close_renderer();
   }
 }
