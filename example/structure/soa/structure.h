@@ -93,7 +93,7 @@ class Node : public NodeBase {
   SoaField<Node, 2> mass_;
 
  public:
-  __device__ Node(float pos_x, float pos_y);
+  __device__ Node(float pos_x, float pos_y, float mass);
 
   __device__ void move();
 };

@@ -21,8 +21,8 @@ __device__ AnchorPullNode::AnchorPullNode(float pos_x, float pos_y,
     : AnchorNode(pos_x, pos_y), vel_x_(vel_x), vel_y_(vel_y) {}
 
 
-__device__ Node::Node(float pos_x, float pos_y)
-    : NodeBase(pos_x, pos_y) {}
+__device__ Node::Node(float pos_x, float pos_y, float mass)
+    : NodeBase(pos_x, pos_y), mass_(mass), vel_x_(0.0f), vel_y_(0.0f) {}
 
 
 __device__ Spring::Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
@@ -163,18 +163,19 @@ __global__ void load_example() {
 
   float spring_factor = 5.0f;
   float max_force = 100.0f;
+  float mass = 20.0f;
 
   auto* a1 = device_allocator->make_new<AnchorPullNode>(0.1, 0.5, 0.0, -0.02);
   auto* a2 = device_allocator->make_new<AnchorPullNode>(0.3, 0.5, 0.0, -0.02);
   auto* a3 = device_allocator->make_new<AnchorPullNode>(0.5, 0.5, 0.0, -0.02);
 
-  auto* n1 = device_allocator->make_new<Node>(0.05, 0.6);
-  auto* n2 = device_allocator->make_new<Node>(0.3, 0.6);
-  auto* n3 = device_allocator->make_new<Node>(0.7, 0.6);
+  auto* n1 = device_allocator->make_new<Node>(0.05, 0.6, mass);
+  auto* n2 = device_allocator->make_new<Node>(0.3, 0.6, mass);
+  auto* n3 = device_allocator->make_new<Node>(0.7, 0.6, mass);
 
-  auto* n4 = device_allocator->make_new<Node>(0.2, 0.7);
-  auto* n5 = device_allocator->make_new<Node>(0.4, 0.7);
-  auto* n6 = device_allocator->make_new<Node>(0.8, 0.7);
+  auto* n4 = device_allocator->make_new<Node>(0.2, 0.7, mass);
+  auto* n5 = device_allocator->make_new<Node>(0.4, 0.7, mass);
+  auto* n6 = device_allocator->make_new<Node>(0.8, 0.7, mass);
 
   auto* a4 = device_allocator->make_new<AnchorNode>(0.1, 0.9);
   auto* a5 = device_allocator->make_new<AnchorNode>(0.3, 0.9);
