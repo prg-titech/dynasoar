@@ -16,6 +16,11 @@ __device__ AnchorNode::AnchorNode(float pos_x, float pos_y)
     : NodeBase(pos_x, pos_y) {}
 
 
+__device__ AnchorPullNode::AnchorPullNode(float pos_x, float pos_y,
+                                          float vel_x, float vel_y)
+    : AnchorNode(pos_x, pos_y), vel_x_(vel_x), vel_y_(vel_y) {}
+
+
 __device__ Node::Node(float pos_x, float pos_y)
     : NodeBase(pos_x, pos_y) {}
 
@@ -25,6 +30,15 @@ __device__ Spring::Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
     : p1_(p1), p2_(p2), spring_factor_(spring_factor), force_(0.0f),
       max_force_(max_force), initial_length_(p1->distance_to(p2)) {
   assert(initial_length_ > 0.0f);
+  p1_->add_spring(this);
+  p2_->add_spring(this);
+}
+
+
+__device__ void NodeBase::add_spring(Spring* spring) {
+  springs_[num_springs_++] = spring;
+  assert(num_springs_ <= kMaxDegree);
+  assert(spring->p1() == this || spring->p2() == this);
 }
 
 
@@ -36,9 +50,9 @@ __device__ float NodeBase::distance_to(NodeBase* other) const {
 }
 
 
-__device__ void AnchorNode::pull() {
-  pos_x_ += kPullX;
-  pos_y_ += kPullY;
+__device__ void AnchorPullNode::pull() {
+  pos_x_ += vel_x_ * kDt;
+  pos_y_ += vel_y_ * kDt;
 }
 
 
@@ -131,7 +145,7 @@ void compute() {
 
 
 void step() {
-  allocator_handle->parallel_do<AnchorNode, &AnchorNode::pull>();
+  allocator_handle->parallel_do<AnchorPullNode, &AnchorPullNode::pull>();
 
   for (int i = 0; i < kNumComputeIterations; ++i) {
     compute();
@@ -141,6 +155,43 @@ void step() {
     transfer_data();
     draw(host_num_springs, host_spring_info);
   }
+}
+
+
+__global__ void load_example() {
+  assert(threadIdx.x == 0 && blockIdx.x == 0);
+
+  float spring_factor = 5.0f;
+  float max_force = 100.0f;
+
+  auto* a1 = device_allocator->make_new<AnchorPullNode>(0.1, 0.5, 0.0, -0.02);
+  auto* a2 = device_allocator->make_new<AnchorPullNode>(0.3, 0.5, 0.0, -0.02);
+  auto* a3 = device_allocator->make_new<AnchorPullNode>(0.5, 0.5, 0.0, -0.02);
+
+  auto* n1 = device_allocator->make_new<Node>(0.05, 0.6);
+  auto* n2 = device_allocator->make_new<Node>(0.3, 0.6);
+  auto* n3 = device_allocator->make_new<Node>(0.7, 0.6);
+
+  auto* n4 = device_allocator->make_new<Node>(0.2, 0.7);
+  auto* n5 = device_allocator->make_new<Node>(0.4, 0.7);
+  auto* n6 = device_allocator->make_new<Node>(0.8, 0.7);
+
+  auto* a4 = device_allocator->make_new<AnchorNode>(0.1, 0.9);
+  auto* a5 = device_allocator->make_new<AnchorNode>(0.3, 0.9);
+  auto* a6 = device_allocator->make_new<AnchorNode>(0.6, 0.9);
+
+  device_allocator->make_new<Spring>(a1, n1, spring_factor, max_force);
+  device_allocator->make_new<Spring>(a2, n2, spring_factor, max_force);
+  device_allocator->make_new<Spring>(a3, n3, spring_factor, max_force);
+
+  device_allocator->make_new<Spring>(n1, n4, spring_factor, max_force);
+  device_allocator->make_new<Spring>(n2, n5, spring_factor, max_force);
+  device_allocator->make_new<Spring>(n3, n6, spring_factor, max_force);
+  device_allocator->make_new<Spring>(n2, n6, spring_factor, max_force);
+
+  device_allocator->make_new<Spring>(n4, a4, spring_factor, max_force);
+  device_allocator->make_new<Spring>(n5, a5, spring_factor, max_force);
+  device_allocator->make_new<Spring>(n6, a6, spring_factor, max_force);
 }
 
 
@@ -155,7 +206,9 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
 
-  for (int i = 0; i < kNumSteps; ++i) {
+  load_example<<<1, 1>>>();
+
+  for (int i = 0; i < 100*kNumSteps; ++i) {
     step();
   }
 

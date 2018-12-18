@@ -9,10 +9,12 @@
 // Pre-declare all classes.
 class NodeBase;
 class AnchorNode;
+class AnchorPullNode;
 class Node;
 class Spring;
 
-using AllocatorT = SoaAllocator<64*64*64*64, NodeBase, AnchorNode, Node, Spring>;
+using AllocatorT = SoaAllocator<64*64*64*64, NodeBase, AnchorNode,
+                                AnchorPullNode, Node, Spring>;
 
 
 class NodeBase : public SoaBase<AllocatorT> {
@@ -38,6 +40,8 @@ class NodeBase : public SoaBase<AllocatorT> {
   __device__ float pos_x() const { return pos_x_; }
 
   __device__ float pos_y() const { return pos_y_; }
+
+  __device__ void add_spring(Spring* spring);
 };
 
 
@@ -49,6 +53,25 @@ class AnchorNode : public NodeBase {
   using FieldTypes = std::tuple<>;
 
   __device__ AnchorNode(float pos_x, float pos_y);
+};
+
+
+class AnchorPullNode : public AnchorNode {
+ public:
+  static const bool kIsAbstract = false;
+  using BaseClass = AnchorNode;
+
+  using FieldTypes = std::tuple<
+      float,          // vel_x_
+      float>;         // vel_y_
+
+ private:
+  SoaField<AnchorPullNode, 0> vel_x_;
+  SoaField<AnchorPullNode, 1> vel_y_;
+
+ public:
+  __device__ AnchorPullNode(float pos_x, float pos_y,
+                            float vel_x, float vel_y);
 
   __device__ void pull();
 };
