@@ -317,15 +317,18 @@ void initialize_memory() {
 }
 
 
-//__device__ NodeBase* tmp_nodes[kMaxNodes];
-
+__device__ IndexT dev_tmp_nodes[kMaxNodes];
+__device__ IndexT dev_node_counter;
 __global__ void kernel_create_nodes(DsNode* nodes, int num_nodes) {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < num_nodes; i += blockDim.x * gridDim.x) {
+    int idx = atomicAdd(&dev_node_counter, 1);
+    dev_tmp_nodes[i] = idx;
+
     if (nodes[i].type == kTypeNode) {
-      new_Node(i, nodes[i].pos_x, nodes[i].pos_y, nodes[i].mass);
+      new_Node(idx, nodes[i].pos_x, nodes[i].pos_y, nodes[i].mass);
     } else if (nodes[i].type == kTypeAnchorPullNode) {
-      new_AnchorPullNode(i, nodes[i].pos_x, nodes[i].pos_y, nodes[i].vel_x,
+      new_AnchorPullNode(idx, nodes[i].pos_x, nodes[i].pos_y, nodes[i].vel_x,
                          nodes[i].vel_y);
     } else {
       assert(false);
@@ -337,7 +340,7 @@ __global__ void kernel_create_nodes(DsNode* nodes, int num_nodes) {
 __global__ void kernel_create_springs(DsSpring* springs, int num_springs) {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < num_springs; i += blockDim.x * gridDim.x) {
-    new_Spring(i, springs[i].p1, springs[i].p2,
+    new_Spring(i, dev_tmp_nodes[springs[i].p1], dev_tmp_nodes[springs[i].p2],
                springs[i].spring_factor, springs[i].max_force);
   }
 }
@@ -353,6 +356,11 @@ void load_dataset(Dataset& dataset) {
   cudaMalloc(&host_springs, sizeof(DsSpring)*dataset.springs.size());
   cudaMemcpy(host_springs, dataset.springs.data(),
              sizeof(DsSpring)*dataset.springs.size(), cudaMemcpyHostToDevice);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  IndexT zero = 0;
+  cudaMemcpyToSymbol(dev_node_counter, &zero, sizeof(IndexT), 0,
+                     cudaMemcpyHostToDevice);
   gpuErrchk(cudaDeviceSynchronize());
 
   kernel_create_nodes<<<128, 128>>>(host_nodes, dataset.nodes.size());
