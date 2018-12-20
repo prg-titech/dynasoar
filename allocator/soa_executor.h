@@ -81,7 +81,7 @@ struct ParallelExecutor {
       uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
       if (num_soa_blocks > 0) {
-        uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
+        uint32_t total_threads = num_soa_blocks * kSize;
 
         kernel_parallel_do<ThisClass>
             <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
@@ -106,7 +106,7 @@ struct ParallelExecutor {
         uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
         if (num_soa_blocks > 0) {
-          uint32_t total_threads = num_soa_blocks * BlockHelperIterT::kSize;
+          uint32_t total_threads = num_soa_blocks * kSize;
 
           kernel_parallel_do_with_pre<ThisClass, PreClass>
               <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,

@@ -13,9 +13,9 @@ void random_dataset(Dataset& result) {
   float mass_min = 500.0f;
   float mass_max = 500.0f;
 
-  int num_nodes = 180;
-  int num_pull_nodes = 20;
-  int num_springs = 400;
+  int num_nodes = 0.9*kMaxNodes;
+  int num_pull_nodes = 0.1*kMaxNodes;
+  int num_springs = 0.7*kMaxSprings;
   int num_total_nodes = num_nodes + num_pull_nodes;
 
   float border_margin = 0.35f;

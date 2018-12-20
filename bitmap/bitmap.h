@@ -347,21 +347,27 @@ class Bitmap {
 
     __DEV__ void nested_initialize(bool allocated) { assert(false); }
 
-    __DEV__ void trivial_scan() {
-      SizeT current_size = 0;
-      for (int i = 0; i < kBitsize; ++i) {
-        if (containers[0] & (kOne << i)) {
-          enumeration_result_buffer[current_size++] = i;
-        }
-      }
+    __DEV__ void atomic_add_scan_init() {
+      enumeration_result_size = 0;
+    }
 
-      enumeration_result_size = current_size;
-      assert(__popcll(containers[0]) == current_size);
+    __DEV__ void trivial_scan() {
+      assert(blockDim.x == 64 && gridDim.x == 1);
+
+      if (containers[0] & (kOne << threadIdx.x)) {
+        enumeration_result_buffer[atomicAdd(&enumeration_result_size, 1)]
+            = threadIdx.x;
+      }
     }
 
     void scan() {
+      member_func_kernel<ThisClass, &ThisClass::atomic_add_scan_init>
+          <<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+
       // Does not perform a prefix scan but computes the result directly.
-      member_func_kernel<ThisClass, &ThisClass::trivial_scan><<<1, 1>>>(this);
+      member_func_kernel<ThisClass, &ThisClass::trivial_scan>
+          <<<1, 64>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
     }
   };

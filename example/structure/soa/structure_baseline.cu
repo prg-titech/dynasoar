@@ -13,7 +13,7 @@
 static const int kThreads = 256;
 static const int kNullptr = std::numeric_limits<int>::max();
 
-using IndexT = int;
+using IndexT = unsigned long long int;
 
 __device__ DeviceArray<IndexT, kMaxDegree>* dev_Node_springs;
 __device__ float* dev_Node_pos_x;
