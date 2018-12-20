@@ -3,7 +3,7 @@ project(soa-alloc)
 
 # Set up CUDA.
 find_package(CUDA 9.0 REQUIRED)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -std=c++11)
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -std=c++11 -lineinfo)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; --expt-extended-lambda)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -gencode arch=compute_50,code=sm_50)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -gencode arch=compute_61,code=sm_61)

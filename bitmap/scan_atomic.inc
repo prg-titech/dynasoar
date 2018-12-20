@@ -28,6 +28,8 @@ __DEV__ void atomic_add_scan() {
   }      
 }
 
+static const int kNumBlocksAtomicAdd = 256;
+
 void run_atomic_add_scan() {
   nested.scan();
 
@@ -35,6 +37,7 @@ void run_atomic_add_scan() {
   member_func_kernel<ThisClass, &ThisClass::atomic_add_scan_init><<<1, 1>>>(this);
   gpuErrchk(cudaDeviceSynchronize());
   member_func_kernel<ThisClass, &ThisClass::atomic_add_scan>
-      <<<num_selected/256+1, 256>>>(this);
+      <<<(num_selected + kNumBlocksAtomicAdd - 1)/kNumBlocksAtomicAdd,
+         kNumBlocksAtomicAdd>>>(this);
   gpuErrchk(cudaDeviceSynchronize());
 }

@@ -1,11 +1,15 @@
 #ifndef EXAMPLE_STRUCTURE_SOA_CONFIGURATION_H
 #define EXAMPLE_STRUCTURE_SOA_CONFIGURATION_H
 
-static const int kNumComputeIterations = 5;
+// Runs about 90 seconds on my machine (Titan Xp).
+// Note: SoaAlloc does not pay off with small problem sizes. Probably because
+// overheads due to kernel launch and pre-iteration bitmap scans dominate.
+
+static const int kNumComputeIterations = 40;
 static const int kMaxDegree = 5;
 static const float kDt = 0.01f;
-static const int kNumSteps = 5;
-static const int kMaxNodes = 100000;
+static const int kNumSteps = 50;
+static const int kMaxNodes = 5000000;
 static const int kMaxSprings = kMaxNodes*kMaxDegree / 2;
 static const bool kOptionRender = false;
 static const float kVelocityDampening = 0.0f; //0.00005; // Percentage value
