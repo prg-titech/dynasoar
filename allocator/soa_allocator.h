@@ -98,9 +98,6 @@ class SoaAllocator {
   }
 
   __DEV__ void initialize(char* data_buffer) {
-    // Check alignment of data storage buffer.
-    assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
-
     global_free_.initialize(true);
     for (int i = 0; i < kNumTypes; ++i) {
       allocated_[i].initialize(false);
@@ -115,6 +112,9 @@ class SoaAllocator {
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
       data_ = data_buffer;
+
+      // Check alignment of data storage buffer.
+      assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
     }
   }
 

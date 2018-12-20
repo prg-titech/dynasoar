@@ -1,6 +1,7 @@
 #include <chrono>
 #include <curand_kernel.h>
 
+#include "dataset.h"
 #include "rendering.h"
 #include "structure.h"
 
@@ -37,8 +38,9 @@ __device__ Spring::Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
 
 
 __device__ void NodeBase::add_spring(Spring* spring) {
-  springs_[num_springs_++] = spring;
-  assert(num_springs_ <= kMaxDegree);
+  int idx = atomicAdd(&num_springs_, 1);
+  springs_[idx] = spring;
+  assert(idx + 1 <= kMaxDegree);
   assert(spring->p1() == this || spring->p2() == this);
 }
 
@@ -60,6 +62,10 @@ __device__ void NodeBase::remove_spring(Spring* spring) {
   }
 
   --num_springs_;
+
+  if (num_springs_ == 0) {
+    device_allocator->free<NodeBase>(this);
+  }
 }
 
 
@@ -167,6 +173,19 @@ void transfer_data() {
 }
 
 
+float checksum() {
+  transfer_data();
+  float result = 0.0f;
+
+  for (int i = 0; i < host_num_springs; ++i) {
+    result += host_spring_info[i].p1_x*host_spring_info[i].p2_y
+              *host_spring_info[i].force;
+  }
+
+  return result;
+}
+
+
 void compute() {
   allocator_handle->parallel_do<Spring, &Spring::compute_force>();
   allocator_handle->parallel_do<Node, &Node::move>();
@@ -184,6 +203,64 @@ void step() {
     transfer_data();
     draw(host_num_springs, host_spring_info);
   }
+}
+
+
+__device__ NodeBase* tmp_nodes[kMaxNodes];
+
+__global__ void kernel_create_nodes(DsNode* nodes, int num_nodes) {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < num_nodes; i += blockDim.x * gridDim.x) {
+    if (nodes[i].type == kTypeNode) {
+      tmp_nodes[i] = device_allocator->make_new<Node>(nodes[i].pos_x,
+                                                      nodes[i].pos_y,
+                                                      nodes[i].mass);
+    } else if (nodes[i].type == kTypeAnchorPullNode) {
+      tmp_nodes[i] = device_allocator->make_new<AnchorPullNode>(nodes[i].pos_x,
+                                                                nodes[i].pos_y,
+                                                                nodes[i].vel_x,
+                                                                nodes[i].vel_y);
+    } else {
+      assert(false);
+    }
+  }
+}
+
+
+__global__ void kernel_create_springs(DsSpring* springs, int num_springs) {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < num_springs; i += blockDim.x * gridDim.x) {
+    assert(tmp_nodes[springs[i].p1] != nullptr);
+    assert(tmp_nodes[springs[i].p2] != nullptr);
+
+    device_allocator->make_new<Spring>(tmp_nodes[springs[i].p1],
+                                       tmp_nodes[springs[i].p2],
+                                       springs[i].spring_factor,
+                                       springs[i].max_force);
+  }
+}
+
+
+void load_dataset(Dataset& dataset) {
+  DsNode* host_nodes;
+  cudaMalloc(&host_nodes, sizeof(DsNode)*dataset.nodes.size());
+  cudaMemcpy(host_nodes, dataset.nodes.data(),
+             sizeof(DsNode)*dataset.nodes.size(), cudaMemcpyHostToDevice);
+
+  DsSpring* host_springs;
+  cudaMalloc(&host_springs, sizeof(DsSpring)*dataset.springs.size());
+  cudaMemcpy(host_springs, dataset.springs.data(),
+             sizeof(DsSpring)*dataset.springs.size(), cudaMemcpyHostToDevice);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_create_nodes<<<128, 128>>>(host_nodes, dataset.nodes.size());
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_create_springs<<<128, 128>>>(host_springs, dataset.springs.size());
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cudaFree(host_nodes);
+  cudaFree(host_springs);
 }
 
 
@@ -225,74 +302,6 @@ __global__ void load_example() {
 }
 
 
-__global__ void load_random() {
-  assert(threadIdx.x == 0 && blockIdx.x == 0);
-
-  curandState rand_state;
-  curand_init(42, 0, 0, &rand_state);
-
-  float spring_min = 3.0f;
-  float spring_max = 5.0f;
-  float spring_delta = spring_max - spring_min;
-  float max_force = 0.5f;
-  float mass_min = 500.0f;
-  float mass_max = 500.0f;
-  float mass_delta = mass_max - mass_min;
-
-  int num_nodes = 200;
-  int num_pull_nodes = 20;
-  int num_springs = 400;
-  int num_total_nodes = num_nodes + num_pull_nodes;
-
-  float border_margin = 0.35f;
-
-  NodeBase** nodes = new NodeBase*[num_total_nodes];
-  int i = 0;
-  for (; i < num_nodes; ++i) {
-    float mass = curand_uniform(&rand_state)*mass_delta + mass_min;
-    float pos_x = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
-    float pos_y = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
-    nodes[i] = device_allocator->make_new<Node>(pos_x, pos_y, mass);
-  }
-
-  for (; i < num_total_nodes; ++i) {
-    float pos_x = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
-    float pos_y = curand_uniform(&rand_state)*(1.0-2*border_margin) + border_margin;
-    float vel_x = curand_uniform(&rand_state)*0.1 - 0.05;
-    float vel_y = curand_uniform(&rand_state)*0.1 - 0.05;
-    nodes[i] = device_allocator->make_new<AnchorPullNode>(
-        pos_x, pos_y, vel_x, vel_y);
-  }
-
-  for (i = 0; i < num_springs; ++i) {
-    NodeBase* p1 = nullptr;
-    NodeBase* p2 = nullptr;
-
-    while (p1 == nullptr) {
-      NodeBase* n = nodes[curand(&rand_state) % num_total_nodes];
-
-      if (n->num_springs() < kMaxDegree) {
-        p1 = n;
-      }
-    }
-
-    while (p2 == nullptr) {
-      NodeBase* n = nodes[curand(&rand_state) % num_total_nodes];
-
-      if (n->num_springs() < kMaxDegree && n != p1) {
-        p2 = n;
-      }
-    }
-
-    float spring_factor = curand_uniform(&rand_state)*spring_delta
-                          + spring_min;
-    device_allocator->make_new<Spring>(p1, p2, spring_factor, max_force);
-  }
-
-  delete[] nodes;
-}
-
-
 int main(int /*argc*/, char** /*argv*/) {
   if (kOptionRender) {
     init_renderer();
@@ -305,11 +314,24 @@ int main(int /*argc*/, char** /*argv*/) {
                      cudaMemcpyHostToDevice);
 
   //load_example<<<1, 1>>>();
-  load_random<<<1, 1>>>();
+  
+  Dataset dataset;
+  random_dataset(dataset);
+  load_dataset(dataset);
 
-  for (int i = 0; i < 100*kNumSteps; ++i) {
+  auto time_start = std::chrono::system_clock::now();
+
+  for (int i = 0; i < kNumSteps; ++i) {
     step();
   }
+
+  auto time_end = std::chrono::system_clock::now();
+  auto elapsed = time_end - time_start;
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      .count();
+
+  printf("Time: %lu ms\n", millis);
+  printf("Checksum: %f\n", checksum());
 
   if (kOptionRender) {
     close_renderer();
