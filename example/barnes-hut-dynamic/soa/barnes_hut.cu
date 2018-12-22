@@ -37,7 +37,10 @@ __DEV__ BodyNode::BodyNode(float pos_x, float pos_y, float vel_x, float vel_y,
 __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
                            float p2_x, float p2_y)
     : NodeBase(parent, 0.0f, 0.0f, 0.0f),
-      p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {}
+      p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {
+  assert(p1_x < p2_x);
+  assert(p1_y < p2_y);
+}
 
 
 __DEV__ float NodeBase::distance_to(NodeBase* other) {
@@ -125,7 +128,7 @@ __DEV__ void BodyNode::update() {
 __DEV__ void BodyNode::clear_node() {
   assert(parent_ != nullptr);
 
-  if (!parent_->is_inside(this)) {
+  if (!parent_->contains(this)) {
     parent_->remove(this);
     parent_ = nullptr;
   }
@@ -153,7 +156,13 @@ __DEV__ void BodyNode::add_to_tree() {
 
 
 __DEV__ int TreeNode::child_index(BodyNode* body) {
-  assert(is_inside(body));
+  assert(contains(body));
+
+  // |-----------|
+  // |  0  |  1  |
+  // |-----|-----|
+  // |  2  |  3  |
+  // |-----------|
 
   int c_idx = 0;
   if (body->pos_x() > (p1_x_ + p2_x_) / 2) c_idx = 1;
@@ -163,10 +172,12 @@ __DEV__ int TreeNode::child_index(BodyNode* body) {
 
 
 __DEV__ void TreeNode::insert(BodyNode* body) {
-  assert(is_inside(body));
+  assert(contains(body));
   TreeNode* current = this;
 
   while (true) {
+    assert(current->contains(body));
+
     // TODO: Need a threadfence here to see updates of current?
     // Probably not because atomic operation should update cache.
 
@@ -184,6 +195,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       // TODO: Maybe threadfence here or atomic read to avoid false reads?
       BodyNode* other = child->cast<BodyNode>();
       assert(other != nullptr);
+      assert(current->contains(other));
+      assert(current->child_index(other) == current->child_index(body));
 
       // Replace BodyNode with TreeNode.
       float new_p1_x = c_idx == 0 || c_idx == 2
@@ -197,8 +210,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       auto* new_node = device_allocator->make_new<TreeNode>(
           /*parent=*/ current, new_p1_x, new_p1_y, new_p2_x, new_p2_y);
-      assert(new_node->is_inside(other));
-      assert(new_node->is_inside(body));
+      assert(new_node->contains(other));
+      assert(new_node->contains(body));
 
       // Insert other into new node.
       new_node->children_[new_node->child_index(other)] = other;
@@ -300,7 +313,7 @@ __DEV__ bool TreeNode::is_leaf() {
 }
 
 
-__DEV__ bool TreeNode::is_inside(BodyNode* body) {
+__DEV__ bool TreeNode::contains(BodyNode* body) {
   float x = body->pos_x();
   float y = body->pos_y();
   return x >= p1_x_ && x < p2_x_ && y >= p1_y_ && y < p2_y_;
@@ -395,6 +408,8 @@ void initialize_simulation() {
 
   kernel_init_bodies<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
+
+  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
 }
 
 

@@ -124,7 +124,7 @@ class TreeNode : public NodeBase {
 
   __DEV__ void insert(BodyNode* body);
 
-  __DEV__ bool is_inside(BodyNode* body);
+  __DEV__ bool contains(BodyNode* body);
 
   __DEV__ void remove(BodyNode* body);
 
