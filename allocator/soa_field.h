@@ -230,19 +230,19 @@ class SoaField {
   template<typename U = T>
   __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
   atomic_read() {
-    T dummy;
+    T dummy = 0;
     return atomic_cas(dummy, dummy);
   }
 
   template<typename U = T>
   __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
   atomic_read() {
-    T dummy;
+    T dummy = 0;
     return atomic_cas(dummy, dummy);
   }
 
   template<typename U = T>
-  __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
+  __DEV__ typename std::enable_if<sizeof(U) == 4, void>::type
   atomic_write(T value) {
     auto* ptr_addr = reinterpret_cast<unsigned int*>(data_ptr());
     auto* ptr_value = reinterpret_cast<unsigned int*>(&value);
@@ -250,7 +250,7 @@ class SoaField {
   }
 
   template<typename U = T>
-  __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
+  __DEV__ typename std::enable_if<sizeof(U) == 8, void>::type
   atomic_write(T value) {
     auto* ptr_addr = reinterpret_cast<unsigned long long int*>(data_ptr());
     auto* ptr_value = reinterpret_cast<unsigned long long int*>(&value);

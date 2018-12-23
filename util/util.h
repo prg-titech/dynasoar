@@ -76,19 +76,19 @@ class DeviceArray {
   template<typename U = T>
   __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
   atomic_read(size_t pos) {
-    T dummy;
+    T dummy = 0;
     return atomic_cas(pos, dummy, dummy);
   }
 
   template<typename U = T>
   __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
   atomic_read(size_t pos) {
-    T dummy;
+    T dummy = 0;
     return atomic_cas(pos, dummy, dummy);
   }
 
   template<typename U = T>
-  __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
+  __DEV__ typename std::enable_if<sizeof(U) == 4, void>::type
   atomic_write(size_t pos, T value) {
     auto* ptr_addr = reinterpret_cast<unsigned int*>(data_ + pos);
     auto* ptr_value = reinterpret_cast<unsigned int*>(&value);
@@ -96,7 +96,7 @@ class DeviceArray {
   }
 
   template<typename U = T>
-  __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
+  __DEV__ typename std::enable_if<sizeof(U) == 8, void>::type
   atomic_write(size_t pos, T value) {
     auto* ptr_addr = reinterpret_cast<unsigned long long int*>(data_ + pos);
     auto* ptr_value = reinterpret_cast<unsigned long long int*>(&value);

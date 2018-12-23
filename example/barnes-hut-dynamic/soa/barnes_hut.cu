@@ -40,10 +40,16 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
       p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {
   assert(p1_x < p2_x);
   assert(p1_y < p2_y);
+  children_->atomic_write(0, nullptr);
+  children_->atomic_write(1, nullptr);
+  children_->atomic_write(2, nullptr);
+  children_->atomic_write(3, nullptr);
+/*
   volatile_children_[0] = nullptr;
   volatile_children_[1] = nullptr;
   volatile_children_[2] = nullptr;
   volatile_children_[3] = nullptr;
+  */
 }
 
 
@@ -187,7 +193,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
-    NodeBase* child = current->volatile_children_[c_idx];
+    //NodeBase* child = current->volatile_children_[c_idx];
+    NodeBase* child = current->children_->atomic_read(c_idx);
 
     if (child == nullptr) {
       body->set_parent(current);  // TODO: volatile
@@ -221,7 +228,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Insert other into new node.
       // TODO: volatile
-      new_node->children_[new_node->child_index(other)] = other;
+//      new_node->children_[new_node->child_index(other)] = other;
+      new_node->children_->atomic_write(new_node->child_index(other), other);
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
