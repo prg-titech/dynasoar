@@ -193,7 +193,10 @@ __DEV__ int TreeNode::child_index(NodeBase* node) {
 
 
 __DEV__ void TreeNode::insert(BodyNode* body) {
-  assert(contains(body));
+  if (!contains(body)) {
+    printf("%f %f\n", body->pos_x(), body->pos_y());
+  }
+
   TreeNode* current = this;
 
   while (true) {
