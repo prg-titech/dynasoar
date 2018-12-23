@@ -215,10 +215,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     } else {
       BodyNode* other = child->cast<BodyNode>();
       assert(other != nullptr);
-      assert(other->parent() == current);
       assert(current->contains(other));
-      assert(current->child_index(other) != -1);
-      assert(current->child_index(other) == c_idx);
       assert(current->compute_index(other) == c_idx);
 
       // Replace BodyNode with TreeNode.
@@ -248,6 +245,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
+        assert(other->parent() == current);
         other->set_parent(new_node);
 
         // Now insert body.
