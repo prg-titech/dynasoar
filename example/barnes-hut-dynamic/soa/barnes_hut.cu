@@ -60,6 +60,7 @@ __DEV__ void NodeBase::apply_force(BodyNode* body) {
     float dx = body->pos_x() - pos_x_;
     float dy = body->pos_y() - pos_y_;
     float dist = sqrt(dx*dx + dy*dy);
+    assert(dist > 0.0000001);  // Should fail only if dist with same body.
     float F = kGravityConstant * mass_ * body->mass()
         / (dist * dist + kDampeningFactor);
     body->add_force(F*dx / dist, F*dy / dist);
