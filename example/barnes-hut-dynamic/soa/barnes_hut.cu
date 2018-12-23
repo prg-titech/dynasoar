@@ -211,7 +211,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     int c_idx = current->child_index(body);
     //NodeBase* child = current->volatile_children_[c_idx];
     //NodeBase* child = current->children_->atomic_read(c_idx);
-    NodeBase* child = pointerCAS<NodeBase>(&current->children_[c_idx], nullptr, nullptr);
+    auto** child_ptr = &current->children_[c_idx];
+    NodeBase* child = pointerCAS<NodeBase>(child_ptr, nullptr, nullptr);
 
     if (child == nullptr) {
       body->set_parent(current);  // TODO: volatile
