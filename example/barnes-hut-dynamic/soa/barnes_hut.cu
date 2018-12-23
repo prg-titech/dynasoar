@@ -433,7 +433,7 @@ void step() {
 
   // BFS steps to update tree.
   allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 100; ++i) {
     allocator_handle->parallel_do<TreeNode, &TreeNode::bfs_step>();
     allocator_handle->parallel_do<TreeNode, &TreeNode::update_frontier>();
   }
