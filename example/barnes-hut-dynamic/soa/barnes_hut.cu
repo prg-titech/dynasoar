@@ -23,14 +23,6 @@ __DEV__ T* pointerCAS(T** addr, T* assumed, T* value) {
 }
 
 
-template<typename T>
-__DEV__ void pointerAE(T** addr, T* value) {
-  auto* i_addr = reinterpret_cast<unsigned long long int*>(addr);
-  auto i_value = reinterpret_cast<unsigned long long int>(value);
-  atomicExch(i_addr, i_value);
-}
-
-
 __DEV__ NodeBase::NodeBase(TreeNode* parent, float pos_x, float pos_y,
                            float mass)
     : parent_(parent), pos_x_(pos_x), pos_y_(pos_y), mass_(mass) {}
@@ -48,18 +40,10 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
       p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {
   assert(p1_x < p2_x);
   assert(p1_y < p2_y);
-  /*
   children_->atomic_write(0, nullptr);
   children_->atomic_write(1, nullptr);
   children_->atomic_write(2, nullptr);
   children_->atomic_write(3, nullptr);
-  */
-
-  pointerAE<NodeBase>(&children_[0], nullptr);
-  pointerAE<NodeBase>(&children_[1], nullptr);
-  pointerAE<NodeBase>(&children_[2], nullptr);
-  pointerAE<NodeBase>(&children_[3], nullptr);
-
 /*
   volatile_children_[0] = nullptr;
   volatile_children_[1] = nullptr;
@@ -210,14 +194,11 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
     //NodeBase* child = current->volatile_children_[c_idx];
-    //NodeBase* child = current->children_->atomic_read(c_idx);
-    auto** child_ptr = &current->children_[c_idx];
-    NodeBase* child = pointerCAS<NodeBase>(child_ptr, nullptr, nullptr);
+    NodeBase* child = current->children_->atomic_read(c_idx);
 
     if (child == nullptr) {
       body->set_parent(current);  // TODO: volatile
-      //if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
-      if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
+      if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
         return;
       } else {
         body->set_parent(nullptr);
