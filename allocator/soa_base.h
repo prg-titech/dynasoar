@@ -14,6 +14,10 @@ class SoaBase {
 
   __DEV__ uint8_t get_type() const { return AllocatorT::get_type(this); }
 
+  __DEV__ uint8_t get_type() const volatile {
+    return AllocatorT::get_type(this);
+  }
+
   template<typename ClassIterT, typename ScanClassT>
   __DEV__ void rewrite_object(AllocatorT* allocator, int num_records) {
     SoaClassHelper<ScanClassT>::template dev_for_all<ClassIterT::FieldUpdater,
@@ -32,6 +36,16 @@ class SoaBase {
     if (this != nullptr
         && get_type() == AllocatorT::template BlockHelper<T>::kIndex) {
       return static_cast<T*>(this);
+    } else {
+      return nullptr;
+    }
+  }
+
+  template<typename T>
+  __DEV__ volatile T* cast() volatile {
+    if (this != nullptr
+        && get_type() == AllocatorT::template BlockHelper<T>::kIndex) {
+      return static_cast<volatile T*>(this);
     } else {
       return nullptr;
     }

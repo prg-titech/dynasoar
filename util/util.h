@@ -20,13 +20,57 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 template<typename T, size_t N>
 class DeviceArray {
  private:
-  T data[N];
+  T data_[N];
 
  public:
   using BaseType = T;
 
   __device__ T& operator[](size_t pos) {
-    return data[pos];
+    assert(pos < N);
+    return data_[pos];
+  }
+
+  __device__ const T& operator[](size_t pos) const {
+    assert(pos < N);
+    return data_[pos];
+  }
+
+  __device__ volatile T& operator[](size_t pos) volatile {
+    assert(pos < N);
+    volatile T* data_ptr = data_ + pos;
+    return *data_ptr;
+  }
+
+  __device__ const volatile T& operator[](size_t pos) const volatile {
+    assert(pos < N);
+    const volatile T* data_ptr = data_ + pos;
+    return *data_ptr;
+  }
+
+  template<typename U = T>
+  __device__ typename std::enable_if<sizeof(U) == 4, U>::type
+  atomic_cas(size_t pos, T assumed, T value) {
+    assert(pos < N);
+
+    auto* ptr_assumed = reinterpret_cast<unsigned int*>(&assumed);
+    auto* ptr_value = reinterpret_cast<unsigned int*>(&value);
+    auto* ptr_addr = reinterpret_cast<unsigned int*>(data_ + pos);
+
+    auto result = atomicCAS(ptr_addr, *ptr_assumed, *ptr_value);
+    return *reinterpret_cast<U*>(&result);
+  }
+
+  template<typename U = T>
+  __device__ typename std::enable_if<sizeof(U) == 8, U>::type
+  atomic_cas(size_t pos, T assumed, T value) {
+    assert(pos < N);
+
+    auto* ptr_assumed = reinterpret_cast<unsigned long long int*>(&assumed);
+    auto* ptr_value = reinterpret_cast<unsigned long long int*>(&value);
+    auto* ptr_addr = reinterpret_cast<unsigned long long int*>(data_ + pos);
+
+    auto result = atomicCAS(ptr_addr, *ptr_assumed, *ptr_value);
+    return *reinterpret_cast<U*>(&result);
   }
 };
 

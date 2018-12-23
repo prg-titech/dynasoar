@@ -40,6 +40,10 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
       p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {
   assert(p1_x < p2_x);
   assert(p1_y < p2_y);
+  volatile_children_[0] = nullptr;
+  volatile_children_[1] = nullptr;
+  volatile_children_[2] = nullptr;
+  volatile_children_[3] = nullptr;
 }
 
 
@@ -183,12 +187,11 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
-    auto** child_ptr = &current->children_[c_idx];
-    auto* child = *child_ptr;
+    NodeBase* child = current->volatile_children_[c_idx];
 
     if (child == nullptr) {
-      if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
-        body->set_parent(current);
+      body->set_parent(current);  // TODO: volatile
+      if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
         return;
       }
     } else if (child->cast<TreeNode>() != nullptr) {
@@ -197,6 +200,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       // TODO: Maybe threadfence here or atomic read to avoid false reads?
       BodyNode* other = child->cast<BodyNode>();
       assert(other != nullptr);
+      assert(other->parent() == current);  // TODO: volatile
       assert(current->contains(other));
       assert(current->child_index(other) == current->child_index(body));
 
@@ -216,11 +220,12 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(new_node->contains(body));
 
       // Insert other into new node.
+      // TODO: volatile
       new_node->children_[new_node->child_index(other)] = other;
 
       // Try to install this node.
-      if (pointerCAS<NodeBase>(child_ptr, other, new_node) == other) {
-        other->set_parent(new_node);
+      if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
+        other->set_parent(new_node);    // TODO: volatile
 
         // Now insert body.
         current = new_node;

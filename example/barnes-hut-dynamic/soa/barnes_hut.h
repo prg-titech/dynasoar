@@ -104,7 +104,9 @@ class TreeNode : public NodeBase {
       bool>;                                      // next_frontier_
 
  private:
+  volatile SoaField<TreeNode, 0> volatile_children_;
   SoaField<TreeNode, 0> children_;
+
   SoaField<TreeNode, 1> p1_x_;
   SoaField<TreeNode, 2> p1_y_;
   SoaField<TreeNode, 3> p2_x_;

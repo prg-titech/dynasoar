@@ -42,7 +42,7 @@ struct PointerHelper {
 // identifier.
 template<typename C, int Field>
 class SoaField {
- private:
+ protected:
   using T = typename SoaFieldHelper<C, Field>::type;
 
   // Calculate data pointer from address.
@@ -53,6 +53,10 @@ class SoaField {
         - sizeof(SoaField<C, Field>)
             * (Field + SoaClassUtil<typename C::BaseClass>::kNumFields);
     return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
+  }
+
+  __DEV__ volatile T* data_ptr() const volatile {
+    return const_cast<const SoaField<C, Field>*>(this)->data_ptr();
   }
 
  public:
@@ -90,25 +94,74 @@ class SoaField {
 
   // Field initialization.
   __DEV__ SoaField() {}
-  __DEV__ explicit SoaField(const T& value) { *data_ptr() = value; }
+  __DEV__ explicit SoaField(const T& value) { *this = value; }
 
   // Implicit conversion operator for automatic conversion to base type.
   __DEV__ operator T&() { return *data_ptr(); }
   __DEV__ operator const T&() const { return *data_ptr(); }
+  __DEV__ operator volatile T&() volatile { return *data_ptr(); }
+  __DEV__ operator const volatile T&() const volatile { return *data_ptr(); }
+
+  // Force conversion.
+  __DEV__ T& get() { return *data_ptr(); }
+  __DEV__ const T& get() const { return *data_ptr(); }
+  __DEV__ volatile T& get() volatile { return *data_ptr(); }
+  __DEV__ const volatile T& get() const volatile { return *data_ptr(); }
 
   // Custom address-of operator.
   __DEV__ T* operator&() { return data_ptr(); }
   __DEV__ const T* operator&() const { return data_ptr(); }
+  __DEV__ volatile T* operator&() volatile { return data_ptr(); }
+  __DEV__ const volatile T* operator&() const volatile { return data_ptr(); }
 
-  // Support member function calls.
-  __DEV__ T& operator->() { return *data_ptr(); }
-  __DEV__ const T& operator->() const { return *data_ptr(); }
+  // Member function calls on fields of pointer types.
+  template<typename U = T>
+  __DEV__ typename std::enable_if<std::is_pointer<U>::value, T>::type&
+  operator->() { return *data_ptr(); }
+
+  template<typename U = T>
+  __DEV__ const typename std::enable_if<std::is_pointer<U>::value, T>::type&
+  operator->() const { return *data_ptr(); }
+
+  template<typename U = T>
+  __DEV__ volatile typename std::enable_if<std::is_pointer<U>::value, T>::type&
+  operator->() volatile { return *data_ptr(); }
+
+  template<typename U = T>
+  __DEV__ const volatile typename std::enable_if<std::is_pointer<U>::value,
+                                                 T>::type&
+  operator->() const volatile{ return *data_ptr(); }
+
+  // Member function calls on non-pointer types.
+  template<typename U = T>
+  __DEV__ typename std::enable_if<!std::is_pointer<U>::value, T*>::type
+  operator->() { return data_ptr(); }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<!std::is_pointer<U>::value, const T*>::type
+  operator->() const { return data_ptr(); }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<!std::is_pointer<U>::value,
+                                  volatile T*>::type
+  operator->() volatile { return data_ptr(); }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<!std::is_pointer<U>::value,
+                                  const volatile T*>::type
+  operator->() const volatile { return data_ptr(); }
 
   // Dereference type in case of pointer type.
   __DEV__ typename std::remove_pointer<T>::type& operator*() {
     return **data_ptr();
   }
   __DEV__ typename std::remove_pointer<T>::type& operator*() const {
+    return **data_ptr();
+  }
+  __DEV__ typename std::remove_pointer<T>::type& operator*() volatile {
+    return **data_ptr();
+  }
+  __DEV__ typename std::remove_pointer<T>::type& operator*() const volatile {
     return **data_ptr();
   }
 
@@ -120,10 +173,58 @@ class SoaField {
     return (*data_ptr())[pos];
   }
 
+  template<typename U = T>
+  __DEV__ const typename std::enable_if<is_device_array<U>::value,
+                                        typename U::BaseType>::type&
+  operator[](size_t pos) const {
+    return (*data_ptr())[pos];
+  }
+
+  template<typename U = T>
+  __DEV__ volatile typename std::enable_if<is_device_array<U>::value,
+                                           typename U::BaseType>::type&
+  operator[](size_t pos) volatile {
+    return (*data_ptr())[pos];
+  }
+
+  template<typename U = T>
+  __DEV__ const volatile typename std::enable_if<is_device_array<U>::value,
+                                                 typename U::BaseType>::type&
+  operator[](size_t pos) const volatile {
+    return (*data_ptr())[pos];
+  }
+
   // Assignment operator.
   __DEV__ T& operator=(const T& value) {
     *data_ptr() = value;
     return *data_ptr();
+  }
+
+  __DEV__ volatile T& operator=(const T& value) volatile {
+    *data_ptr() = value;
+    return *data_ptr();
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
+  atomic_cas(T assumed, T value) {
+    auto* ptr_assumed = reinterpret_cast<unsigned int*>(&assumed);
+    auto* ptr_value = reinterpret_cast<unsigned int*>(&value);
+    auto* ptr_addr = reinterpret_cast<unsigned int*>(data_ptr());
+
+    auto result = atomicCAS(ptr_addr, *ptr_assumed, *ptr_value);
+    return *reinterpret_cast<U*>(&result);
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
+  atomic_cas(T assumed, T value) {
+    auto* ptr_assumed = reinterpret_cast<unsigned long long int*>(&assumed);
+    auto* ptr_value = reinterpret_cast<unsigned long long int*>(&value);
+    auto* ptr_addr = reinterpret_cast<unsigned long long int*>(data_ptr());
+
+    auto result = atomicCAS(ptr_addr, *ptr_assumed, *ptr_value);
+    return *reinterpret_cast<U*>(&result);
   }
 };
 
