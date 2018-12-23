@@ -188,16 +188,12 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
   while (true) {
     assert(current->contains(body));
 
-    // TODO: Need a threadfence here to see updates of current?
-    // Probably not because atomic operation should update cache.
-
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
     NodeBase* child = current->children_.as_volatile()[c_idx];
-    //NodeBase* child = current->children_->atomic_read(c_idx);
 
     if (child == nullptr) {
-      body->set_parent(current);  // TODO: volatile
+      body->set_parent(current);
       if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
         return;
       } else {
@@ -209,7 +205,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       // TODO: Maybe threadfence here or atomic read to avoid false reads?
       BodyNode* other = child->cast<BodyNode>();
       assert(other != nullptr);
-      assert(other->parent() == current);  // TODO: volatile
+      assert(other->parent() == current);
       assert(current->contains(other));
       assert(current->child_index(other) == current->child_index(body));
 
@@ -229,12 +225,12 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(new_node->contains(body));
 
       // Insert other into new node.
-      // TODO: volatile
+      // TODO: Maybe this could be a volatile write. But atomic is safer.
       new_node->children_->atomic_write(new_node->child_index(other), other);
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
-        other->set_parent(new_node);    // TODO: volatile
+        other->set_parent(new_node);
 
         // Now insert body.
         current = new_node;
@@ -438,6 +434,7 @@ int main(int /*argc*/, char** /*argv*/) {
   initialize_simulation();
 
   for (int i = 0; i < kIterations; ++i) {
+    printf("STEP: %i\n", i);
     step();
   }
 }
