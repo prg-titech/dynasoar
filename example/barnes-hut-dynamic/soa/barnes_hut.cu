@@ -120,10 +120,15 @@ __DEV__ void BodyNode::update() {
   pos_y_ += vel_y_*kDt;
 
   if (pos_x_ < -1 || pos_x_ > 1) {
+    // Undo change in position so that body never leaves boundary tree node.
+    pos_x_ -= vel_x_*kDt;
+    pos_y_ -= vel_y_*kDt;
     vel_x_ = -vel_x_;
   }
 
   if (pos_y_ < -1 || pos_y_ > 1) {
+    pos_x_ -= vel_x_*kDt;
+    pos_y_ -= vel_y_*kDt;
     vel_y_ = -vel_y_;
   }
 }
