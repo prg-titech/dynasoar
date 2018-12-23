@@ -164,7 +164,7 @@ __DEV__ void BodyNode::add_to_tree() {
 }
 
 
-__DEV__ int TreeNode::child_index(BodyNode* body) {
+__DEV__ int TreeNode::compute_index(BodyNode* body) {
   assert(contains(body));
 
   // |-----------|
@@ -180,6 +180,18 @@ __DEV__ int TreeNode::child_index(BodyNode* body) {
 }
 
 
+__DEV__ int TreeNode::child_index(NodeBase* node) {
+  int c_idx = - 1;
+  for (int i = 0; i < 4; ++i) {
+    if (children_.as_volatile()[i] == node) {
+      c_idx = i;
+      break;
+    }
+  }
+  return c_idx;
+}
+
+
 __DEV__ void TreeNode::insert(BodyNode* body) {
   assert(contains(body));
   TreeNode* current = this;
@@ -188,7 +200,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     assert(current->contains(body));
 
     // Check where to insert in this node.
-    int c_idx = current->child_index(body);
+    int c_idx = current->compute_index(body);
     NodeBase* child = current->children_.as_volatile()[c_idx];
 
     if (child == nullptr) {
@@ -206,6 +218,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(other->parent() == current);
       assert(current->contains(other));
       assert(current->child_index(other) == c_idx);
+      assert(current->compute_index(other) == c_idx);
 
       // Replace BodyNode with TreeNode.
       float new_p1_x = c_idx == 0 || c_idx == 2
@@ -224,7 +237,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Insert other into new node.
       // TODO: Maybe this could be a volatile write. But atomic is safer.
-      int other_idx = new_node->child_index(other);
+      int other_idx = new_node->compute_index(other);
 #ifndef NDEBUG
       assert(new_node->children_->atomic_cas(other_idx, nullptr, other)
              == nullptr);
@@ -284,14 +297,8 @@ __DEV__ void TreeNode::collapse_tree() {
 
       if (num_children < 2) {
         // Find index of current node in parent.
-        // TODO: Consider using child_index instead.
-        int c_idx = -1;
-        for (int i = 0; i < 4; ++i) {
-          if (parent->children_.as_volatile()[i] == current) {
-            c_idx = i;
-            break;
-          }
-        }
+        // TODO: Consider using compute_index instead.
+        int c_idx = parent_->child_index(current);
 
         if (c_idx != -1) {
           if (num_children == 0) {
@@ -310,7 +317,7 @@ __DEV__ void TreeNode::collapse_tree() {
             if (child_body != nullptr) {
               assert(current->contains(child_body));
               assert(parent->contains(child_body));
-              assert(parent->child_index(child_body) == c_idx);
+              assert(parent->compute_index(child_body) == c_idx);
             }
 #endif  // NDEBUG
 

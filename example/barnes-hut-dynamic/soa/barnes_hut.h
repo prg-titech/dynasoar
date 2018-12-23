@@ -120,7 +120,9 @@ class TreeNode : public NodeBase {
 
   __DEV__ void check_apply_force(BodyNode* body);
 
-  __DEV__ int child_index(BodyNode* body);
+  __DEV__ int child_index(NodeBase* body);
+
+  __DEV__ int compute_index(BodyNode* body);
 
   __DEV__ void collapse_tree();
 
