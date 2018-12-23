@@ -237,7 +237,13 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
 
 __DEV__ bool TreeNode::remove_child(int c_idx, TreeNode* node) {
-  return pointerCAS<NodeBase>(&children_[c_idx], node, nullptr) == node;
+  NodeBase* before = children_->atomic_cas(c_idx, node, nullptr);
+
+#ifndef NDEBUG
+  assert(before == nullptr || before == node);
+#endif  // NDEBUG
+
+  return before == node;
 }
 
 
@@ -260,9 +266,10 @@ __DEV__ void TreeNode::collapse_tree() {
         // TODO: There could be cases where we do not see a concurrent delete
         // due to missing threadfence.
         // Dangerous: Multiple threads may be deleting stuff at the same time.
-        if (current->children_[i] != nullptr) {
+        auto* child = current->children_.as_volatile()[i];
+        if (child != nullptr) {
           ++num_children;
-          single_child = current->children_[i];
+          single_child = child;
         }
       }
 
@@ -270,7 +277,7 @@ __DEV__ void TreeNode::collapse_tree() {
         // Find index of current node in parent.
         int c_idx = -1;
         for (int i = 0; i < 4; ++i) {
-          if (parent->children_[i] == current) {
+          if (parent->children_.as_volatile()[i] == current) {
             c_idx = i;
             break;
           }
@@ -281,17 +288,26 @@ __DEV__ void TreeNode::collapse_tree() {
             // Node is empty. Remove.
             if (parent->remove_child(c_idx, current)) {
               current = parent;
+              device_allocator->free(current);
+            } else {
+              // Another thread already remove this node.
+              break;
             }
           } else if (num_children == 1) {
             assert(single_child != nullptr);
             // Node has only one child. Merge with parent.
-            if (pointerCAS<NodeBase>(&parent->children_[c_idx], current,
-                                     single_child) == current) {
+            NodeBase* before = parent->children_->atomic_cas(
+                c_idx, current, single_child);
+
+            if (before == current) {
               assert(single_child->parent() == this);
               // TODO: Use pointerCAS here?
               single_child->set_parent(parent);
               device_allocator->free(current);
               current = parent;
+            } else {
+              // Another thread already performed a merge or removed the node.
+              break;
             }
           }
         } else {
