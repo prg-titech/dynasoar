@@ -188,6 +188,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     if (child == nullptr) {
       if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
+        body->set_parent(current);
         return;
       }
     } else if (child->cast<TreeNode>() != nullptr) {
