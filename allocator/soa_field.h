@@ -256,6 +256,16 @@ class SoaField {
     auto* ptr_value = reinterpret_cast<unsigned long long int*>(&value);
     atomicExch(ptr_addr, *ptr_value);
   }
+
+  __DEV__ volatile SoaField<C, Field>& as_volatile() {
+    volatile SoaField<C, Field>* this_v = this;
+    return *this_v;
+  }
+
+  __DEV__ const volatile SoaField<C, Field>& as_volatile() const {
+    const volatile SoaField<C, Field>* this_v = this;
+    return *this_v;
+  }
 };
 
 #endif  // ALLOCATOR_SOA_FIELD_H

@@ -193,8 +193,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
-    //NodeBase* child = current->volatile_children_[c_idx];
-    NodeBase* child = current->children_->atomic_read(c_idx);
+    NodeBase* child = current->children_.as_volatile()[c_idx];
+    //NodeBase* child = current->children_->atomic_read(c_idx);
 
     if (child == nullptr) {
       body->set_parent(current);  // TODO: volatile
