@@ -44,12 +44,6 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
   children_->atomic_write(1, nullptr);
   children_->atomic_write(2, nullptr);
   children_->atomic_write(3, nullptr);
-/*
-  volatile_children_[0] = nullptr;
-  volatile_children_[1] = nullptr;
-  volatile_children_[2] = nullptr;
-  volatile_children_[3] = nullptr;
-  */
 }
 
 
@@ -413,6 +407,18 @@ __global__ void kernel_init_bodies() {
 }
 
 
+__device__ double device_checksum;
+__DEV__ void BodyNode::add_checksum() {
+  device_checksum += pos_x_ + pos_y_*2 + vel_x_*3 + vel_y_*4;
+}
+
+
+__global__ void kernel_compute_checksum() {
+  device_checksum = 0.0f;
+  device_allocator->template device_do<BodyNode>(&BodyNode::add_checksum);
+}
+
+
 void initialize_simulation() {
   kernel_init_tree<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -437,4 +443,12 @@ int main(int /*argc*/, char** /*argv*/) {
     printf("STEP: %i\n", i);
     step();
   }
+
+  kernel_compute_checksum<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  double checksum;
+  cudaMemcpyFromSymbol(&checksum, device_checksum, sizeof(device_checksum), 0,
+                       cudaMemcpyDeviceToHost);
+  printf("Checksum: %f\n", checksum);
 }
