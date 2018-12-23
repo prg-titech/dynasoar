@@ -216,7 +216,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     if (child == nullptr) {
       body->set_parent(current);  // TODO: volatile
-      if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
+      //if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
+      if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
         return;
       } else {
         body->set_parent(nullptr);
