@@ -255,7 +255,6 @@ __DEV__ bool TreeNode::remove_child(int c_idx, TreeNode* node) {
 __DEV__ void TreeNode::collapse_tree() {
   // Collapse bottom-up.
   // Leaf = Only BodyNode objects as children. Or no children at all.
-  // No threadfence needed between kernel launches because of cudaDeviceSync.
 
   if (is_leaf()) {
     TreeNode* current = this;
@@ -280,6 +279,7 @@ __DEV__ void TreeNode::collapse_tree() {
 
       if (num_children < 2) {
         // Find index of current node in parent.
+        // TODO: Consider using child_index instead.
         int c_idx = -1;
         for (int i = 0; i < 4; ++i) {
           if (parent->children_.as_volatile()[i] == current) {
@@ -299,7 +299,16 @@ __DEV__ void TreeNode::collapse_tree() {
               break;
             }
           } else if (num_children == 1) {
+#ifndef NDEBUG
             assert(single_child != nullptr);
+            BodyNode* child_body = single_child->cast<BodyNode>();
+            if (child_body != nullptr) {
+              assert(current->contains(child_body));
+              assert(parent->contains(child_body));
+              assert(parent->child_index(child_body) == c_idx);
+            }
+#endif  // NDEBUG
+
             // Node has only one child. Merge with parent.
             NodeBase* before = parent->children_->atomic_cas(
                 c_idx, current, single_child);
