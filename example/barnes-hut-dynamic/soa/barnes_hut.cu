@@ -217,6 +217,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(other != nullptr);
       assert(other->parent() == current);
       assert(current->contains(other));
+      assert(current->child_index(other) != -1);
       assert(current->child_index(other) == c_idx);
       assert(current->compute_index(other) == c_idx);
 
