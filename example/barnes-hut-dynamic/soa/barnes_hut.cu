@@ -206,7 +206,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(other != nullptr);
       assert(other->parent() == current);
       assert(current->contains(other));
-      assert(current->child_index(other) == current->child_index(body));
+      assert(current->child_index(other) == c_idx);
 
       // Replace BodyNode with TreeNode.
       float new_p1_x = c_idx == 0 || c_idx == 2
