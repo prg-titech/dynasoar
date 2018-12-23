@@ -200,6 +200,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       body->set_parent(current);  // TODO: volatile
       if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
         return;
+      } else {
+        body->set_parent(nullptr);
       }
     } else if (child->cast<TreeNode>() != nullptr) {
       current = child->cast<TreeNode>();
@@ -229,7 +231,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       // Insert other into new node.
       // TODO: volatile
 //      new_node->children_[new_node->child_index(other)] = other;
-      new_node->children_->atomic_write(new_node->child_index(other), other);
+      assert(new_node->children_->atomic_cas(new_node->child_index(other), nullptr, other) == nullptr);
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
