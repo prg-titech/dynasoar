@@ -256,7 +256,7 @@ __DEV__ void TreeNode::collapse_tree() {
     TreeNode* current = this;
 
     while (current != tree) {
-      TreeNode* parent = current->parent_;
+      TreeNode* parent = current->parent_.as_volatile();
       assert(parent != nullptr);
 
       int num_children = 0;
@@ -300,7 +300,7 @@ __DEV__ void TreeNode::collapse_tree() {
                 c_idx, current, single_child);
 
             if (before == current) {
-              assert(single_child->parent() == this);
+              assert(single_child->parent() == current);
               // TODO: Use pointerCAS here?
               single_child->set_parent(parent);
               device_allocator->free(current);
@@ -311,7 +311,7 @@ __DEV__ void TreeNode::collapse_tree() {
             }
           }
         } else {
-          // Node not found in parent.
+          // Node not found in parent. Other thread modified node.
           break;
         }
       } else {
