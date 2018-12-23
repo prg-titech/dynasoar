@@ -183,10 +183,11 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
-    auto*& child = current->children_[c_idx];
+    auto** child_ptr = &current->children_[c_idx];
+    auto* child = *child_ptr;
 
     if (child == nullptr) {
-      if (pointerCAS<NodeBase>(&child, nullptr, body) == nullptr) {
+      if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
         return;
       }
     } else if (child->cast<TreeNode>() != nullptr) {
@@ -217,8 +218,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       new_node->children_[new_node->child_index(other)] = other;
 
       // Try to install this node.
-      // TODO: Ensure that references work as expected here.
-      if (pointerCAS<NodeBase>(&child, other, new_node) == other) {
+      if (pointerCAS<NodeBase>(child_ptr, other, new_node) == other) {
         other->set_parent(new_node);
 
         // Now insert body.
