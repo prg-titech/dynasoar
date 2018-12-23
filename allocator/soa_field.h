@@ -226,6 +226,36 @@ class SoaField {
     auto result = atomicCAS(ptr_addr, *ptr_assumed, *ptr_value);
     return *reinterpret_cast<U*>(&result);
   }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
+  atomic_read() {
+    T dummy;
+    return atomic_cas(dummy, dummy);
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
+  atomic_read() {
+    T dummy;
+    return atomic_cas(dummy, dummy);
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
+  atomic_write(T value) {
+    auto* ptr_addr = reinterpret_cast<unsigned int*>(data_ptr());
+    auto* ptr_value = reinterpret_cast<unsigned int*>(&value);
+    atomicExch(ptr_addr, *ptr_value);
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
+  atomic_write(T value) {
+    auto* ptr_addr = reinterpret_cast<unsigned long long int*>(data_ptr());
+    auto* ptr_value = reinterpret_cast<unsigned long long int*>(&value);
+    atomicExch(ptr_addr, *ptr_value);
+  }
 };
 
 #endif  // ALLOCATOR_SOA_FIELD_H

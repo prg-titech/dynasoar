@@ -72,6 +72,36 @@ class DeviceArray {
     auto result = atomicCAS(ptr_addr, *ptr_assumed, *ptr_value);
     return *reinterpret_cast<U*>(&result);
   }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
+  atomic_read(size_t pos) {
+    T dummy;
+    return atomic_cas(pos, dummy, dummy);
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
+  atomic_read(size_t pos) {
+    T dummy;
+    return atomic_cas(pos, dummy, dummy);
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 4, U>::type
+  atomic_write(size_t pos, T value) {
+    auto* ptr_addr = reinterpret_cast<unsigned int*>(data_ + pos);
+    auto* ptr_value = reinterpret_cast<unsigned int*>(&value);
+    atomicExch(ptr_addr, *ptr_value);
+  }
+
+  template<typename U = T>
+  __DEV__ typename std::enable_if<sizeof(U) == 8, U>::type
+  atomic_write(size_t pos, T value) {
+    auto* ptr_addr = reinterpret_cast<unsigned long long int*>(data_ + pos);
+    auto* ptr_value = reinterpret_cast<unsigned long long int*>(&value);
+    atomicExch(ptr_addr, *ptr_value);
+  }
 };
 
 // Check if type is a device array.
