@@ -14,6 +14,21 @@ class TreeNode;
 using AllocatorT = SoaAllocator<64*64*64*64, NodeBase, BodyNode, TreeNode>;
 
 
+template<typename T>
+__DEV__ T* pCAS(T** addr, T* assumed, T* value) {
+  auto* i_addr = reinterpret_cast<unsigned long long int*>(addr);
+  auto i_assumed = reinterpret_cast<unsigned long long int>(assumed);
+  auto i_value = reinterpret_cast<unsigned long long int>(value);
+  return reinterpret_cast<T*>(atomicCAS(i_addr, i_assumed, i_value));
+}
+
+template<typename T>
+__DEV__ void pAE(T** addr, T* value) {
+  auto* i_addr = reinterpret_cast<unsigned long long int*>(addr);
+  auto i_value = reinterpret_cast<unsigned long long int>(value);
+  atomicExch(i_addr, i_value);
+}
+
 class NodeBase : public SoaBase<AllocatorT> {
  public:
   static const bool kIsAbstract = true;
@@ -32,9 +47,15 @@ class NodeBase : public SoaBase<AllocatorT> {
  public:
   __DEV__ NodeBase(TreeNode* parent, float pos_x, float pos_y, float mass);
 
-  __DEV__ TreeNode* parent() const { return parent_; }
+  __DEV__ TreeNode* parent() {
+//return pCAS<TreeNode>(&parent_, nullptr, nullptr);  
+	return parent_;
+}
 
-  __DEV__ void set_parent(TreeNode* parent) { parent_ = parent; }
+  __DEV__ void set_parent(TreeNode* parent) {
+	parent_ = parent;
+//pAE<TreeNode>(&parent_, parent); 
+}
 
   __DEV__ float pos_x() const { return pos_x_; }
 

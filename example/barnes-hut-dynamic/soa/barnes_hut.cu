@@ -40,6 +40,11 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
       p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {
   assert(p1_x < p2_x);
   assert(p1_y < p2_y);
+  pAE<NodeBase>(&children_[0], nullptr);
+  pAE<NodeBase>(&children_[1], nullptr);
+  pAE<NodeBase>(&children_[2], nullptr);
+  pAE<NodeBase>(&children_[3], nullptr);
+
 }
 
 
@@ -184,20 +189,25 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
     auto** child_ptr = &current->children_[c_idx];
-    auto* child = *child_ptr;
+    auto* child = pointerCAS<NodeBase>(child_ptr, nullptr, nullptr);
 
     if (child == nullptr) {
+      body->set_parent(current);
       if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
-        body->set_parent(current);
         return;
-      }
+      } else {
+	body->set_parent(nullptr);
+}
     } else if (child->cast<TreeNode>() != nullptr) {
       current = child->cast<TreeNode>();
     } else {
       // TODO: Maybe threadfence here or atomic read to avoid false reads?
       BodyNode* other = child->cast<BodyNode>();
       assert(other != nullptr);
-      assert(current->contains(other));
+      if(other->parent() != current) {
+          printf("%p -> parent() [%p] != %p\n", other, other->parent(), current);
+}
+ //     assert(current->contains(other));
       assert(current->child_index(other) == current->child_index(body));
 
       // Replace BodyNode with TreeNode.
@@ -216,13 +226,13 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(new_node->contains(body));
 
       // Insert other into new node.
-      new_node->children_[new_node->child_index(other)] = other;
+//      new_node->children_[new_node->child_index(other)] = other;
+      assert(pointerCAS<NodeBase>(&new_node->children_[new_node->child_index(other)], nullptr, other) == nullptr);
 
       // Try to install this node.
       if (pointerCAS<NodeBase>(child_ptr, other, new_node) == other) {
-        other->set_parent(new_node);
-
-        // Now insert body.
+other->set_parent(new_node);        
+// Now insert body.
         current = new_node;
       } else {
         device_allocator->free(new_node);
@@ -411,6 +421,8 @@ void initialize_simulation() {
   gpuErrchk(cudaDeviceSynchronize());
 
   allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
+
+printf("DONE!\n");
 }
 
 
