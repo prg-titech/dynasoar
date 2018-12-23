@@ -101,7 +101,8 @@ class TreeNode : public NodeBase {
       float,                                      // p2_x_
       float,                                      // p2_y_
       bool,                                       // frontier_
-      bool>;                                      // next_frontier_
+      bool,                                       // next_frontier_
+      bool>;                                      // visited_
 
  private:
   //volatile SoaField<TreeNode, 0> volatile_children_;
@@ -113,6 +114,7 @@ class TreeNode : public NodeBase {
   SoaField<TreeNode, 4> p2_y_;
   SoaField<TreeNode, 5> frontier_;
   SoaField<TreeNode, 6> next_frontier_;
+  SoaField<TreeNode, 7> visited_;
 
  public:
   __DEV__ TreeNode(TreeNode* parent, float p1_x, float p1_y, float p2_x,
@@ -130,9 +132,11 @@ class TreeNode : public NodeBase {
 
   __DEV__ bool contains(BodyNode* body);
 
-  __DEV__ void remove(BodyNode* body);
+  __DEV__ void remove(NodeBase* body);
 
   __DEV__ bool remove_child(int c_idx, TreeNode* node);
+
+  __DEV__ void remove_unvisited();
 
   __DEV__ bool is_leaf();
 

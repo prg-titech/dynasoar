@@ -60,7 +60,7 @@ __DEV__ void NodeBase::apply_force(BodyNode* body) {
     float dx = body->pos_x() - pos_x_;
     float dy = body->pos_y() - pos_y_;
     float dist = sqrt(dx*dx + dy*dy);
-    assert(dist > 0.0000001);  // Should fail only if dist with same body.
+    assert(dist > 0.000000001);  // Should fail only if dist with same body.
     float F = kGravityConstant * mass_ * body->mass()
         / (dist * dist + kDampeningFactor);
     body->add_force(F*dx / dist, F*dy / dist);
@@ -145,7 +145,7 @@ __DEV__ void BodyNode::clear_node() {
 }
 
 
-__DEV__ void TreeNode::remove(BodyNode* body) {
+__DEV__ void TreeNode::remove(NodeBase* body) {
   for (int i = 0; i < 4; ++i) {
     if (children_[i] == body) {
       children_[i] = nullptr;
@@ -153,7 +153,7 @@ __DEV__ void TreeNode::remove(BodyNode* body) {
     }
   }
 
-  // BodyNode not found.
+  // Node not found.
   assert(false);
 }
 
@@ -372,6 +372,7 @@ __DEV__ bool TreeNode::contains(BodyNode* body) {
 
 __DEV__ void TreeNode::initialize_frontier() {
   frontier_ = is_leaf();
+  visited_ = false;
 }
 
 
@@ -383,6 +384,7 @@ __DEV__ void TreeNode::update_frontier() {
 
 __DEV__ void TreeNode::bfs_step() {
   if (frontier_) {
+    visited_ = true;
     frontier_ = false;
 
     // Update pos_x and pos_y: gravitational center
@@ -405,7 +407,19 @@ __DEV__ void TreeNode::bfs_step() {
     // Add parent to printier.
     if (parent_ != nullptr) {
       parent_->next_frontier_ = true;
+    } else {
+      assert(this == tree);
     }
+  }
+}
+
+
+__DEV__ void TreeNode::remove_unvisited() {
+  if (!visited_) {
+    // Remove this node.
+    assert(parent_ != nullptr);
+    parent_->remove(this);
+    device_allocator->free(this);
   }
 }
 
@@ -423,6 +437,8 @@ void step() {
     allocator_handle->parallel_do<TreeNode, &TreeNode::bfs_step>();
     allocator_handle->parallel_do<TreeNode, &TreeNode::update_frontier>();
   }
+
+  allocator_handle->parallel_do<TreeNode, &TreeNode::remove_unvisited>();
 }
 
 
