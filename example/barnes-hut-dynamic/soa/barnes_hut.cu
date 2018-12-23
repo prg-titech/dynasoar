@@ -230,8 +230,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Insert other into new node.
       // TODO: volatile
-//      new_node->children_[new_node->child_index(other)] = other;
-      assert(new_node->children_->atomic_cas(new_node->child_index(other), nullptr, other) == nullptr);
+      new_node->children_->atomic_write(new_node->child_index(other), other);
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
