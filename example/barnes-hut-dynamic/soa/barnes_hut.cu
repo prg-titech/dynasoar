@@ -201,7 +201,6 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     } else if (child->cast<TreeNode>() != nullptr) {
       current = child->cast<TreeNode>();
     } else {
-      // TODO: Maybe threadfence here or atomic read to avoid false reads?
       BodyNode* other = child->cast<BodyNode>();
       assert(other != nullptr);
       assert(other->parent() == current);
@@ -225,7 +224,13 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Insert other into new node.
       // TODO: Maybe this could be a volatile write. But atomic is safer.
-      new_node->children_->atomic_write(new_node->child_index(other), other);
+      int other_idx = new_node->child_index(other);
+#ifndef NDEBUG
+      assert(new_node->children_->atomic_cas(other_idx, nullptr, other)
+             == nullptr);
+#else
+      new_node->children_->atomic_write(other_idx, other);
+#endif  // NDEBUG
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
