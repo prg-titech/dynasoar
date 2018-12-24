@@ -502,8 +502,10 @@ void bfs() {
 
 void step() {
 #ifndef NDEBUG
+  printf("A\n");
   allocator_handle->parallel_do<BodyNode, &BodyNode::sanity_check>();
   allocator_handle->parallel_do<TreeNode, &TreeNode::sanity_check>();
+  printf("A done\n");
 #endif  // NDEBUG
 
   allocator_handle->parallel_do<BodyNode, &BodyNode::compute_force>();
@@ -511,6 +513,14 @@ void step() {
   allocator_handle->parallel_do<BodyNode, &BodyNode::clear_node>();
   allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
   //allocator_handle->parallel_do<TreeNode, &TreeNode::collapse_tree>();
+
+#ifndef NDEBUG
+  printf("B\n");
+  allocator_handle->parallel_do<BodyNode, &BodyNode::sanity_check>();
+  allocator_handle->parallel_do<TreeNode, &TreeNode::sanity_check>();
+  printf("B done\n");
+#endif  // NDEBUG
+
 
   bfs();
 }
