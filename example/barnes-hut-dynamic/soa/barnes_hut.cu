@@ -208,30 +208,27 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
   assert(contains(body));
   TreeNode* current = this;
 
-  while (true) {
+  bool done = false;
+  while (!done) {
     assert(current->contains(body));
 
     // Check where to insert in this node.
     int c_idx = current->compute_index(body);
     NodeBase* child = current->children_.as_volatile()[c_idx];
-    printf("Checking child: %p\n", child);
 
     if (child == nullptr) {
       // Empty slot found.
-      //auto* cas_result = current->children_->atomic_cas(c_idx, nullptr, body);
-      auto* cas_result = pointerCAS<NodeBase>(&current->children_[c_idx], nullptr, body);
+      auto* cas_result = current->children_->atomic_cas(c_idx, nullptr, body);
       if (cas_result == nullptr) {
         // Must set parent with retry loop due to possible race condition.
         // Another thread might already try to insert a TreeNode here.
-        printf("[%p] [nullptr] Try to set.\n", body);
         body->cas_parent_retry(nullptr, current);
-        printf("[%p] [nullptr] DONE\n", body);
-        return;
-      } else {
-        printf("[%p] FAILED TO SET nullptr: %p [%p]\n", body, cas_result, current->children_.as_volatile()[c_idx]);
-      }
+
+        // Must use while loop condition instead of break from endless loop
+        // to avoid deadlock due to branch divergence.
+        done = true;
+      }  // else: Other thread was faster.
     } else if (child->cast<TreeNode>() != nullptr) {
-      printf("[%p] Recurse\n", body);
       current = child->cast<TreeNode>();
     } else {
       BodyNode* other = child->cast<BodyNode>();
@@ -266,9 +263,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
-        printf("[%p] [insert] Try to set.\n", body);
         other->cas_parent_retry(current, new_node);
-        printf("[%p] [insert] DONE\n", body);
 
         // Now insert body.
         current = new_node;
