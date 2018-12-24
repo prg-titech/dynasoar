@@ -404,12 +404,21 @@ __DEV__ void TreeNode::bfs_step() {
         total_mass += children_[i]->mass();
         sum_pos_x += children_[i]->mass()*children_[i]->pos_x();
         sum_pos_y += children_[i]->mass()*children_[i]->pos_y();
+
+#ifndef NDEBUG
+        BodyNode* body_node = children_[i]->cast<BodyNode>();
+        if (body_node != nullptr) {
+          // Ensure that BodyNodes are properly initialized.
+          assert(body_node->mass() > 0.000000001);
+        }
+#endif  // NDEBUG
       }
     }
 
     assert(total_mass > 0.000000001);  // Should fail only if empty node.
     pos_x_ = sum_pos_x/total_mass;
     pos_y_ = sum_pos_y/total_mass;
+    mass_ = total_mass;
 
     // Add parent to frontier.
     if (parent_ != nullptr) {
