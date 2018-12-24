@@ -354,13 +354,18 @@ __DEV__ void TreeNode::collapse_tree() {
 
 
 __DEV__ bool TreeNode::is_leaf() {
+  // A node is a leaf if it has at least one BodyNode child and no TreeNode
+  // child.
+  bool has_body_node = false;
   for (int i = 0; i < 4; ++i) {
     if (children_[i]->cast<TreeNode>() != nullptr) {
       return false;
+    } else if (children_[i]->cast<BodyNode>() != nullptr) {
+      has_body_node = true;
     }
   }
 
-  return true;
+  return has_body_node;
 }
 
 
