@@ -221,13 +221,15 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
         // Must set parent with retry loop due to possible race condition.
         // Another thread might already try to insert a TreeNode here.
-        printf("[nullptr] Try to set.\n");
+        printf("[%p] [nullptr] Try to set.\n", body);
         body->cas_parent_retry(nullptr, current);
-        printf("[nullptr] DONE\n");
+        printf("[%p] [nullptr] DONE\n", body);
         return;
+      } else {
+        printf("[%p] FAILED TO SET nullptr\n", body);
       }
     } else if (child->cast<TreeNode>() != nullptr) {
-      printf("Recurse\n");
+      printf("[%p] Recurse\n", body);
       current = child->cast<TreeNode>();
     } else {
       BodyNode* other = child->cast<BodyNode>();
@@ -262,9 +264,9 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
-        printf("[insert] Try to set.\n");
+        printf("[%p] [insert] Try to set.\n", body);
         other->cas_parent_retry(current, new_node);
-        printf("[insert] DONE\n");
+        printf("[%p] [insert] DONE\n", body);
 
         // Now insert body.
         current = new_node;
