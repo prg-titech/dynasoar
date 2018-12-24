@@ -36,6 +36,8 @@ class NodeBase : public SoaBase<AllocatorT> {
 
   __DEV__ void set_parent(TreeNode* parent) { parent_ = parent; }
 
+  __DEV__ void cas_parent_retry(TreeNode* assumed, TreeNode* value);
+
   __DEV__ float pos_x() const { return pos_x_; }
 
   __DEV__ float pos_y() const { return pos_y_; }

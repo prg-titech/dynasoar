@@ -47,6 +47,12 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
 }
 
 
+// Set new parent with atomic CAS and retry loop.
+__DEV__ void NodeBase::cas_parent_retry(TreeNode* assumed, TreeNode* value) {
+  while (parent_.atomic_cas(assumed, value) != assumed) {}
+}
+
+
 __DEV__ float NodeBase::distance_to(NodeBase* other) {
   float dx = other->pos_x() - pos_x_;
   float dy = other->pos_y() - pos_y_;
@@ -205,11 +211,12 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     NodeBase* child = current->children_.as_volatile()[c_idx];
 
     if (child == nullptr) {
-      body->set_parent(current);
+      // Empty slot found.
       if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
+        // Must set parent with retry loop due to possible race condition.
+        // Another thread might already try to insert a TreeNode here.
+        body->cas_parent_retry(nullptr, current);
         return;
-      } else {
-        body->set_parent(nullptr);
       }
     } else if (child->cast<TreeNode>() != nullptr) {
       current = child->cast<TreeNode>();
@@ -235,7 +242,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(new_node->contains(body));
 
       // Insert other into new node.
-      // TODO: Maybe this could be a volatile write. But atomic is safer.
+      // This could be a volatile write with threadfence. But atomic is safer.
       int other_idx = new_node->compute_index(other);
 #ifndef NDEBUG
       assert(new_node->children_->atomic_cas(other_idx, nullptr, other)
@@ -246,8 +253,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Try to install this node.
       if (current->children_->atomic_cas(c_idx, other, new_node) == other) {
-        assert(other->parent() == current);
-        other->set_parent(new_node);
+        other->cas_parent_retry(current, new_node);
 
         // Now insert body.
         current = new_node;
