@@ -469,6 +469,7 @@ template<int Id>
 __DEV__ void BodyNode::sanity_check() {
   // BodyNode is part of the tree.
   assert(parent_ != nullptr);
+  assert(parent_->contains(this));
 
   // Node is properly registered in the parent.
   bool found = false;
@@ -476,10 +477,7 @@ __DEV__ void BodyNode::sanity_check() {
   for (int i = 0; i < 4; ++i) {
     if (parent_->child(i) == this) {
       found = true;
-
-      if (parent_->compute_index(this) != i) {
-        printf("%i %i\n", parent_->compute_index(this), i);
-      }
+      assert(parent_->compute_index(this) == i);
     }
     ++num_children;
   }
