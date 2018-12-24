@@ -476,6 +476,7 @@ __DEV__ void BodyNode::sanity_check() {
   for (int i = 0; i < 4; ++i) {
     if (parent_->child(i) == this) {
       found = true;
+      assert(parent_->compute_index(this) == i);
     }
     ++num_children;
   }
@@ -501,6 +502,11 @@ __DEV__ void TreeNode::sanity_check() {
     }
     assert(num_children > 0);
     assert(found);
+
+    assert(p1_x_ >= parent_->p1_x_);
+    assert(p1_y_ >= parent_->p1_y_);
+    assert(p2_x_ <= parent_->p2_x_);
+    assert(p2_y_ <= parent_->p2_y_);
   } else {
     assert(parent_ != tree);
   }
