@@ -218,7 +218,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     if (child == nullptr) {
       // Empty slot found.
-      auto* cas_result = current->children_->atomic_cas(c_idx, nullptr, body);
+      //auto* cas_result = current->children_->atomic_cas(c_idx, nullptr, body);
+      auto* cas_result = pointerCAS<NodeBase>(&current->children_[c_idx], nullptr, body);
       if (cas_result == nullptr) {
         // Must set parent with retry loop due to possible race condition.
         // Another thread might already try to insert a TreeNode here.
