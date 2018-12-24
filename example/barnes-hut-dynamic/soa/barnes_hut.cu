@@ -270,6 +270,10 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       } else {
         device_allocator->free(new_node);
       }
+
+#ifndef NDEBUG
+      other->sanity_check();
+#endif  // NDEBUG
     }
   }
 
