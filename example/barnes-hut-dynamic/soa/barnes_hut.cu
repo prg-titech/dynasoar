@@ -476,7 +476,10 @@ __DEV__ void BodyNode::sanity_check() {
   for (int i = 0; i < 4; ++i) {
     if (parent_->child(i) == this) {
       found = true;
-      assert(parent_->compute_index(this) == i);
+
+      if (parent_->compute_index(this) != i) {
+        printf("%i %i\n", parent_->compute_index(this), i);
+      }
     }
     ++num_children;
   }
