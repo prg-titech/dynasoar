@@ -172,6 +172,10 @@ __DEV__ void TreeNode::remove(NodeBase* body) {
 __DEV__ void BodyNode::add_to_tree() {
   if (parent_ == nullptr) {
     tree->insert(this);
+  } else {
+#ifndef NDEBUG
+    sanity_check<7>();
+#endif  // NDEBUG
   }
 }
 
