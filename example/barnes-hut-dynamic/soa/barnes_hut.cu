@@ -490,6 +490,7 @@ __DEV__ void TreeNode::sanity_check() {
       ++num_children;
     }
     assert(num_children > 0);
+    assert(found);
   } else {
     assert(parent_ != tree);
   }
