@@ -218,7 +218,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
     if (child == nullptr) {
       // Empty slot found.
-      if (current->children_->atomic_cas(c_idx, nullptr, body) == nullptr) {
+      auto* cas_result = current->children_->atomic_cas(c_idx, nullptr, body);
+      if (cas_result == nullptr) {
         // Must set parent with retry loop due to possible race condition.
         // Another thread might already try to insert a TreeNode here.
         printf("[%p] [nullptr] Try to set.\n", body);
@@ -226,7 +227,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
         printf("[%p] [nullptr] DONE\n", body);
         return;
       } else {
-        printf("[%p] FAILED TO SET nullptr\n", body);
+        printf("[%p] FAILED TO SET nullptr: %p\n", body, cas_result);
       }
     } else if (child->cast<TreeNode>() != nullptr) {
       printf("[%p] Recurse\n", body);
