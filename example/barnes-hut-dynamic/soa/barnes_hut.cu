@@ -272,14 +272,14 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       }
 
 #ifndef NDEBUG
-      other->sanity_check();
+      other->sanity_check<0>();
 #endif  // NDEBUG
     }
   }
 
 #ifndef NDEBUG
   // Cannot check other bodies that were moved here.
-  body->sanity_check();
+  body->sanity_check<1>();
 #endif  // NDEBUG
 }
 
@@ -461,6 +461,7 @@ __DEV__ void TreeNode::remove_unvisited() {
 }
 
 
+template<int Id>
 __DEV__ void BodyNode::sanity_check() {
   // BodyNode is part of the tree.
   assert(parent_ != nullptr);
@@ -479,6 +480,7 @@ __DEV__ void BodyNode::sanity_check() {
 }
 
 
+template<int Id>
 __DEV__ void TreeNode::sanity_check() {
   // BodyNode is part of the tree.
   if (this != tree) {
@@ -516,8 +518,8 @@ void bfs() {
 void step() {
 #ifndef NDEBUG
   printf("A\n");
-  allocator_handle->parallel_do<BodyNode, &BodyNode::sanity_check>();
-  allocator_handle->parallel_do<TreeNode, &TreeNode::sanity_check>();
+  allocator_handle->parallel_do<BodyNode, &BodyNode::sanity_check<3>>();
+  allocator_handle->parallel_do<TreeNode, &TreeNode::sanity_check<4>>();
   printf("A done\n");
 #endif  // NDEBUG
 
@@ -529,8 +531,8 @@ void step() {
 
 #ifndef NDEBUG
   printf("B\n");
-  allocator_handle->parallel_do<BodyNode, &BodyNode::sanity_check>();
-  allocator_handle->parallel_do<TreeNode, &TreeNode::sanity_check>();
+  allocator_handle->parallel_do<BodyNode, &BodyNode::sanity_check<5>>();
+  allocator_handle->parallel_do<TreeNode, &TreeNode::sanity_check<6>>();
   printf("B done\n");
 #endif  // NDEBUG
 

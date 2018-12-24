@@ -90,6 +90,7 @@ class BodyNode : public NodeBase {
   __DEV__ void add_to_draw_array();
 
    // Only for debugging.
+  template<int Id>
   __DEV__ void sanity_check();
 };
 
@@ -156,6 +157,7 @@ class TreeNode : public NodeBase {
   __DEV__ void update_frontier();
 
    // Only for debugging.
+  template<int Id>
   __DEV__ void sanity_check();
 };
 
