@@ -274,6 +274,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
   }
 
 #ifndef NDEBUG
+  // Cannot check other bodies that were moved here.
   body->sanity_check();
 #endif  // NDEBUG
 }
@@ -462,12 +463,14 @@ __DEV__ void BodyNode::sanity_check() {
 
   // Node is properly registered in the parent.
   bool found = false;
+  int num_children = 0;
   for (int i = 0; i < 4; ++i) {
     if (parent_->child(i) == this) {
       found = true;
-      break;
     }
+    ++num_children;
   }
+  assert(num_children > 0);
   assert(found);
 }
 
@@ -479,13 +482,14 @@ __DEV__ void TreeNode::sanity_check() {
 
     // Node is properly registered in the parent.
     bool found = false;
+    int num_children = 0;
     for (int i = 0; i < 4; ++i) {
       if (parent_->child(i) == this) {
         found = true;
-        break;
       }
+      ++num_children;
     }
-    assert(found);
+    assert(num_children > 0);
   } else {
     assert(parent_ != tree);
   }
