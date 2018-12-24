@@ -272,6 +272,10 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       }
     }
   }
+
+#ifndef NDEBUG
+  body->sanity_check();
+#endif  // NDEBUG
 }
 
 
