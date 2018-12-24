@@ -61,7 +61,6 @@ __DEV__ void NodeBase::apply_force(BodyNode* body) {
     float dy = body->pos_y() - pos_y_;
     float dist = sqrt(dx*dx + dy*dy);
     assert(dist > 0.000000001);  // Should fail only if dist with same body.
-    printf("%i %f %f\n", (int) get_type(), (float) pos_x_, (float) pos_y_);
     float F = kGravityConstant * mass_ * body->mass()
         / (dist * dist + kDampeningFactor);
     body->add_force(F*dx / dist, F*dy / dist);
@@ -195,10 +194,7 @@ __DEV__ int TreeNode::child_index(NodeBase* node) {
 
 
 __DEV__ void TreeNode::insert(BodyNode* body) {
-  if (!contains(body)) {
-    printf("%f %f\n", body->pos_x(), body->pos_y());
-  }
-
+  assert(contains(body));
   TreeNode* current = this;
 
   while (true) {
