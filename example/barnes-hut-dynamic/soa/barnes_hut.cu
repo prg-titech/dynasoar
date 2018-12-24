@@ -228,7 +228,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
         printf("[%p] [nullptr] DONE\n", body);
         return;
       } else {
-        printf("[%p] FAILED TO SET nullptr: %p\n", body, cas_result);
+        printf("[%p] FAILED TO SET nullptr: %p [%p]\n", body, cas_result, current->children_.as_volatile()[c_idx]);
       }
     } else if (child->cast<TreeNode>() != nullptr) {
       printf("[%p] Recurse\n", body);
