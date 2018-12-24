@@ -431,13 +431,7 @@ __DEV__ void TreeNode::remove_unvisited() {
 }
 
 
-void step() {
-  allocator_handle->parallel_do<BodyNode, &BodyNode::compute_force>();
-  allocator_handle->parallel_do<BodyNode, &BodyNode::update>();
-  allocator_handle->parallel_do<BodyNode, &BodyNode::clear_node>();
-  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
-  //allocator_handle->parallel_do<TreeNode, &TreeNode::collapse_tree>();
-
+void bfs() {
   // BFS steps to update tree.
   allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
   for (int i = 0; i < 100; ++i) {
@@ -446,6 +440,17 @@ void step() {
   }
 
   allocator_handle->parallel_do<TreeNode, &TreeNode::remove_unvisited>();
+}
+
+
+void step() {
+  allocator_handle->parallel_do<BodyNode, &BodyNode::compute_force>();
+  allocator_handle->parallel_do<BodyNode, &BodyNode::update>();
+  allocator_handle->parallel_do<BodyNode, &BodyNode::clear_node>();
+  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
+  //allocator_handle->parallel_do<TreeNode, &TreeNode::collapse_tree>();
+
+  bfs();
 }
 
 
@@ -495,6 +500,7 @@ void initialize_simulation() {
   gpuErrchk(cudaDeviceSynchronize());
 
   allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
+  bfs();
 }
 
 
