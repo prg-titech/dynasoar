@@ -25,7 +25,10 @@ __DEV__ T* pointerCAS(T** addr, T* assumed, T* value) {
 
 __DEV__ NodeBase::NodeBase(TreeNode* parent, float pos_x, float pos_y,
                            float mass)
-    : parent_(parent), pos_x_(pos_x), pos_y_(pos_y), mass_(mass) {}
+    : parent_(parent), pos_x_(pos_x), pos_y_(pos_y), mass_(mass) {
+  assert(pos_x >= -1.0f && pos_x < 1.0f);
+  assert(pos_y >= -1.0f && pos_y < 1.0f);
+}
 
 
 __DEV__ BodyNode::BodyNode(float pos_x, float pos_y, float vel_x, float vel_y,
@@ -172,10 +175,6 @@ __DEV__ void TreeNode::remove(NodeBase* body) {
 __DEV__ void BodyNode::add_to_tree() {
   if (parent_ == nullptr) {
     tree->insert(this);
-  } else {
-#ifndef NDEBUG
-    sanity_check<7>();
-#endif  // NDEBUG
   }
 }
 
