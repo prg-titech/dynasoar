@@ -214,6 +214,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     // Check where to insert in this node.
     int c_idx = current->compute_index(body);
     NodeBase* child = current->children_.as_volatile()[c_idx];
+    printf("Checking child: %p\n", child);
 
     if (child == nullptr) {
       // Empty slot found.
