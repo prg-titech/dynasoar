@@ -222,7 +222,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
         // Another thread might already try to insert a TreeNode here.
         printf("[nullptr] Try to set.\n");
         body->cas_parent_retry(nullptr, current);
-        printf("[nullptr] DONE\n")''
+        printf("[nullptr] DONE\n");
         return;
       }
     } else if (child->cast<TreeNode>() != nullptr) {
