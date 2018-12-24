@@ -436,6 +436,42 @@ __DEV__ void TreeNode::remove_unvisited() {
 }
 
 
+__DEV__ void BodyNode::sanity_check() {
+  // BodyNode is part of the tree.
+  assert(parent_ != nullptr);
+
+  // Node is properly registered in the parent.
+  bool found = false;
+  for (int i = 0; i < 4; ++i) {
+    if (parent_->child(i) == this) {
+      found = true;
+      break;
+    }
+  }
+  assert(found);
+}
+
+
+__DEV__ void TreeNode::sanity_check() {
+  // BodyNode is part of the tree.
+  if (this != tree) {
+    assert(parent_ != nullptr);
+
+    // Node is properly registered in the parent.
+    bool found = false;
+    for (int i = 0; i < 4; ++i) {
+      if (parent_->child(i) == this) {
+        found = true;
+        break;
+      }
+    }
+    assert(found);
+  } else {
+    assert(parent_ != tree);
+  }
+}
+
+
 void bfs() {
   // BFS steps to update tree.
   allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
@@ -449,6 +485,11 @@ void bfs() {
 
 
 void step() {
+#ifndef NDEBUG
+  allocator_handle->parallel_do<BodyNode, &BodyNode::sanity_check>();
+  allocator_handle->parallel_do<TreeNode, &TreeNode::sanity_check>();
+#endif  // NDEBUG
+
   allocator_handle->parallel_do<BodyNode, &BodyNode::compute_force>();
   allocator_handle->parallel_do<BodyNode, &BodyNode::update>();
   allocator_handle->parallel_do<BodyNode, &BodyNode::clear_node>();

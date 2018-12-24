@@ -86,6 +86,9 @@ class BodyNode : public NodeBase {
   __DEV__ void add_checksum();
 
   __DEV__ void add_to_draw_array();
+
+   // Only for debugging.
+  __DEV__ void sanity_check();
 };
 
 
@@ -126,6 +129,8 @@ class TreeNode : public NodeBase {
 
   __DEV__ int compute_index(BodyNode* body);
 
+  __DEV__ NodeBase* child(int idx) { return children_[idx]; }
+
   __DEV__ void collapse_tree();
 
   __DEV__ void insert(BodyNode* body);
@@ -147,6 +152,9 @@ class TreeNode : public NodeBase {
   __DEV__ void bfs_step();
 
   __DEV__ void update_frontier();
+
+   // Only for debugging.
+  __DEV__ void sanity_check();
 };
 
 #endif  // EXAMPLE_BARNES_HUT_DYNAMIC_SOA_BARNES_HUT_H
