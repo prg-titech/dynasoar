@@ -61,6 +61,7 @@ __DEV__ void NodeBase::apply_force(BodyNode* body) {
     float dy = body->pos_y() - pos_y_;
     float dist = sqrt(dx*dx + dy*dy);
     assert(dist > 0.000000001);  // Should fail only if dist with same body.
+    printf("%i %f %f\n", (int) get_type(), (float) pos_x_, (float) pos_y_);
     float F = kGravityConstant * mass_ * body->mass()
         / (dist * dist + kDampeningFactor);
     body->add_force(F*dx / dist, F*dy / dist);
@@ -372,6 +373,7 @@ __DEV__ bool TreeNode::contains(BodyNode* body) {
 
 __DEV__ void TreeNode::initialize_frontier() {
   frontier_ = is_leaf();
+  next_frontier_ = false;
   visited_ = false;
 }
 
@@ -400,11 +402,11 @@ __DEV__ void TreeNode::bfs_step() {
       }
     }
 
-    mass_ = total_mass;
+    assert(total_mass > 0.000000001);  // Should fail only if empty node.
     pos_x_ = sum_pos_x/total_mass;
     pos_y_ = sum_pos_y/total_mass;
 
-    // Add parent to printier.
+    // Add parent to frontier.
     if (parent_ != nullptr) {
       parent_->next_frontier_ = true;
     } else {
