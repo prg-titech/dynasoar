@@ -28,6 +28,10 @@ class DeviceArray {
   __device__ T& operator[](size_t pos) {
     return data[pos];
   }
+
+  __device__ const T& operator[](size_t pos) const {
+    return data[pos];
+  }
 };
 
 // Check if type is a device array.

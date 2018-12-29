@@ -120,6 +120,13 @@ class SoaField {
     return (*data_ptr())[pos];
   }
 
+  template<typename U = T>
+  __DEV__ const typename std::enable_if<is_device_array<U>::value,
+                                        typename U::BaseType>::type&
+  operator[](size_t pos) const {
+    return (*data_ptr())[pos];
+  }
+
   // Assignment operator.
   __DEV__ T& operator=(const T& value) {
     *data_ptr() = value;
