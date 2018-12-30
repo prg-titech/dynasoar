@@ -1,14 +1,30 @@
 
 #include "configuration.h"
+#include "rendering.h"
 #include "traffic.h"
 
 
 static const int kNumBlockSize = 256;
 
+// TODO: Consider migrating to SoaAlloc.
 TrafficLight* h_traffic_lights;
 __device__ TrafficLight* d_traffic_lights;
 Node* h_nodes;
 __device__ Node* d_nodes;
+
+
+// Only for rendering.
+__device__ int dev_num_cells;
+__device__ float* dev_Cell_pos_x;
+__device__ float* dev_Cell_pos_y;
+__device__ bool* dev_Cell_occupied;
+float* host_Cell_pos_x;
+float* host_Cell_pos_y;
+bool* host_Cell_occupied;
+float* host_data_Cell_pos_x;
+float* host_data_Cell_pos_y;
+bool* host_data_Cell_occupied;
+int host_num_cells;
 
 
 // Allocator handles.
@@ -172,12 +188,15 @@ __device__ void Car::step_slow_down() {
 
 
 __device__ void TrafficLight::step() {
-  timer_ = (timer_ + 1) % phase_time_;
+  if (num_cells_ > 0) {
+    timer_ = (timer_ + 1) % phase_time_;
 
-  if (timer_ == 0) {
-    cells_[phase_]->set_current_max_velocity(0);
-    phase_ = (phase_ + 1) % num_cells_;
-    cells_[phase_]->remove_speed_limit();
+    if (timer_ == 0) {
+      assert(cells_[phase_] != nullptr);
+      cells_[phase_]->set_current_max_velocity(0);
+      phase_ = (phase_ + 1) % num_cells_;
+      cells_[phase_]->remove_speed_limit();
+    }
   }
 }
 
@@ -206,7 +225,17 @@ __device__ Car::Car(int seed, Cell* cell, int max_velocity)
 __device__ Cell::Cell(int max_velocity, float x, float y)
     : car_(nullptr), max_velocity_(max_velocity),
       current_max_velocity_(max_velocity),
-      num_incoming_(0), num_outgoing_(0), x_(x), y_(y), is_target_(false) {}
+      num_incoming_(0), num_outgoing_(0), x_(x), y_(y), is_target_(false) {
+  atomicAdd(&dev_num_cells, 1);
+}
+
+
+__device__ void Cell::add_to_rendering_array() {
+  int idx = atomicAdd(&dev_num_cells, 1);
+  dev_Cell_pos_x[idx] = x_;
+  dev_Cell_pos_y[idx] = y_;
+  dev_Cell_occupied[idx] = !is_free();
+}
 
 
 __global__ void kernel_traffic_light_step() {
@@ -223,7 +252,7 @@ __global__ void kernel_create_nodes() {
     curandState_t state;
     curand_init(i, 0, 0, &state);
 
-    d_nodes[i].num_edges = curand(&state) % (kMaxDegree - 1) + 1;
+    d_nodes[i].num_edges = curand(&state) % kMaxDegree + 1;
     d_nodes[i].num_incoming = 0;
     float x = curand_uniform(&state);
     float y = curand_uniform(&state);
@@ -248,13 +277,14 @@ __global__ void kernel_create_edges() {
 
     for (int k = 0; k < d_nodes[i].num_edges; ++k) {
       int target = -1;
-      while (false) {
+      while (true) {
         target = curand(&state) % kNumIntersections;
         int num_in = d_nodes[i].num_incoming;
 
         if (num_in < kMaxDegree) {
           // Try...
           if (atomicCAS(&d_nodes[i].num_incoming, num_in, num_in + 1) == num_in) {
+            printf("Connect: %i --> %i\n", i, target);
             // Create edge.
             float dx = d_nodes[i].x - d_nodes[target].x;
             float dy = d_nodes[i].y - d_nodes[target].y;
@@ -295,7 +325,6 @@ __global__ void kernel_create_edges() {
             for (int j = 0; j < d_nodes[target].num_edges; ++j) {
               prev->set_outgoing(j, d_nodes[target].cell_out[j]);
               d_nodes[target].cell_out[j]->set_incoming(num_in, prev);
-              d_nodes[target].cell_out[j]->set_num_incoming(num_in + 1);
             }
             d_nodes[target].cell_in[num_in] = prev;
           }
@@ -313,14 +342,22 @@ __global__ void kernel_create_traffic_lights() {
         /*num_cells=*/ d_nodes[i].num_incoming,
         /*phase_time=*/ 5);
 
+    for (int j = 0; j < d_nodes[i].num_edges; ++j) {
+      d_nodes[i].cell_out[j]->set_num_incoming(d_nodes[i].num_incoming);
+    }
+
     for (int j = 0; j < d_nodes[i].num_incoming; ++j) {
       d_traffic_lights[i].set_cell(j, d_nodes[i].cell_in[j]);
+      d_nodes[i].cell_in[j]->set_current_max_velocity(0);  // Set to "red".
     }
   }
 }
 
 
 void create_street_network() {
+  int zero = 0;
+  cudaMemcpyToSymbol(dev_num_cells, &zero, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
   cudaMalloc(&h_nodes, sizeof(Node)*kNumIntersections);
   cudaMemcpyToSymbol(d_nodes, &h_nodes, sizeof(Node*), 0,
                      cudaMemcpyHostToDevice);
@@ -343,24 +380,69 @@ void create_street_network() {
       (kNumIntersections + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
+
+  // Allocate helper data structures for rendering.
+  cudaMemcpyFromSymbol(&host_num_cells, dev_num_cells, sizeof(int), 0,
+                       cudaMemcpyDeviceToHost);
+  cudaMalloc(&host_Cell_pos_x, sizeof(float)*host_num_cells);
+  cudaMemcpyToSymbol(dev_Cell_pos_x, &host_Cell_pos_x, sizeof(float*), 0,
+                     cudaMemcpyHostToDevice);
+  cudaMalloc(&host_Cell_pos_y, sizeof(float)*host_num_cells);
+  cudaMemcpyToSymbol(dev_Cell_pos_y, &host_Cell_pos_y, sizeof(float*), 0,
+                     cudaMemcpyHostToDevice);
+  cudaMalloc(&host_Cell_occupied, sizeof(bool)*host_num_cells);
+  cudaMemcpyToSymbol(dev_Cell_occupied, &host_Cell_occupied, sizeof(bool*), 0,
+                     cudaMemcpyHostToDevice);
+  host_data_Cell_pos_x = (float*) malloc(sizeof(float)*host_num_cells);
+  host_data_Cell_pos_y = (float*) malloc(sizeof(float)*host_num_cells);
+  host_data_Cell_occupied = (bool*) malloc(sizeof(bool)*host_num_cells);
+
+  printf("Number of cells: %i\n", host_num_cells);
 }
 
 
-void step() {
-  allocator_handle->parallel_do<ProducerCell, &ProducerCell::create_car>();
-
+void step_traffic_lights() { 
   // TODO: Consider migrating this to SoaAlloc.
   kernel_traffic_light_step<<<
       (kNumIntersections + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
+}
 
+
+void transfer_data() {
+  int zero = 0;
+  cudaMemcpyToSymbol(dev_num_cells, &zero, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
+
+  allocator_handle->parallel_do<Cell, &Cell::add_to_rendering_array>();
+
+  cudaMemcpy(host_data_Cell_pos_x, host_Cell_pos_x,
+             sizeof(float)*host_num_cells, cudaMemcpyDeviceToHost);
+  cudaMemcpy(host_data_Cell_pos_y, host_Cell_pos_y,
+             sizeof(float)*host_num_cells, cudaMemcpyDeviceToHost);
+  cudaMemcpy(host_data_Cell_occupied, host_Cell_occupied,
+             sizeof(float)*host_num_cells, cudaMemcpyDeviceToHost);
+
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+
+void step() {
+  allocator_handle->parallel_do<ProducerCell, &ProducerCell::create_car>();
+  
+  step_traffic_lights();
   allocator_handle->parallel_do<Car, &Car::step_prepare_path>();
   allocator_handle->parallel_do<Car, &Car::step_move>();
 }
 
 
+
 int main(int /*argc*/, char** /*argv*/) {
+  if (kOptionRender) {
+    init_renderer();
+  }
+
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
@@ -370,6 +452,16 @@ int main(int /*argc*/, char** /*argv*/) {
   create_street_network();
 
   for (int i = 0; i < kNumIterations; ++i) {
+    if (kOptionRender) {
+      transfer_data();
+      draw(host_data_Cell_pos_x, host_data_Cell_pos_y, host_data_Cell_occupied,
+           host_num_cells);
+    }
+
     step();
+  }
+
+  if (kOptionRender) {
+    close_renderer();
   }
 }

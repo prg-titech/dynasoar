@@ -13,7 +13,7 @@ class Cell;
 class ProducerCell;
 class TrafficLight;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Car, Cell, ProducerCell>;
+using AllocatorT = SoaAllocator<2*64*64*64, Car, Cell, ProducerCell>;
 
 class Cell : public SoaBase<AllocatorT> {
  public:
@@ -62,11 +62,17 @@ class Cell : public SoaBase<AllocatorT> {
 
   __device__ Cell* get_incoming(int idx) const { return incoming_[idx]; }
 
-  __device__ void set_incoming(int idx, Cell* cell) { incoming_[idx] = cell; }
+  __device__ void set_incoming(int idx, Cell* cell) {
+    assert(cell != nullptr);
+    incoming_[idx] = cell;
+  }
 
   __device__ Cell* get_outgoing(int idx) const { return outgoing_[idx]; }
 
-  __device__ void set_outgoing(int idx, Cell* cell) { outgoing_[idx] = cell;}
+  __device__ void set_outgoing(int idx, Cell* cell) {
+    assert(cell != nullptr);
+    outgoing_[idx] = cell;
+  }
 
   __device__ float x() const { return x_; }
 
@@ -83,6 +89,9 @@ class Cell : public SoaBase<AllocatorT> {
   __device__ void occupy(Car* car);
 
   __device__ void release();
+
+  // Only for rendering.
+  __device__ void add_to_rendering_array();
 };
 
 
@@ -165,7 +174,10 @@ class TrafficLight {
   __device__ TrafficLight(int num_cells, int phase_time)
       : num_cells_(num_cells), timer_(0), phase_time_(phase_time), phase_(0) {}
 
-  __device__ void set_cell(int idx, Cell* cell) { cells_[idx] = cell; }
+  __device__ void set_cell(int idx, Cell* cell) {
+    assert(cell != nullptr);
+    cells_[idx] = cell;
+  }
 
   __device__ void step();
 };
