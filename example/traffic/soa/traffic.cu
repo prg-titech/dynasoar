@@ -1,3 +1,4 @@
+#include <chrono>
 
 #include "configuration.h"
 #include "rendering.h"
@@ -85,12 +86,14 @@ __device__ void Car::step_extend_path() {
   Cell* next_cell;
 
   for (int i = 0; i < velocity_; ++i) {
-    if (cell->is_sink()) {
+    if (cell->is_sink() || cell->is_target()) {
       break;
     }
 
     next_cell = next_step(cell);
     assert(next_cell != cell);
+
+    if (!next_cell->is_free()) break;
 
     cell = next_cell;
     path_[i] = cell;
@@ -104,8 +107,8 @@ __device__ void Car::step_extend_path() {
 __device__ void Car::step_constraint_velocity() {
   // This is actually only needed for the very first iteration, because a car
   // may be positioned on a traffic light cell.
-  if (velocity_ > position()->max_velocity()) {
-    velocity_ = position()->max_velocity();
+  if (velocity_ > position()->current_max_velocity()) {
+    velocity_ = position()->current_max_velocity();
   }
 
   int path_index = 0;
@@ -125,11 +128,11 @@ __device__ void Car::step_constraint_velocity() {
       break;
     } // else: Can enter next cell.
 
-    if (velocity_ > next_cell->max_velocity()) {
+    if (velocity_ > next_cell->current_max_velocity()) {
       // Car is too fast for this cell.
-      if (next_cell->max_velocity() > distance - 1) {
+      if (next_cell->current_max_velocity() > distance - 1) {
         // Even if we slow down, we would still make progress.
-        velocity_ = next_cell->max_velocity();
+        velocity_ = next_cell->current_max_velocity();
       } else {
         // Do not enter the next cell.
         --distance;
@@ -174,7 +177,9 @@ __device__ void Car::step_move() {
     // Remove car from the simulation. Will be added again in the next
     // iteration.
     position()->release();
-    device_allocator->free(this);
+    position_ = nullptr;
+    //printf("KILLED!\n");
+    device_allocator->free<Car>(this);
   }
 }
 
@@ -217,6 +222,7 @@ __device__ void ProducerCell::create_car() {
 __device__ Car::Car(int seed, Cell* cell, int max_velocity)
     : position_(cell), path_length_(0), velocity_(0),
       max_velocity_(max_velocity) {
+  assert(cell->is_free());
   cell->occupy(this);
   curand_init(seed, 0, 0, &random_state_);
 }
@@ -254,8 +260,11 @@ __global__ void kernel_create_nodes() {
 
     d_nodes[i].num_edges = curand(&state) % kMaxDegree + 1;
     d_nodes[i].num_incoming = 0;
+
     float x = curand_uniform(&state);
     float y = curand_uniform(&state);
+    assert(x >= 0 && x <= 1);
+    assert(y >= 0 && y <= 1);
     d_nodes[i].x = x;
     d_nodes[i].y = y;
 
@@ -269,6 +278,58 @@ __global__ void kernel_create_nodes() {
 }
 
 
+__device__ Cell* connect_intersections(Cell* from, Node* target,
+                                       int incoming_idx, curandState_t& state) {
+  // Create edge.
+  float dx = target->x - from->x();
+  float dy = target->y - from->y();
+  float dist = sqrt(dx*dx + dy*dy);
+  int steps = dist/kCellLength;
+  float step_x = dx/steps;
+  float step_y = dy/steps;
+  Cell* prev = from;
+
+  for (int j = 0; j < steps; ++j) {
+    float new_x = from->x() + j*step_x;
+    float new_y = from->y() + j*step_y;
+    assert(new_x >= 0 && new_x <= 1);
+    assert(new_y >= 0 && new_y <= 1);
+    Cell* next;
+
+    if (curand_uniform(&state) < kProducerRatio) {
+      next = device_allocator->make_new<ProducerCell>(
+          prev->max_velocity(), new_x, new_y,
+          curand(&state));
+    } else {
+      next = device_allocator->make_new<Cell>(
+          prev->max_velocity(), new_x, new_y);
+    }
+
+    if (curand_uniform(&state) < kTargetRatio) {
+      next->set_target();
+    }
+
+    prev->set_num_outgoing(1);
+    prev->set_outgoing(0, next);
+    next->set_num_incoming(1);
+    next->set_incoming(0, prev);
+
+    prev = next;
+  }
+
+  // Connect to all outgoing nodes of target.
+  prev->set_num_outgoing(target->num_edges);
+  for (int i = 0; i < target->num_edges; ++i) {
+    Cell* next = target->cell_out[i];
+    // num_incoming set later.
+    prev->set_outgoing(i, next);
+    next->set_incoming(incoming_idx, prev);
+  }
+
+  return prev;
+}
+
+
 __global__ void kernel_create_edges() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
        i < kNumIntersections; i += blockDim.x * gridDim.x) {
@@ -279,54 +340,19 @@ __global__ void kernel_create_edges() {
       int target = -1;
       while (true) {
         target = curand(&state) % kNumIntersections;
-        int num_in = d_nodes[i].num_incoming;
+        if (target == i) continue;
+        // Create edge from i --> target
+        int num_in = d_nodes[target].num_incoming;
 
         if (num_in < kMaxDegree) {
           // Try...
-          if (atomicCAS(&d_nodes[i].num_incoming, num_in, num_in + 1) == num_in) {
-            printf("Connect: %i --> %i\n", i, target);
-            // Create edge.
-            float dx = d_nodes[i].x - d_nodes[target].x;
-            float dy = d_nodes[i].y - d_nodes[target].y;
-            float dist = sqrt(dx*dx + dy*dy);
-            int steps = dist/kCellLength;
-            float step_x = dx/steps;
-            float step_y = dy/steps;
-            Cell* prev = d_nodes[i].cell_out[k];
+          if (atomicCAS(&d_nodes[target].num_incoming, num_in, num_in + 1) == num_in) {
+            auto* last = connect_intersections(
+                d_nodes[i].cell_out[k], &d_nodes[target], num_in, state);
 
-            for (int j = 0; j < steps; ++j) {
-              float new_x = d_nodes[i].x + j*step_x;
-              float new_y = d_nodes[i].y + j*step_y;
-              Cell* next;
-
-              if (curand_uniform(&state) < kProducerRatio) {
-                next = device_allocator->make_new<ProducerCell>(
-                    /*max_velocity=*/ prev->max_velocity(), new_x, new_y,
-                    curand(&state));
-              } else {
-                next = device_allocator->make_new<Cell>(
-                    /*max_velocity=*/ prev->max_velocity(), new_x, new_y);
-              }
-
-              if (curand_uniform(&state) < kTargetRatio) {
-                next->set_target();
-              }
-
-              prev->set_num_outgoing(1);
-              prev->set_outgoing(0, next);
-              next->set_num_incoming(1);
-              next->set_incoming(0, prev);
-
-              prev = next;
-            }
-
-            // Connect to all outgoing nodes.
-            prev->set_num_outgoing(d_nodes[target].num_edges);
-            for (int j = 0; j < d_nodes[target].num_edges; ++j) {
-              prev->set_outgoing(j, d_nodes[target].cell_out[j]);
-              d_nodes[target].cell_out[j]->set_incoming(num_in, prev);
-            }
-            d_nodes[target].cell_in[num_in] = prev;
+            last->set_current_max_velocity(0);
+            d_nodes[target].cell_in[num_in] = last;
+            break;
           }
         }
       }
@@ -422,13 +448,14 @@ void transfer_data() {
   cudaMemcpy(host_data_Cell_pos_y, host_Cell_pos_y,
              sizeof(float)*host_num_cells, cudaMemcpyDeviceToHost);
   cudaMemcpy(host_data_Cell_occupied, host_Cell_occupied,
-             sizeof(float)*host_num_cells, cudaMemcpyDeviceToHost);
+             sizeof(bool)*host_num_cells, cudaMemcpyDeviceToHost);
 
   gpuErrchk(cudaDeviceSynchronize());
 }
 
 
 void step() {
+  //printf("STEP!\n");
   allocator_handle->parallel_do<ProducerCell, &ProducerCell::create_car>();
   
   step_traffic_lights();
@@ -451,6 +478,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
   create_street_network();
 
+  auto time_start = std::chrono::system_clock::now();
+
   for (int i = 0; i < kNumIterations; ++i) {
     if (kOptionRender) {
       transfer_data();
@@ -460,6 +489,13 @@ int main(int /*argc*/, char** /*argv*/) {
 
     step();
   }
+
+  auto time_end = std::chrono::system_clock::now();
+  auto elapsed = time_end - time_start;
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      .count();
+
+  printf("Time: %lu ms\n", millis);
 
   if (kOptionRender) {
     close_renderer();
