@@ -159,6 +159,8 @@ class Car : public SoaBase<AllocatorT> {
   __device__ int random_int(int a, int b) {
     return curand(&random_state_) % (b - a) + a;
   }
+
+  __device__ void compute_checksum();
 };
 
 

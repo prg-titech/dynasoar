@@ -244,6 +244,13 @@ __device__ void Cell::add_to_rendering_array() {
 }
 
 
+__device__ int d_checksum;
+
+__device__ void Car::compute_checksum() {
+  atomicAdd(&d_checksum, 1);
+}
+
+
 __global__ void kernel_traffic_light_step() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
        i < kNumIntersections; i += blockDim.x * gridDim.x) {
@@ -359,6 +366,18 @@ __global__ void kernel_create_traffic_lights() {
       d_nodes[i].cell_in[j]->set_current_max_velocity(0);  // Set to "red".
     }
   }
+}
+
+
+int checksum() {
+  int zero = 0;
+  cudaMemcpyToSymbol(d_checksum, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
+
+  allocator_handle->parallel_do<Car, &Car::compute_checksum>();
+
+  int result;
+  cudaMemcpyFromSymbol(&result, d_checksum, sizeof(int), 0, cudaMemcpyDeviceToHost);
+  return result;
 }
 
 
@@ -525,6 +544,7 @@ int main(int /*argc*/, char** /*argv*/) {
       .count();
 
   printf("Time: %lu ms\n", millis);
+  printf("Checksum: %i\n", checksum());
 
   if (kOptionRender) {
     close_renderer();
