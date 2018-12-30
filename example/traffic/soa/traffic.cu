@@ -258,21 +258,14 @@ __global__ void kernel_create_nodes() {
     curandState_t state;
     curand_init(i, 0, 0, &state);
 
-    d_nodes[i].num_edges = curand(&state) % kMaxDegree + 1;
-    d_nodes[i].num_incoming = 0;
+    assert(d_nodes[i].x >= 0 && d_nodes[i].x <= 1);
+    assert(d_nodes[i].y >= 0 && d_nodes[i].y <= 1);
 
-    float x = curand_uniform(&state);
-    float y = curand_uniform(&state);
-    assert(x >= 0 && x <= 1);
-    assert(y >= 0 && y <= 1);
-    d_nodes[i].x = x;
-    d_nodes[i].y = y;
-
-    for (int j = 0; j < d_nodes[i].num_edges; ++j) {
+    for (int j = 0; j < d_nodes[i].num_outgoing; ++j) {
       d_nodes[i].cell_out[j] = device_allocator->make_new<Cell>(
           /*max_velocity=*/ curand(&state) % (kMaxVelocity/2)
                             + kMaxVelocity/2,
-          x, y);
+          d_nodes[i].x, d_nodes[i].y);
     }
   }
 }
@@ -318,8 +311,8 @@ __device__ Cell* connect_intersections(Cell* from, Node* target,
   }
 
   // Connect to all outgoing nodes of target.
-  prev->set_num_outgoing(target->num_edges);
-  for (int i = 0; i < target->num_edges; ++i) {
+  prev->set_num_outgoing(target->num_outgoing);
+  for (int i = 0; i < target->num_outgoing; ++i) {
     Cell* next = target->cell_out[i];
     // num_incoming set later.
     prev->set_outgoing(i, next);
@@ -336,26 +329,15 @@ __global__ void kernel_create_edges() {
     curandState_t state;
     curand_init(i, 0, 0, &state);
 
-    for (int k = 0; k < d_nodes[i].num_edges; ++k) {
-      int target = -1;
-      while (true) {
-        target = curand(&state) % kNumIntersections;
-        if (target == i) continue;
-        // Create edge from i --> target
-        int num_in = d_nodes[target].num_incoming;
+    for (int k = 0; k < d_nodes[i].num_outgoing; ++k) {
+      int target = d_nodes[i].node_out[k];
+      int target_pos = d_nodes[i].node_out_pos[k];
 
-        if (num_in < kMaxDegree) {
-          // Try...
-          if (atomicCAS(&d_nodes[target].num_incoming, num_in, num_in + 1) == num_in) {
-            auto* last = connect_intersections(
-                d_nodes[i].cell_out[k], &d_nodes[target], num_in, state);
+      auto* last = connect_intersections(
+          d_nodes[i].cell_out[k], &d_nodes[target], target_pos, state);
 
-            last->set_current_max_velocity(0);
-            d_nodes[target].cell_in[num_in] = last;
-            break;
-          }
-        }
-      }
+      last->set_current_max_velocity(0);
+      d_nodes[target].cell_in[target_pos] = last;
     }
   }
 }
@@ -368,7 +350,7 @@ __global__ void kernel_create_traffic_lights() {
         /*num_cells=*/ d_nodes[i].num_incoming,
         /*phase_time=*/ 5);
 
-    for (int j = 0; j < d_nodes[i].num_edges; ++j) {
+    for (int j = 0; j < d_nodes[i].num_outgoing; ++j) {
       d_nodes[i].cell_out[j]->set_num_incoming(d_nodes[i].num_incoming);
     }
 
@@ -377,6 +359,50 @@ __global__ void kernel_create_traffic_lights() {
       d_nodes[i].cell_in[j]->set_current_max_velocity(0);  // Set to "red".
     }
   }
+}
+
+
+float random_float() {
+  return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+}
+
+
+void create_network_structure() {
+  srand(kSeed);
+
+  Node* node_data = (Node*) malloc(sizeof(Node)*kNumIntersections);
+
+  // Create nodes.
+  for (int i = 0; i < kNumIntersections; ++i) {
+    node_data[i].num_outgoing = rand() % kMaxDegree + 1;
+    node_data[i].num_incoming = 0;
+    node_data[i].x = random_float();
+    node_data[i].y = random_float();
+  }
+
+  // Create edges.
+  for (int i = 0; i < kNumIntersections; ++i) {
+    for (int k = 0; k < node_data[i].num_outgoing; ++k) {
+      int target = -1;
+      while (true) {
+        target = rand() % kNumIntersections;
+
+        if (target != i) {
+          if (node_data[target].num_incoming < kMaxDegree) {
+            node_data[i].node_out[k] = target;
+            node_data[i].node_out_pos[k] = node_data[target].num_incoming;
+            ++node_data[target].num_incoming;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Copy data to GPU.
+  cudaMemcpy(h_nodes, node_data, sizeof(Node)*kNumIntersections,
+             cudaMemcpyHostToDevice);
+  gpuErrchk(cudaDeviceSynchronize());
 }
 
 
@@ -391,6 +417,9 @@ void create_street_network() {
   cudaMemcpyToSymbol(d_traffic_lights, &h_traffic_lights,
                      sizeof(TrafficLight*), 0, cudaMemcpyHostToDevice);
   gpuErrchk(cudaDeviceSynchronize());
+
+  // Create basic structure on host.
+  create_network_structure();
 
   kernel_create_nodes<<<
       (kNumIntersections + kNumBlockSize - 1) / kNumBlockSize,

@@ -185,10 +185,15 @@ class TrafficLight {
 
 // Only for creating the street network. Should be loaded from file.
 struct Node {
-  int num_edges;
+  int num_outgoing;
   int num_incoming;
+
   Cell* cell_out[kMaxDegree];
   Cell* cell_in[kMaxDegree];
+
+  int node_out[kMaxDegree];
+  int node_out_pos[kMaxDegree];
+
   float x, y;
 };
 
