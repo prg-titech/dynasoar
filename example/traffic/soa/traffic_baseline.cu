@@ -2,6 +2,7 @@
 #include <chrono>
 #include <curand_kernel.h>
 #include <limits>
+#include <cub/cub.cuh>
 
 #include "configuration.h"
 #include "util/util.h"
@@ -27,6 +28,7 @@ __device__ bool* d_Cell_is_target;
 __device__ curandState_t* d_Cell_random_state;
 __device__ char* d_Cell_type;
 
+// Need 2 arrays of both, so we can swap.
 __device__ curandState_t* d_Car_random_state;
 __device__ DeviceArray<IndexT, kMaxVelocity>* d_Car_path;
 __device__ IndexT* d_Car_position;
@@ -35,8 +37,25 @@ __device__ int* d_Car_velocity;
 __device__ int* d_Car_max_velocity;
 __device__ int* d_Car_active;
 
+__device__ curandState_t* d_Car_random_state_2;
+__device__ DeviceArray<IndexT, kMaxVelocity>* d_Car_path_2;
+__device__ IndexT* d_Car_position_2;
+__device__ int* d_Car_path_length_2;
+__device__ int* d_Car_velocity_2;
+__device__ int* d_Car_max_velocity_2;
+__device__ int* d_Car_active_2;
+
+// For prefix sum array compaction.
+__device__ int* d_prefix_sum_temp;
+__device__ int* d_prefix_sum_output;
+int* h_prefix_sum_temp;
+int* h_prefix_sum_output;
+int* h_Car_active;
+int* h_Car_active_2;
+
 __device__ int d_num_cells;
 __device__ int d_num_cars;
+__device__ int d_num_cars_2;
 int host_num_cells;
 int host_num_cars;
 
@@ -671,7 +690,7 @@ __device__ void Car_step_prepare_path(IndexT self) {
 
 __global__ void kernel_Car_step_prepare_path() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < kMaxNumCars; i += blockDim.x * gridDim.x) {
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
     if (d_Car_active[i]) {
       Car_step_prepare_path(i);
     }
@@ -681,15 +700,16 @@ __global__ void kernel_Car_step_prepare_path() {
 
 __global__ void kernel_fill_car_indices() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < kMaxNumCars; i += blockDim.x * gridDim.x) {
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
     d_Car_active[i] = 0;
+    d_Car_active_2[i] = 0;
   }
 }
 
 
 __global__ void kernel_Car_step_move() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < kMaxNumCars; i += blockDim.x * gridDim.x) {
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
     if (d_Car_active[i]) {
       Car_step_move(i);
     }
@@ -700,7 +720,7 @@ __global__ void kernel_Car_step_move() {
 __device__ int d_checksum;
 __global__ void kernel_compute_checksum() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < kMaxNumCars; i += blockDim.x * gridDim.x) {
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
     if (d_Car_active[i]) {
       atomicAdd(&d_checksum, 1);
     }
@@ -729,12 +749,12 @@ void step() {
   step_traffic_lights();
 
   kernel_Car_step_prepare_path<<<
-      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
+      (host_num_cars + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   kernel_Car_step_move<<<
-      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
+      (host_num_cars + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
@@ -832,9 +852,52 @@ void allocate_memory() {
   cudaMemcpyToSymbol(d_Car_max_velocity, &h_Car_max_velocity, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
-  int* h_Car_active;
   cudaMalloc(&h_Car_active, sizeof(int)*kMaxNumCars);
   cudaMemcpyToSymbol(d_Car_active, &h_Car_active, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  curandState_t* h_Car_random_state_2;
+  cudaMalloc(&h_Car_random_state_2, sizeof(curandState_t)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_random_state_2, &h_Car_random_state_2, sizeof(curandState_t*),
+                     0, cudaMemcpyHostToDevice);
+
+  DeviceArray<IndexT, kMaxVelocity>* h_Car_path_2;
+  cudaMalloc(&h_Car_path_2, sizeof(DeviceArray<IndexT, kMaxVelocity>)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_path_2, &h_Car_path_2,
+                     sizeof(DeviceArray<IndexT, kMaxVelocity>*),
+                     0, cudaMemcpyHostToDevice);
+
+  IndexT* h_Car_position_2;
+  cudaMalloc(&h_Car_position_2, sizeof(IndexT)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_position_2, &h_Car_position_2, sizeof(IndexT*),
+                     0, cudaMemcpyHostToDevice);
+
+  int* h_Car_path_length_2;
+  cudaMalloc(&h_Car_path_length_2, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_path_length_2, &h_Car_path_length_2, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  int* h_Car_velocity_2;
+  cudaMalloc(&h_Car_velocity_2, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_velocity_2, &h_Car_velocity_2, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  int* h_Car_max_velocity_2;
+  cudaMalloc(&h_Car_max_velocity_2, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_max_velocity_2, &h_Car_max_velocity_2, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  cudaMalloc(&h_Car_active_2, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_active_2, &h_Car_active_2, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+
+  cudaMalloc(&h_prefix_sum_temp, 3*sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_prefix_sum_temp, &h_prefix_sum_temp, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  cudaMalloc(&h_prefix_sum_output, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_prefix_sum_output, &h_prefix_sum_output, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
   kernel_fill_car_indices<<<128, 128>>>();
@@ -846,6 +909,120 @@ void allocate_memory() {
 }
 
 
+__global__ void kernel_compact_initialize() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < kMaxNumCars; i += blockDim.x * gridDim.x) {
+    d_Car_active_2[i] = 0;
+  }
+}
+
+
+__global__ void kernel_compact_cars() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
+    if (d_Car_active[i]) {
+      int target = d_prefix_sum_output[i];
+
+      // Copy i --> target.
+      d_Car_random_state_2[target] = d_Car_random_state[i];
+      // TODO: Check if properly copied.
+      d_Car_path_2[target] = d_Car_path[i];
+      d_Car_position_2[target] = d_Car_position[i];
+      d_Car_path_length_2[target] = d_Car_path_length[i];
+      d_Car_velocity_2[target] = d_Car_velocity[i];
+      d_Car_max_velocity_2[target] = d_Car_max_velocity[i];
+      d_Car_active_2[target] = 1;
+
+      // Update pointer in Cell.
+      d_Cell_car[d_Car_position[i]] = target;
+
+      atomicAdd(&d_num_cars_2, 1);
+    }
+  }
+}
+
+
+__global__ void kernel_compact_swap_pointers() {
+  {
+    auto* tmp = d_Car_random_state;
+    d_Car_random_state = d_Car_random_state_2;
+    d_Car_random_state_2 = tmp;
+  }
+
+  {
+    auto* tmp = d_Car_path;
+    d_Car_path = d_Car_path_2;
+    d_Car_path_2 = tmp;
+  }
+
+  {
+    auto* tmp = d_Car_position;
+    d_Car_position = d_Car_position_2;
+    d_Car_position_2 = tmp;
+  }
+
+  {
+    auto* tmp = d_Car_path_length;
+    d_Car_path_length = d_Car_path_length_2;
+    d_Car_path_length_2 = tmp;
+  }
+
+  {
+    auto* tmp = d_Car_velocity;
+    d_Car_velocity = d_Car_velocity_2;
+    d_Car_velocity_2 = tmp;
+  }
+
+  {
+    auto* tmp = d_Car_max_velocity;
+    d_Car_max_velocity = d_Car_max_velocity_2;
+    d_Car_max_velocity_2 = tmp;
+  }
+
+  {
+    auto* tmp = d_Car_active;
+    d_Car_active = d_Car_active_2;
+    d_Car_active_2 = tmp;
+  }
+
+  d_num_cars = d_num_cars_2;
+}
+
+
+void compact_car_array() {
+  int zero = 0;
+  cudaMemcpyToSymbol(d_num_cars_2, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
+  cudaMemcpyFromSymbol(&host_num_cars, d_num_cars, sizeof(int), 0, cudaMemcpyDeviceToHost);
+
+  // TODO: Prefix sum broken for num_objects < 256.
+  auto prefix_sum_size = host_num_cars < 256 ? 256 : host_num_cars;
+  size_t temp_size = 3*kMaxNumCars;
+  cub::DeviceScan::ExclusiveSum(h_prefix_sum_temp,
+                                temp_size,
+                                h_Car_active,
+                                h_prefix_sum_output,
+                                prefix_sum_size);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_compact_initialize<<<
+      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_compact_cars<<<
+      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_compact_swap_pointers<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  auto* tmp = h_Car_active;
+  h_Car_active = h_Car_active_2;
+  h_Car_active_2 = tmp;
+}
+
+
 int main(int /*argc*/, char** /*argv*/) {
   allocate_memory();
   create_street_network();
@@ -854,6 +1031,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kNumIterations; ++i) {
     step();
+
+    compact_car_array();
   }
 
   auto time_end = std::chrono::system_clock::now();
