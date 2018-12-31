@@ -4,5 +4,9 @@ string(STRIP "${SDL2_LIBRARIES}" SDL2_LIBRARIES)
 
 cuda_add_executable(gol_soa gol.cu rendering.cu dataset_loader.cu)
 target_link_libraries(gol_soa SDL2)
-cuda_add_executable(gol_soa_baseline gol_baseline.cu rendering.cu dataset_loader.cu)
-target_link_libraries(gol_soa_baseline SDL2)
+
+cuda_add_executable(gol_soa_no_cell gol_no_cell.cu rendering.cu dataset_loader.cu)
+target_link_libraries(gol_soa_no_cell SDL2)
+
+cuda_add_executable(gol_baseline_simple gol_baseline_simple.cu rendering.cu dataset_loader.cu)
+target_link_libraries(gol_baseline_simple SDL2)
