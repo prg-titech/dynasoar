@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <chrono>
+#include <cub/cub.cuh>
 #include <stdio.h>
 
 #include "configuration.h"
@@ -35,23 +36,37 @@ __device__ int* d_Cell_redirection_index;
 // Only for debugging.
 __device__ int* d_Cell_found;
 
+// Object/array size counters.
 __device__ int d_num_candidates;
 __device__ int d_num_alive;
 int host_num_candidates;
 int host_num_alive;
 
+// Allocation data structures.
 __device__ IndexT* d_candidates;
 __device__ IndexT* d_alive;
 __device__ int* d_Candidate_active;
 __device__ int* d_Alive_active;
 
+// Host arrays for prefix sum compaction.
+IndexT* h_candidates;
+IndexT* h_alive;
+int* h_Candidate_active;
+int* h_Alive_active;
+IndexT* h_candidates_2;
+IndexT* h_alive_2;
+int* h_Candidate_active_2;
+int* h_Alive_active_2;
+int* h_prefix_sum_temp;
+int* h_prefix_sum_output;
+
 // For prefix sum compaction.
+__device__ int* d_prefix_sum_temp;
+__device__ int* d_prefix_sum_output;
 __device__ IndexT* d_candidates_2;
 __device__ IndexT* d_alive_2;
 __device__ int* d_Candidate_active_2;
 __device__ int* d_Alive_active_2;
-__device__ int d_num_candidates_2;
-__device__ int d_num_alive_2;
 
 // Dataset.
 __device__ int SIZE_X;
@@ -458,6 +473,126 @@ int checksum() {
 }
 
 
+__global__ void kernel_compact_alive() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < d_num_alive; i += blockDim.x * gridDim.x) {
+    if (d_Alive_active[i]) {
+      int target = d_prefix_sum_output[i];
+
+      d_Cell_redirection_index[d_alive[i]] = target;
+      d_Alive_active_2[target] = 1;
+      d_alive_2[target] = d_alive[i];
+    }
+  }
+}
+
+
+__global__ void kernel_compact_swap_pointers_alive() {
+  // Update size.
+  d_num_alive = d_prefix_sum_output[d_num_alive - 1] + d_Alive_active[d_num_alive - 1];
+
+  {
+    auto* tmp = d_alive_2;
+    d_alive_2 = d_alive;
+    d_alive = tmp;
+  }
+
+  {
+    auto* tmp = d_Alive_active_2;
+    d_Alive_active_2 = d_Alive_active;
+    d_Alive_active = tmp;
+  }
+}
+
+
+__global__ void kernel_compact_candidates() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < d_num_candidates; i += blockDim.x * gridDim.x) {
+    if (d_Candidate_active[i]) {
+      int target = d_prefix_sum_output[i];
+
+      d_Cell_redirection_index[d_candidates[i]] = target;
+      d_Candidate_active_2[target] = 1;
+      d_candidates_2[target] = d_candidates[i];
+    }
+  }
+}
+
+
+__global__ void kernel_compact_swap_pointers_candidates() {
+  // Update size.
+  d_num_candidates = d_prefix_sum_output[d_num_candidates - 1]
+      + d_Candidate_active[d_num_candidates - 1];
+
+  {
+    auto* tmp = d_candidates_2;
+    d_candidates_2 = d_candidates;
+    d_candidates = tmp;
+  }
+
+  {
+    auto* tmp = d_Candidate_active_2;
+    d_Candidate_active_2 = d_Candidate_active;
+    d_Candidate_active = tmp;
+  }
+}
+
+
+void prefix_sum_step() {
+  update_object_counters();
+
+  if (true) {
+    // TODO: Prefix sum broken for num_objects < 256.
+    auto prefix_sum_size = host_num_alive < 256 ? 256 : host_num_alive;
+    size_t temp_size = 3*dataset.x*dataset.y;
+    cub::DeviceScan::ExclusiveSum(h_prefix_sum_temp,
+                                  temp_size,
+                                  h_Alive_active,
+                                  h_prefix_sum_output,
+                                  prefix_sum_size);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    kernel_compact_alive<<<
+        (host_num_alive + kNumBlockSize - 1) / kNumBlockSize,
+        kNumBlockSize>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+
+    kernel_compact_swap_pointers_alive<<<1, 1>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+
+    auto* tmp = h_Alive_active_2;
+    h_Alive_active_2 = h_Alive_active;
+    h_Alive_active = tmp;
+  }
+
+  if (true) {
+    // TODO: Prefix sum broken for num_objects < 256.
+    auto prefix_sum_size = host_num_candidates < 256 ? 256 : host_num_candidates;
+    size_t temp_size = 3*dataset.x*dataset.y;
+    cub::DeviceScan::ExclusiveSum(h_prefix_sum_temp,
+                                  temp_size,
+                                  h_Candidate_active,
+                                  h_prefix_sum_output,
+                                  prefix_sum_size);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    kernel_compact_candidates<<<
+        (host_num_candidates + kNumBlockSize - 1) / kNumBlockSize,
+        kNumBlockSize>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+
+    kernel_compact_swap_pointers_candidates<<<1, 1>>>();
+    gpuErrchk(cudaDeviceSynchronize());
+
+    auto* tmp = h_Candidate_active_2;
+    h_Candidate_active_2 = h_Candidate_active;
+    h_Candidate_active = tmp;
+  }
+
+  update_object_counters();
+}
+
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     printf("Usage: %s filename.pgm\n", argv[0]);
@@ -502,44 +637,44 @@ int main(int argc, char** argv) {
   cudaMemcpyToSymbol(d_Cell_redirection_index, &h_Cell_redirection_index, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
-  IndexT* h_candidates;
   cudaMalloc(&h_candidates, sizeof(IndexT)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_candidates, &h_candidates, sizeof(IndexT*),
                      0, cudaMemcpyHostToDevice);
 
-  IndexT* h_alive;
   cudaMalloc(&h_alive, sizeof(IndexT)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_alive, &h_alive, sizeof(IndexT*),
                      0, cudaMemcpyHostToDevice);
 
-  int* h_Candidate_active;
   cudaMalloc(&h_Candidate_active, sizeof(int)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_Candidate_active, &h_Candidate_active, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
-  int* h_Alive_active;
   cudaMalloc(&h_Alive_active, sizeof(int)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_Alive_active, &h_Alive_active, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
-  IndexT* h_candidates_2;
   cudaMalloc(&h_candidates_2, sizeof(IndexT)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_candidates_2, &h_candidates_2, sizeof(IndexT*),
                      0, cudaMemcpyHostToDevice);
 
-  IndexT* h_alive_2;
   cudaMalloc(&h_alive_2, sizeof(IndexT)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_alive_2, &h_alive_2, sizeof(IndexT*),
                      0, cudaMemcpyHostToDevice);
 
-  int* h_Candidate_active_2;
   cudaMalloc(&h_Candidate_active_2, sizeof(int)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_Candidate_active_2, &h_Candidate_active_2, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
-  int* h_Alive_active_2;
   cudaMalloc(&h_Alive_active_2, sizeof(int)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(d_Alive_active_2, &h_Alive_active_2, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  cudaMalloc(&h_prefix_sum_temp, sizeof(int)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(d_prefix_sum_temp, &h_prefix_sum_temp, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  cudaMalloc(&h_prefix_sum_output, sizeof(int)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(d_prefix_sum_output, &h_prefix_sum_output, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
   // Initialize cells.
@@ -577,6 +712,9 @@ int main(int argc, char** argv) {
         kNumBlockSize>>>();
     gpuErrchk(cudaDeviceSynchronize());
     update_object_counters();
+
+    // Compact arrays.
+    prefix_sum_step();
   }
 
   auto time_end = std::chrono::system_clock::now();
