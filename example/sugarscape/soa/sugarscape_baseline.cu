@@ -71,14 +71,17 @@ __device__ void Cell_enter(int cell_id, int agent) {
   assert(dev_Cell_Agent_type[agent] != kNoType);
 
   dev_Cell_Agent_permission[cell_id] = false;
-  dev_Cell_Male_female_request[cell_id] = kNullptr;
   dev_Cell_Male_proposal_accepted[cell_id] = false;
+  dev_Cell_Male_female_request[cell_id] = kNullptr;
+  dev_Cell_Agent_cell_request[cell_id] = kNullptr;
 
   // Threadfence to make sure that cell will not be processed by accident.
   // E.g.: permission set to false first before setting new type.
   __threadfence();
 
   dev_Cell_Agent_type[cell_id] = dev_Cell_Agent_type[agent];
+
+  __threadfence();
 
   dev_Cell_Agent_random_state[cell_id] = dev_Cell_Agent_random_state[agent];
   dev_Cell_Agent_vision[cell_id] = dev_Cell_Agent_vision[agent];
@@ -93,6 +96,10 @@ __device__ void Cell_enter(int cell_id, int agent) {
 __device__ void Cell_leave(int cell_id) {
   assert(dev_Cell_Agent_type[cell_id] != kNoType);
   dev_Cell_Agent_type[cell_id] = kNoType;
+  dev_Cell_Agent_permission[cell_id] = false;
+  dev_Cell_Male_proposal_accepted[cell_id] = false;
+  dev_Cell_Male_female_request[cell_id] = kNullptr;
+  dev_Cell_Agent_cell_request[cell_id] = kNullptr;
 }
 
 
@@ -157,6 +164,9 @@ __device__ void new_Male(int cell_id, int vision, int age, int max_age,
   new_Agent(cell_id, vision, age, max_age, endowment, metabolism);
   dev_Cell_Male_proposal_accepted[cell_id] = false;
   dev_Cell_Male_female_request[cell_id] = kNullptr;
+
+  __threadfence();
+
   dev_Cell_Agent_type[cell_id] = kClassMale;
 }
 
@@ -164,6 +174,10 @@ __device__ void new_Male(int cell_id, int vision, int age, int max_age,
 __device__ void new_Female(int cell_id, int vision, int age, int max_age,
                            int endowment, int metabolism) {
   new_Agent(cell_id, vision, age, max_age, endowment, metabolism);
+
+  __threadfence();
+
+
   dev_Cell_Agent_type[cell_id] = kClassFemale;
 }
 
