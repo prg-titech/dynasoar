@@ -303,8 +303,8 @@ int main(int argc, char** argv) {
   auto time_start = std::chrono::system_clock::now();
 
   // Run simulation.
-  for (int i = 0; i < 100; ++i) {
-    printf("Iteration %i\n", i);
+  for (int i = 0; i < kNumIterations; ++i) {
+//    printf("Iteration %i\n", i);
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
     allocator_handle->parallel_do<Candidate, &Candidate::update>();
