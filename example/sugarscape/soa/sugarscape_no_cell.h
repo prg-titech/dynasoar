@@ -26,6 +26,7 @@ class Agent : public SoaBase<AllocatorT> {
       int,              // age_
       int,              // max_age_
       int,              // sugar_
+      int,              // max_sugar_
       int,              // metabolism_
       int,              // endowment_
       bool>;            // permission_
@@ -38,13 +39,14 @@ class Agent : public SoaBase<AllocatorT> {
   SoaField<Agent, 4> age_;
   SoaField<Agent, 5> max_age_;
   SoaField<Agent, 6> sugar_;
-  SoaField<Agent, 7> metabolism_;
-  SoaField<Agent, 8> endowment_;
-  SoaField<Agent, 9> permission_;
+  SoaField<Agent, 7> max_sugar_;
+  SoaField<Agent, 8> metabolism_;
+  SoaField<Agent, 9> endowment_;
+  SoaField<Agent, 10> permission_;
 
  public:
   __device__ Agent(int cell, int vision, int age, int max_age, int endowment,
-                   int metabolism);
+                   int metabolism, int max_sugar);
 
   __device__ void prepare_move();
 
@@ -61,6 +63,8 @@ class Agent : public SoaBase<AllocatorT> {
   __device__ int cell_request();
 
   __device__ int sugar();
+
+  __device__ int max_sugar();
 
   __device__ int endowment();
 
@@ -90,7 +94,7 @@ class Male : public Agent {
 
  public:
   __device__ Male(int cell, int vision, int age, int max_age, int endowment,
-                  int metabolism);
+                  int metabolism, int max_sugar);
 
   __device__ Female* female_request();
 
@@ -118,7 +122,8 @@ class Female : public Agent {
 
  public:
   __device__ Female(int cell, int vision, int age, int max_age,
-                    int endowment, int metabolism, int max_children);
+                    int endowment, int metabolism, int max_sugar,
+                    int max_children);
 
   __device__ void decide_proposal();
 

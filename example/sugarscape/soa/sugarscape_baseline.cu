@@ -39,6 +39,7 @@ __device__ int* dev_Cell_Agent_vision;
 __device__ int* dev_Cell_Agent_age;
 __device__ int* dev_Cell_Agent_max_age;
 __device__ int* dev_Cell_Agent_sugar;
+__device__ int* dev_Cell_Agent_max_sugar;
 __device__ int* dev_Cell_Agent_metabolism;
 __device__ int* dev_Cell_Agent_endowment;
 __device__ bool* dev_Cell_Agent_permission;
@@ -90,6 +91,7 @@ __device__ void Cell_enter(int cell_id, int agent) {
   dev_Cell_Agent_age[cell_id] = dev_Cell_Agent_age[agent];
   dev_Cell_Agent_max_age[cell_id] = dev_Cell_Agent_max_age[agent];
   dev_Cell_Agent_sugar[cell_id] = dev_Cell_Agent_sugar[agent];
+  dev_Cell_Agent_max_sugar[cell_id] = dev_Cell_Agent_max_sugar[agent];
   dev_Cell_Agent_metabolism[cell_id] = dev_Cell_Agent_metabolism[agent];
   dev_Cell_Agent_endowment[cell_id] = dev_Cell_Agent_endowment[agent];
   dev_Cell_Female_max_children[cell_id] = dev_Cell_Female_max_children[agent];
@@ -109,9 +111,13 @@ __device__ void Cell_leave(int cell_id) {
 
 __device__ void Agent_harvest_sugar(int cell_id) {
   // Harvest as much sugar as possible.
-  // TODO: Do we need two sugar fields here?
-  dev_Cell_Agent_sugar[cell_id] += dev_Cell_sugar[cell_id];
-  dev_Cell_sugar[cell_id] = 0;
+  int amount = dev_Cell_sugar[cell_id];
+  if (amount + dev_Cell_Agent_sugar[cell_id] > dev_Cell_Agent_max_sugar[cell_id]) {
+    amount = dev_Cell_Agent_max_sugar[cell_id] - dev_Cell_Agent_sugar[cell_id];
+  }
+
+  dev_Cell_Agent_sugar[cell_id] += amount;
+  dev_Cell_sugar[cell_id] -= amount;
 }
 
 
@@ -147,13 +153,14 @@ __device__ void new_Cell(int cell_id, int seed, int sugar, int sugar_capacity,
 
 
 __device__ void new_Agent(int cell_id, int vision, int age, int max_age,
-                          int endowment, int metabolism) {
+                          int endowment, int metabolism, int max_sugar) {
   assert(cell_id != kNullptr);
   dev_Cell_Agent_cell_request[cell_id] = kNullptr;
   dev_Cell_Agent_vision[cell_id] = vision;
   dev_Cell_Agent_age[cell_id] = age;
   dev_Cell_Agent_max_age[cell_id] = max_age;
   dev_Cell_Agent_sugar[cell_id] = endowment;
+  dev_Cell_Agent_max_sugar[cell_id] = max_sugar;
   dev_Cell_Agent_endowment[cell_id] = endowment;
   dev_Cell_Agent_metabolism[cell_id] = metabolism;
   dev_Cell_Agent_permission[cell_id] = false;
@@ -164,8 +171,8 @@ __device__ void new_Agent(int cell_id, int vision, int age, int max_age,
 
 
 __device__ void new_Male(int cell_id, int vision, int age, int max_age,
-                         int endowment, int metabolism) {
-  new_Agent(cell_id, vision, age, max_age, endowment, metabolism);
+                         int endowment, int metabolism, int max_sugar) {
+  new_Agent(cell_id, vision, age, max_age, endowment, metabolism, max_sugar);
   dev_Cell_Male_proposal_accepted[cell_id] = false;
   dev_Cell_Male_female_request[cell_id] = kNullptr;
 
@@ -176,8 +183,9 @@ __device__ void new_Male(int cell_id, int vision, int age, int max_age,
 
 
 __device__ void new_Female(int cell_id, int vision, int age, int max_age,
-                           int endowment, int metabolism, int max_children) {
-  new_Agent(cell_id, vision, age, max_age, endowment, metabolism);
+                           int endowment, int metabolism, int max_sugar,
+                           int max_children) {
+  new_Agent(cell_id, vision, age, max_age, endowment, metabolism, max_sugar);
   dev_Cell_Female_num_children[cell_id] = 0;
   dev_Cell_Female_max_children[cell_id] = max_children;
 
@@ -438,6 +446,8 @@ __device__ void Male_mate(int cell_id) {
         + dev_Cell_Agent_metabolism[dev_Cell_Male_female_request[cell_id]]) / 2;
     int c_max_children =
         dev_Cell_Female_max_children[dev_Cell_Male_female_request[cell_id]];
+    int c_max_sugar = (dev_Cell_Agent_max_sugar[cell_id]
+        + dev_Cell_Agent_max_sugar[dev_Cell_Male_female_request[cell_id]]) / 2;
 
     // Create agent.
     assert(dev_Cell_Agent_cell_request[cell_id] != kNullptr);
@@ -445,11 +455,12 @@ __device__ void Male_mate(int cell_id) {
 
     if (Agent_random_float(cell_id) <= 0.5f) {
       new_Male(dev_Cell_Agent_cell_request[cell_id],
-               c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
+               c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism,
+               c_max_sugar);
     } else {
       new_Female(dev_Cell_Agent_cell_request[cell_id],
                  c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism,
-                 c_max_children);
+                 c_max_sugar, c_max_children);
     }
 
     // No Cell::enter necessary.
@@ -672,14 +683,16 @@ __global__ void create_agents() {
     int c_metabolism = kMaxMetabolism/3
                        + Cell_random_int(i, 0, kMaxMetabolism*2/3);
     int c_max_children = Cell_random_int(i, 2, kMaxChildren);
+    int c_max_sugar = Cell_random_int(i, kMaxSugar/2, kMaxSugar);
 
     if (r < kProbMale) {
       // Create male agent.
-      new_Male(i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
+      new_Male(i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism,
+               c_max_sugar);
     } else if (r < kProbMale + kProbFemale) {
       // Create female agent.
       new_Female(i, c_vision, /*age=*/ 0, c_max_age, c_endowment,
-                 c_metabolism, c_max_children);
+                 c_metabolism, c_max_sugar, c_max_children);
     }   // else: Do not create agent.
   }
 }
@@ -771,6 +784,11 @@ int main(int /*argc*/, char** /*argv*/) {
   int* host_Cell_Agent_sugar;
   cudaMalloc(&host_Cell_Agent_sugar, sizeof(int)*kSize*kSize);
   cudaMemcpyToSymbol(dev_Cell_Agent_sugar, &host_Cell_Agent_sugar,
+                     sizeof(int*), 0, cudaMemcpyHostToDevice);
+
+  int* host_Cell_Agent_max_sugar;
+  cudaMalloc(&host_Cell_Agent_max_sugar, sizeof(int)*kSize*kSize);
+  cudaMemcpyToSymbol(dev_Cell_Agent_max_sugar, &host_Cell_Agent_max_sugar,
                      sizeof(int*), 0, cudaMemcpyHostToDevice);
 
   int* host_Cell_Agent_metabolism;
