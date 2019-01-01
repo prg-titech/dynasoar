@@ -9,4 +9,6 @@ using CellT = int;
 
 extern dataset_t dataset;
 
+static const int kNumIterations = 100;
+
 #endif  // EXAMPLE_GAME_OF_LIFE_SOA_CONFIGURATION_H

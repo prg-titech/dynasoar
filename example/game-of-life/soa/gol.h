@@ -94,6 +94,9 @@ class Candidate : public Agent {
   __device__ void prepare();
 
   __device__ void update();
+
+  // Only for debugging.
+  __device__ void update_counter();
 };
 
 

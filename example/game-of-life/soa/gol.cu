@@ -235,21 +235,33 @@ void transfer_dataset() {
 
 
 __device__ int device_checksum;
+__device__ int device_num_candidates;
 
 __device__ void Alive::update_checksum() {
   atomicAdd(&device_checksum, 1);
 }
 
 
+__device__ void Candidate::update_counter() {
+  atomicAdd(&device_num_candidates, 1);
+}
+
 int checksum() {
   int host_checksum = 0;
+  int host_num_candidates = 0;
   cudaMemcpyToSymbol(device_checksum, &host_checksum, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
+  cudaMemcpyToSymbol(device_num_candidates, &host_num_candidates, sizeof(int), 0,
                      cudaMemcpyHostToDevice);
 
   allocator_handle->parallel_do<Alive, &Alive::update_checksum>();
+  allocator_handle->parallel_do<Candidate, &Candidate::update_counter>();
 
   cudaMemcpyFromSymbol(&host_checksum, device_checksum, sizeof(int), 0,
                        cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(&host_num_candidates, device_num_candidates, sizeof(int), 0,
+                       cudaMemcpyDeviceToHost);
+
   return host_checksum;
 }
 
@@ -303,8 +315,7 @@ int main(int argc, char** argv) {
   auto time_start = std::chrono::system_clock::now();
 
   // Run simulation.
-  for (int i = 0; i < 100; ++i) {
-    printf("Iteration %i\n", i);
+  for (int i = 0; i < kNumIterations; ++i) {
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
     allocator_handle->parallel_do<Candidate, &Candidate::update>();

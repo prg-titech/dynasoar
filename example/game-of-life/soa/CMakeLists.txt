@@ -10,3 +10,5 @@ target_link_libraries(gol_soa_no_cell SDL2)
 
 cuda_add_executable(gol_baseline_simple gol_baseline_simple.cu rendering.cu dataset_loader.cu)
 target_link_libraries(gol_baseline_simple SDL2)
+
+cuda_add_executable(gol_baseline gol_baseline.cu dataset_loader.cu)
