@@ -91,25 +91,24 @@ __device__ void new_Cell(int cell_id, int seed, int sugar, int sugar_capacity,
 
 
 __device__ Agent::Agent(int cell, int vision, int age, int max_age,
-                        int endowment, int metabolism, int max_sugar)
+                        int endowment, int metabolism)
     : cell_(cell), cell_request_(kNullptr), vision_(vision), age_(age),
       max_age_(max_age), sugar_(endowment), endowment_(endowment),
-      metabolism_(metabolism), max_sugar_(max_sugar), permission_(false) {
+      metabolism_(metabolism), permission_(false) {
   assert(cell != kNullptr);
   curand_init(Cell_random_int(cell, 0, kSize*kSize), 0, 0, &random_state_);
 }
 
 
 __device__ Male::Male(int cell, int vision, int age, int max_age,
-                      int endowment, int metabolism, int max_sugar)
-    : Agent(cell, vision, age, max_age, endowment, metabolism, max_sugar),
+                      int endowment, int metabolism)
+    : Agent(cell, vision, age, max_age, endowment, metabolism),
       proposal_accepted_(false), female_request_(nullptr) {}
 
 
 __device__ Female::Female(int cell, int vision, int age, int max_age,
-                          int endowment, int metabolism, int max_sugar,
-                          int max_children)
-    : Agent(cell, vision, age, max_age, endowment, metabolism, max_sugar),
+                          int endowment, int metabolism, int max_children)
+    : Agent(cell, vision, age, max_age, endowment, metabolism),
       num_children_(0), max_children_(max_children) {}
 
 
@@ -192,10 +191,6 @@ __device__ void Agent::update_move() {
 __device__ void Agent::harvest_sugar() {
   // Harvest as much sugar as possible.
   int amount = Cell_sugar(cell_);
-  if (amount + sugar_ > max_sugar_) {
-    amount = max_sugar_ - sugar_;
-  }
-
   Cell_take_sugar(cell_, amount);
   sugar_ += amount;
 }
@@ -212,9 +207,6 @@ __device__ int Agent::cell_request() { return cell_request_; }
 
 
 __device__ int Agent::sugar() { return sugar_; }
-
-
-__device__ int Agent::max_sugar() { return max_sugar_; }
 
 
 __device__ int Agent::vision() { return vision_; }
@@ -403,7 +395,6 @@ __device__ void Male::mate() {
     int c_vision = (vision_ + female_request_->vision()) / 2;
     int c_max_age = (max_age_ + female_request_->max_age()) / 2;
     int c_metabolism = (metabolism_ + female_request_->metabolism()) / 2;
-    int c_max_sugar = (max_sugar_ + female_request_->max_sugar()) / 2;
 
     // Create agent.
     // TODO: Check why type cast is necessary here.
@@ -412,11 +403,11 @@ __device__ void Male::mate() {
     if (random_float() <= 0.5f) {
       child = device_allocator->make_new<Male>(
           (int) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
-          c_metabolism, c_max_sugar);
+          c_metabolism);
     } else {
       child = device_allocator->make_new<Female>(
           (int) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
-          c_metabolism, c_max_sugar, female_request_->max_children());
+          c_metabolism, female_request_->max_children());
     }
 
     // Add agent to target cell.
@@ -599,19 +590,17 @@ __global__ void create_agents() {
     int c_metabolism = kMaxMetabolism/3
                        + Cell_random_int(i, 0, kMaxMetabolism*2/3);
     int c_max_children = Cell_random_int(i, 2, kMaxChildren);
-    int c_max_sugar = Cell_random_int(i, kMaxSugar/2, kMaxSugar);
     Agent* agent = nullptr;
 
     if (r < kProbMale) {
       // Create male agent.
       agent = device_allocator->make_new<Male>(
-          i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism,
-          c_max_sugar);
+          i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
     } else if (r < kProbMale + kProbFemale) {
       // Create female agent.
       agent = device_allocator->make_new<Female>(
           i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism,
-          c_max_sugar, c_max_children);
+          c_max_children);
     }   // else: Do not create agent.
 
     if (agent != nullptr) {
