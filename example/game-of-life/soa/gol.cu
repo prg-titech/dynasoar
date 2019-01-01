@@ -280,7 +280,7 @@ int main(int argc, char** argv) {
   cudaMemcpyToSymbol(SIZE_Y, &dataset.y, sizeof(int), 0,
                      cudaMemcpyHostToDevice);
 
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     init_renderer();
   }
   
@@ -321,12 +321,12 @@ int main(int argc, char** argv) {
     allocator_handle->parallel_do<Candidate, &Candidate::update>();
     allocator_handle->parallel_do<Alive, &Alive::update>();
 
-    if (OPTION_DRAW) {
+    if (kOptionRender) {
       render();
     }
   }
 
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     close_renderer();
   }
 

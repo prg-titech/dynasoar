@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
     dataset = load_from_file(argv[1]);
   }
 
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     init_renderer();
   }
 
@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
 
   transfer_dataset();
 
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     render();
   }
 
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
     host_cells = host_next_cells;
     host_next_cells = tmp;
 
-    if (OPTION_DRAW) {
+    if (kOptionRender) {
       render();
     }
   }
@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
 
   printf("Time: %lu ms\n", millis);
 
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     close_renderer();
   }
 
