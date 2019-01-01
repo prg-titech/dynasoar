@@ -15,56 +15,64 @@ static const int kNullptr = std::numeric_limits<int>::max();
 
 using IndexT = int;
 
-__device__ DeviceArray<IndexT, kMaxDegree>* dev_Node_springs;
-__device__ float* dev_Node_pos_x;
-__device__ float* dev_Node_pos_y;
-__device__ int* dev_Node_num_springs;
-__device__ float* dev_Node_vel_x;
-__device__ float* dev_Node_vel_y;
-__device__ float* dev_Node_mass;
-__device__ char* dev_Node_type;
-__device__ IndexT* dev_Spring_p1;
-__device__ IndexT* dev_Spring_p2;
-__device__ float* dev_Spring_factor;
-__device__ float* dev_Spring_initial_length;
-__device__ float* dev_Spring_force;
-__device__ float* dev_Spring_max_force;
-__device__ bool* dev_Spring_is_active;
+struct Node {
+  DeviceArray<IndexT, kMaxDegree> springs;
+  int num_springs;
+  float pos_x;
+  float pos_y;
+  float vel_x;
+  float vel_y;
+  float mass;
+  char type;
+};
+
+struct Spring {
+  IndexT p1;
+  IndexT p2;
+  float factor;
+  float initial_length;
+  float force;
+  float max_force;
+  bool is_active;
+};
+
+__device__ Node* dev_nodes;
+__device__ Spring* dev_springs;
 
 
 __device__ void new_NodeBase(IndexT id, float pos_x, float pos_y) {
-  dev_Node_pos_x[id] = pos_x;
-  dev_Node_pos_y[id] = pos_y;
-  dev_Node_num_springs[id] = 0;
-  dev_Node_type[id] = kTypeNodeBase;
+  dev_nodes[id].pos_x = pos_x;
+  dev_nodes[id].pos_y = pos_y;
+  dev_nodes[id].num_springs = 0;
+  dev_nodes[id].type = kTypeNodeBase;
 }
 
 
 __device__ void new_AnchorNode(IndexT id, float pos_x, float pos_y) {
   new_NodeBase(id, pos_x, pos_y);
-  dev_Node_type[id] = kTypeAnchorNode;
+  dev_nodes[id].type = kTypeAnchorNode;
 }
 
 
 __device__ void new_AnchorPullNode(IndexT id, float pos_x, float pos_y,
                                    float vel_x, float vel_y) {
   new_AnchorNode(id, pos_x, pos_y);
-  dev_Node_vel_x[id] = vel_x;
-  dev_Node_vel_y[id] = vel_y;
-  dev_Node_type[id] = kTypeAnchorPullNode;
+  dev_nodes[id].vel_x = vel_x;
+  dev_nodes[id].vel_y = vel_y;
+  dev_nodes[id].type = kTypeAnchorPullNode;
 }
 
 
 __device__ void new_Node(IndexT id, float pos_x, float pos_y, float mass) {
   new_NodeBase(id, pos_x, pos_y);
-  dev_Node_mass[id] = mass;
-  dev_Node_type[id] = kTypeNode;
+  dev_nodes[id].mass = mass;
+  dev_nodes[id].type = kTypeNode;
 }
 
 
 __device__ float NodeBase_distance_to(IndexT id, IndexT other) {
-  float dx = dev_Node_pos_x[id] - dev_Node_pos_x[other];
-  float dy = dev_Node_pos_y[id] - dev_Node_pos_y[other];
+  float dx = dev_nodes[id].pos_x - dev_nodes[other].pos_x;
+  float dy = dev_nodes[id].pos_y - dev_nodes[other].pos_y;
   float dist_sq = dx*dx + dy*dy;
   return sqrt(dist_sq);
 }
@@ -73,24 +81,24 @@ __device__ float NodeBase_distance_to(IndexT id, IndexT other) {
 __device__ void NodeBase_add_spring(IndexT id, IndexT spring) {
   assert(id >= 0 && id < kMaxNodes);
 
-  int idx = atomicAdd(&dev_Node_num_springs[id], 1);
+  int idx = atomicAdd(&dev_nodes[id].num_springs, 1);
   assert(idx + 1 <= kMaxDegree);
-  dev_Node_springs[id][idx] = spring;
+  dev_nodes[id].springs[idx] = spring;
 
-  assert(dev_Spring_p1[spring] == id || dev_Spring_p2[spring] == id);
+  assert(dev_springs[spring].p1 == id || dev_springs[spring].p2 == id);
 }
 
 
 __device__ void new_Spring(IndexT id, IndexT p1, IndexT p2,
                            float spring_factor, float max_force) {
-  dev_Spring_is_active[id] = true;
-  dev_Spring_p1[id] = p1;
-  dev_Spring_p2[id] = p2;
-  dev_Spring_factor[id] = spring_factor;
-  dev_Spring_force[id] = 0.0f;
-  dev_Spring_max_force[id] = max_force;
-  dev_Spring_initial_length[id] = NodeBase_distance_to(p1, p2);
-  assert(dev_Spring_initial_length[id] > 0.0f);
+  dev_springs[id].is_active = true;
+  dev_springs[id].p1 = p1;
+  dev_springs[id].p2 = p2;
+  dev_springs[id].factor = spring_factor;
+  dev_springs[id].force = 0.0f;
+  dev_springs[id].max_force = max_force;
+  dev_springs[id].initial_length = NodeBase_distance_to(p1, p2);
+  assert(dev_springs[id].initial_length > 0.0f);
 
   NodeBase_add_spring(p1, id);
   NodeBase_add_spring(p2, id);
@@ -105,37 +113,37 @@ __device__ void NodeBase_remove_spring(IndexT id, IndexT spring) {
 
   do {
     assert(i < kMaxDegree);
-    s = dev_Node_springs[id][i];
+    s = dev_nodes[id].springs[i];
     ++i;
   } while(s != spring);
 
-  for (; i < dev_Node_num_springs[id]; ++i) {
-    dev_Node_springs[id][i - 1] = dev_Node_springs[id][i];
+  for (; i < dev_nodes[id].num_springs; ++i) {
+    dev_nodes[id].springs[i - 1] = dev_nodes[id].springs[i];
   }
 
-  --dev_Node_num_springs[id];
+  --dev_nodes[id].num_springs;
 
-  if (dev_Node_num_springs[id] == 0) {
-    dev_Node_type[id] = 0;
+  if (dev_nodes[id].num_springs == 0) {
+    dev_nodes[id].type = 0;
   }
 }
 
 
 __device__ void AnchorPullNode_pull(IndexT id) {
-  dev_Node_pos_x[id] += dev_Node_vel_x[id] * kDt;
-  dev_Node_pos_y[id] += dev_Node_vel_y[id] * kDt;
+  dev_nodes[id].pos_x += dev_nodes[id].vel_x * kDt;
+  dev_nodes[id].pos_y += dev_nodes[id].vel_y * kDt;
 }
 
 
 __device__ void Spring_compute_force(IndexT id) {
-  float dist = NodeBase_distance_to(dev_Spring_p1[id], dev_Spring_p2[id]);
-  float displacement = max(0.0f, dist - dev_Spring_initial_length[id]);
-  dev_Spring_force[id] = dev_Spring_factor[id] * displacement;
+  float dist = NodeBase_distance_to(dev_springs[id].p1, dev_springs[id].p2);
+  float displacement = max(0.0f, dist - dev_springs[id].initial_length);
+  dev_springs[id].force = dev_springs[id].factor * displacement;
 
-  if (dev_Spring_force[id] > dev_Spring_max_force[id]) {
-    NodeBase_remove_spring(dev_Spring_p1[id], id);
-    NodeBase_remove_spring(dev_Spring_p2[id], id);
-    dev_Spring_is_active[id] = false;
+  if (dev_springs[id].force > dev_springs[id].max_force) {
+    NodeBase_remove_spring(dev_springs[id].p1, id);
+    NodeBase_remove_spring(dev_springs[id].p2, id);
+    dev_springs[id].is_active = false;
   }
 }
 
@@ -144,39 +152,39 @@ __device__ void Node_move(IndexT id) {
   float force_x = 0.0f;
   float force_y = 0.0f;
 
-  for (int i = 0; i < dev_Node_num_springs[id]; ++i) {
-    IndexT s = dev_Node_springs[id][i];
+  for (int i = 0; i < dev_nodes[id].num_springs; ++i) {
+    IndexT s = dev_nodes[id].springs[i];
     IndexT from;
     IndexT to;
 
-    if (dev_Spring_p1[s] == id) {
+    if (dev_springs[s].p1 == id) {
       from = id;
-      to = dev_Spring_p2[s];
+      to = dev_springs[s].p2;
     } else {
-      assert(dev_Spring_p2[s] == id);
+      assert(dev_springs[s].p2 == id);
       from = id;
-      to = dev_Spring_p1[s];
+      to = dev_springs[s].p1;
     }
 
     // Calculate unit vector.
-    float dx = dev_Node_pos_x[to] - dev_Node_pos_x[from];
-    float dy = dev_Node_pos_y[to] - dev_Node_pos_y[from];
+    float dx = dev_nodes[to].pos_x - dev_nodes[from].pos_x;
+    float dy = dev_nodes[to].pos_y - dev_nodes[from].pos_y;
     float dist = sqrt(dx*dx + dy*dy);
     float unit_x = dx/dist;
     float unit_y = dy/dist;
 
     // Apply force.
-    force_x += unit_x*dev_Spring_force[s];
-    force_y += unit_y*dev_Spring_force[s];
+    force_x += unit_x*dev_springs[s].force;
+    force_y += unit_y*dev_springs[s].force;
   }
 
   // Calculate new velocity and position.
-  dev_Node_vel_x[id] += force_x*kDt / dev_Node_mass[id];
-  dev_Node_vel_y[id] += force_y*kDt / dev_Node_mass[id];
-  dev_Node_vel_x[id] *= 1.0f - kVelocityDampening;
-  dev_Node_vel_y[id] *= 1.0f - kVelocityDampening;
-  dev_Node_pos_x[id] += dev_Node_vel_x[id]*kDt;
-  dev_Node_pos_y[id] += dev_Node_vel_y[id]*kDt;
+  dev_nodes[id].vel_x += force_x*kDt / dev_nodes[id].mass;
+  dev_nodes[id].vel_y += force_y*kDt / dev_nodes[id].mass;
+  dev_nodes[id].vel_x *= 1.0f - kVelocityDampening;
+  dev_nodes[id].vel_y *= 1.0f - kVelocityDampening;
+  dev_nodes[id].pos_x += dev_nodes[id].vel_x*kDt;
+  dev_nodes[id].pos_y += dev_nodes[id].vel_y*kDt;
 }
 
 
@@ -188,19 +196,19 @@ SpringInfo host_spring_info[kMaxSprings];
 
 __device__ void Spring_add_to_rendering_array(IndexT id) {
   int idx = atomicAdd(&dev_num_springs, 1);
-  dev_spring_info[idx].p1_x = dev_Node_pos_x[dev_Spring_p1[id]];
-  dev_spring_info[idx].p1_y = dev_Node_pos_y[dev_Spring_p1[id]];
-  dev_spring_info[idx].p2_x = dev_Node_pos_x[dev_Spring_p2[id]];
-  dev_spring_info[idx].p2_y = dev_Node_pos_y[dev_Spring_p2[id]];
-  dev_spring_info[idx].force = dev_Spring_force[id];
-  dev_spring_info[idx].max_force = dev_Spring_max_force[id];
+  dev_spring_info[idx].p1_x = dev_nodes[dev_springs[id].p1].pos_x;
+  dev_spring_info[idx].p1_y = dev_nodes[dev_springs[id].p1].pos_y;
+  dev_spring_info[idx].p2_x = dev_nodes[dev_springs[id].p2].pos_x;
+  dev_spring_info[idx].p2_y = dev_nodes[dev_springs[id].p2].pos_y;
+  dev_spring_info[idx].force = dev_springs[id].force;
+  dev_spring_info[idx].max_force = dev_springs[id].max_force;
 }
 
 
 __global__ void kernel_AnchorPullNode_pull() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kMaxNodes; i += blockDim.x * gridDim.x) {
-    if (dev_Node_type[i] == kTypeAnchorPullNode) {
+    if (dev_nodes[i].type == kTypeAnchorPullNode) {
       AnchorPullNode_pull(i);
     }
   }
@@ -210,7 +218,7 @@ __global__ void kernel_AnchorPullNode_pull() {
 __global__ void kernel_Node_move() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kMaxNodes; i += blockDim.x * gridDim.x) {
-    if (dev_Node_type[i] == kTypeNode) {
+    if (dev_nodes[i].type == kTypeNode) {
       Node_move(i);
     }
   }
@@ -220,7 +228,7 @@ __global__ void kernel_Node_move() {
 __global__ void kernel_Spring_compute_force() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kMaxSprings; i += blockDim.x * gridDim.x) {
-    if (dev_Spring_is_active[i]) {
+    if (dev_springs[i].is_active) {
       Spring_compute_force(i);
     }
   }
@@ -230,7 +238,7 @@ __global__ void kernel_Spring_compute_force() {
 __global__ void kernel_Spring_add_to_rendering_array() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kMaxSprings; i += blockDim.x * gridDim.x) {
-    if (dev_Spring_is_active[i]) {
+    if (dev_springs[i].is_active) {
       Spring_add_to_rendering_array(i);
     }
   }
@@ -240,7 +248,7 @@ __global__ void kernel_Spring_add_to_rendering_array() {
 __global__ void kernel_initialize_nodes() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kMaxNodes; i += blockDim.x * gridDim.x) {
-    dev_Node_type[i] = 0;
+    dev_nodes[i].type = 0;
   }
 }
 
@@ -248,7 +256,7 @@ __global__ void kernel_initialize_nodes() {
 __global__ void kernel_initialize_springs() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kMaxSprings; i += blockDim.x * gridDim.x) {
-    dev_Spring_is_active[i] = false;
+    dev_springs[i].is_active = false;
   }
 }
 
@@ -376,82 +384,15 @@ void load_dataset(Dataset& dataset) {
 
 int main(int /*argc*/, char** /*argv*/) {
   // Allocate memory.
-  DeviceArray<IndexT, kMaxDegree>* host_Node_springs;
-  cudaMalloc(&host_Node_springs,
-             sizeof(DeviceArray<IndexT, kMaxDegree>)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_springs, &host_Node_springs,
-                     sizeof(DeviceArray<IndexT, kMaxDegree>*), 0,
+  Node* host_nodes;
+  cudaMalloc(&host_nodes, sizeof(Node)*kMaxNodes);
+  cudaMemcpyToSymbol(dev_nodes, &host_nodes, sizeof(Node*), 0,
                      cudaMemcpyHostToDevice);
 
-  float* host_Node_pos_x;
-  cudaMalloc(&host_Node_pos_x, sizeof(float)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_pos_x, &host_Node_pos_x, sizeof(float*), 0,
+  Spring* host_springs;
+  cudaMalloc(&host_springs, sizeof(Spring)*kMaxSprings);
+  cudaMemcpyToSymbol(dev_springs, &host_springs, sizeof(Spring*), 0,
                      cudaMemcpyHostToDevice);
-
-  float* host_Node_pos_y;
-  cudaMalloc(&host_Node_pos_y, sizeof(float)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_pos_y, &host_Node_pos_y, sizeof(float*), 0,
-                     cudaMemcpyHostToDevice);
-
-  float* host_Node_vel_x;
-  cudaMalloc(&host_Node_vel_x, sizeof(float)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_vel_x, &host_Node_vel_x, sizeof(float*), 0,
-                     cudaMemcpyHostToDevice);
-
-  float* host_Node_vel_y;
-  cudaMalloc(&host_Node_vel_y, sizeof(float)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_vel_y, &host_Node_vel_y, sizeof(float*), 0,
-                     cudaMemcpyHostToDevice);
-
-  int* host_Node_num_springs;
-  cudaMalloc(&host_Node_num_springs, sizeof(int)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_num_springs, &host_Node_num_springs,
-                     sizeof(int*), 0, cudaMemcpyHostToDevice);
-
-  float* host_Node_mass;
-  cudaMalloc(&host_Node_mass, sizeof(float)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_mass, &host_Node_mass, sizeof(float*), 0,
-                     cudaMemcpyHostToDevice);
-
-  char* host_Node_type;
-  cudaMalloc(&host_Node_type, sizeof(char)*kMaxNodes);
-  cudaMemcpyToSymbol(dev_Node_type, &host_Node_type, sizeof(char*), 0,
-                     cudaMemcpyHostToDevice);
-
-  IndexT* host_Spring_p1;
-  cudaMalloc(&host_Spring_p1, sizeof(IndexT)*kMaxSprings);
-  cudaMemcpyToSymbol(dev_Spring_p1, &host_Spring_p1, sizeof(IndexT*), 0,
-                     cudaMemcpyHostToDevice);
-
-  IndexT* host_Spring_p2;
-  cudaMalloc(&host_Spring_p2, sizeof(IndexT)*kMaxSprings);
-  cudaMemcpyToSymbol(dev_Spring_p2, &host_Spring_p2, sizeof(IndexT*), 0,
-                     cudaMemcpyHostToDevice);
-
-  float* host_Spring_factor;
-  cudaMalloc(&host_Spring_factor, sizeof(float)*kMaxSprings);
-  cudaMemcpyToSymbol(dev_Spring_factor, &host_Spring_factor, sizeof(float*), 0,
-                     cudaMemcpyHostToDevice);
-
-  float* host_Spring_initial_length;
-  cudaMalloc(&host_Spring_initial_length, sizeof(float)*kMaxSprings);
-  cudaMemcpyToSymbol(dev_Spring_initial_length, &host_Spring_initial_length,
-                     sizeof(float*), 0, cudaMemcpyHostToDevice);
-
-  float* host_Spring_force;
-  cudaMalloc(&host_Spring_force, sizeof(float)*kMaxSprings);
-  cudaMemcpyToSymbol(dev_Spring_force, &host_Spring_force, sizeof(float*), 0,
-                     cudaMemcpyHostToDevice);
-
-  float* host_Spring_max_force;
-  cudaMalloc(&host_Spring_max_force, sizeof(float)*kMaxSprings);
-  cudaMemcpyToSymbol(dev_Spring_max_force, &host_Spring_max_force,
-                     sizeof(float*), 0, cudaMemcpyHostToDevice);
-
-  bool* host_Spring_is_active;
-  cudaMalloc(&host_Spring_is_active, sizeof(bool)*kMaxSprings);
-  cudaMemcpyToSymbol(dev_Spring_is_active, &host_Spring_is_active,
-                     sizeof(bool*), 0, cudaMemcpyHostToDevice);
 
   initialize_memory();
 

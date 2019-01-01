@@ -5,4 +5,6 @@ string(STRIP "${SDL2_LIBRARIES}" SDL2_LIBRARIES)
 cuda_add_executable(structure_soa structure.cu rendering.cu dataset.cc)
 target_link_libraries(structure_soa SDL2)
 
-cuda_add_executable(structure_baseline structure_baseline.cu dataset.cc)
+cuda_add_executable(structure_baseline_soa structure_baseline.cu dataset.cc)
+
+cuda_add_executable(structure_baseline_aos structure_baseline_aos.cu dataset.cc)
