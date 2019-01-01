@@ -86,7 +86,7 @@ __device__ void Cell_enter(int cell_id, int agent) {
   // E.g.: permission set to false first before setting new type.
   __threadfence();
 
-  dev_cells[cell_id].Agent_type = dev_Cell_Agent_type[agent];
+  dev_cells[cell_id].Agent_type = dev_cells[agent].Agent_type;
 
   __threadfence();
 
