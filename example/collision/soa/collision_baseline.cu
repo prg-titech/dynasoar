@@ -308,7 +308,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
-    printf("%i\n", i);
+    // printf("%i\n", i);
     parallel_do<&Body_compute_force><<<kBlocks, kThreads>>>();
     gpuErrchk(cudaDeviceSynchronize());
 

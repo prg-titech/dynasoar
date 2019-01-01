@@ -270,7 +270,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
-    printf("%i\n", i);
+    // printf("%i\n", i);
     // allocator_handle->parallel_defrag<Body>(/*max_records=*/ 32,
     //                                         /*min_records=*/ 1);
 
