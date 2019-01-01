@@ -70,7 +70,6 @@ __device__ void Cell_enter(int cell_id, int agent) {
   assert(dev_Cell_Agent_type[cell_id] == kNoType);
   assert(dev_Cell_Agent_type[agent] != kNoType);
 
-  dev_Cell_Agent_type[cell_id] = dev_Cell_Agent_type[agent];
   dev_Cell_Agent_random_state[cell_id] = dev_Cell_Agent_random_state[agent];
   dev_Cell_Agent_vision[cell_id] = dev_Cell_Agent_vision[agent];
   dev_Cell_Agent_age[cell_id] = dev_Cell_Agent_age[agent];
@@ -78,7 +77,15 @@ __device__ void Cell_enter(int cell_id, int agent) {
   dev_Cell_Agent_sugar[cell_id] = dev_Cell_Agent_sugar[agent];
   dev_Cell_Agent_metabolism[cell_id] = dev_Cell_Agent_metabolism[agent];
   dev_Cell_Agent_endowment[cell_id] = dev_Cell_Agent_endowment[agent];
-  // No need to copy the other fields.
+  dev_Cell_Agent_permission[cell_id] = dev_Cell_Agent_permission[agent];
+  dev_Cell_Male_female_request[cell_id] = dev_Cell_Male_female_request[agent];
+  dev_Cell_Male_proposal_accepted[cell_id] = dev_Cell_Male_proposal_accepted[agent];
+
+  // Threadfence to make sure that cell will not be processed by accident.
+  // E.g.: permission set to false first before setting new type.
+  __threadfence();
+
+  dev_Cell_Agent_type[cell_id] = dev_Cell_Agent_type[agent];
 }
 
 
