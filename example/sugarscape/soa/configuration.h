@@ -2,7 +2,7 @@
 #define EXAMPLE_SUGARSCAPE_SOA_CONFIGURATION_H
 
 // Size of simulation.
-static const int kSize = 1200;
+static const int kSize = 1500;
 static const int kSeed = 42;
 
 // For initialization only.
@@ -21,7 +21,7 @@ static const int kMaxMetabolism = 80;
 static const int kSugarCapacity = 3500;
 static const int kMaxSugarDiffusion = 60;
 static const float kSugarDiffusionRate = 0.125;
-static const int kMinMatingAge = 18;
+static const int kMinMatingAge = 30;
 
 // Debug/rendering
 static const bool kOptionRender = false;
