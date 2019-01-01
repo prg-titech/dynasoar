@@ -533,7 +533,7 @@ __global__ void create_agents() {
                       + cells[i]->random_int(0, kMaxEndowment*3/4);
     int c_metabolism = kMaxMetabolism/3
                        + cells[i]->random_int(0, kMaxMetabolism*2/3);
-    int c_max_children = cells[i]->random_int(2, 4);
+    int c_max_children = cells[i]->random_int(2, kMaxChildren);
     Agent* agent = nullptr;
 
     if (r < kProbMale) {

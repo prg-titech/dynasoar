@@ -22,6 +22,7 @@ static const int kSugarCapacity = 3500;
 static const int kMaxSugarDiffusion = 60;
 static const float kSugarDiffusionRate = 0.125;
 static const int kMinMatingAge = 22;
+static const int kMaxChildren = 8;
 
 // Debug/rendering
 static const bool kOptionRender = false;

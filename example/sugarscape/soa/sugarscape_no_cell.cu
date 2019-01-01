@@ -589,7 +589,7 @@ __global__ void create_agents() {
                       + Cell_random_int(i, 0, kMaxEndowment*3/4);
     int c_metabolism = kMaxMetabolism/3
                        + Cell_random_int(i, 0, kMaxMetabolism*2/3);
-    int c_max_children = Cell_random_int(i, 2, 4);
+    int c_max_children = Cell_random_int(i, 2, kMaxChildren);
     Agent* agent = nullptr;
 
     if (r < kProbMale) {
