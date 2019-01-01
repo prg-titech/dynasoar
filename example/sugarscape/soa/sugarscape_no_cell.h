@@ -108,12 +108,23 @@ class Female : public Agent {
  public:
   static const bool kIsAbstract = false;
   using BaseClass = Agent;
-  using FieldTypes = std::tuple<>;
+  using FieldTypes = std::tuple<
+      int,            // max_children_
+      int>;           // num_children_
 
+ private:
+  SoaField<Female, 0> max_children_;
+  SoaField<Female, 1> num_children_;
+
+ public:
   __device__ Female(int cell, int vision, int age, int max_age,
-                    int endowment, int metabolism);
+                    int endowment, int metabolism, int max_children);
 
   __device__ void decide_proposal();
+
+  __device__ void increment_num_children() { ++num_children_; }
+
+  __device__ int max_children() {  return max_children_; }
 };
 
 
