@@ -44,6 +44,8 @@ __device__ int* dev_Cell_Agent_endowment;
 __device__ bool* dev_Cell_Agent_permission;
 __device__ int* dev_Cell_Male_female_request;
 __device__ bool* dev_Cell_Male_proposal_accepted;
+__device__ int* dev_Cell_Female_num_children;
+__device__ int* dev_Cell_Female_max_children;
 
 
 __device__ float Cell_random_float(int cell_id) {
@@ -90,6 +92,8 @@ __device__ void Cell_enter(int cell_id, int agent) {
   dev_Cell_Agent_sugar[cell_id] = dev_Cell_Agent_sugar[agent];
   dev_Cell_Agent_metabolism[cell_id] = dev_Cell_Agent_metabolism[agent];
   dev_Cell_Agent_endowment[cell_id] = dev_Cell_Agent_endowment[agent];
+  dev_Cell_Female_max_children[cell_id] = dev_Cell_Female_max_children[agent];
+  dev_Cell_Female_num_children[cell_id] = dev_Cell_Female_num_children[agent];
 }
 
 
@@ -172,11 +176,12 @@ __device__ void new_Male(int cell_id, int vision, int age, int max_age,
 
 
 __device__ void new_Female(int cell_id, int vision, int age, int max_age,
-                           int endowment, int metabolism) {
+                           int endowment, int metabolism, int max_children) {
   new_Agent(cell_id, vision, age, max_age, endowment, metabolism);
+  dev_Cell_Female_num_children[cell_id] = 0;
+  dev_Cell_Female_max_children[cell_id] = max_children;
 
   __threadfence();
-
 
   dev_Cell_Agent_type[cell_id] = kClassFemale;
 }
@@ -414,6 +419,9 @@ __device__ void Male_mate(int cell_id) {
     assert(dev_Cell_Male_female_request[cell_id] != kNullptr);
     assert(dev_Cell_Agent_cell_request[cell_id] != kNullptr);
 
+    // Register birth.
+    ++dev_Cell_Female_num_children[dev_Cell_Male_female_request[cell_id]];
+
     // Take sugar from endowment.
     int c_endowment = (dev_Cell_Agent_endowment[cell_id]
         + dev_Cell_Agent_endowment[dev_Cell_Male_female_request[cell_id]]) / 2;
@@ -428,7 +436,8 @@ __device__ void Male_mate(int cell_id) {
         + dev_Cell_Agent_max_age[dev_Cell_Male_female_request[cell_id]]) / 2;
     int c_metabolism = (dev_Cell_Agent_metabolism[cell_id]
         + dev_Cell_Agent_metabolism[dev_Cell_Male_female_request[cell_id]]) / 2;
-
+    int c_max_children =
+        dev_Cell_Female_max_children[dev_Cell_Male_female_request[cell_id]];
 
     // Create agent.
     assert(dev_Cell_Agent_cell_request[cell_id] != kNullptr);
@@ -439,7 +448,8 @@ __device__ void Male_mate(int cell_id) {
                c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
     } else {
       new_Female(dev_Cell_Agent_cell_request[cell_id],
-                 c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
+                 c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism,
+                 c_max_children);
     }
 
     // No Cell::enter necessary.
@@ -453,33 +463,36 @@ __device__ void Male_mate(int cell_id) {
 
 
 __device__ void Female_decide_proposal(int cell_id) {
-  int selected_agent = kNullptr;
-  int selected_sugar = -1;
-  int this_x = cell_id % kSize;
-  int this_y = cell_id / kSize;
+  if (dev_Cell_Female_num_children[cell_id]
+      < dev_Cell_Female_max_children[cell_id]) {
+    int selected_agent = kNullptr;
+    int selected_sugar = -1;
+    int this_x = cell_id % kSize;
+    int this_y = cell_id / kSize;
 
-  for (int dx = -kMaxVision; dx < kMaxVision + 1; ++dx) {
-    for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
-      int nx = this_x + dx;
-      int ny = this_y + dy;
-      if (nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
-        int n_id = nx + ny*kSize;
+    for (int dx = -kMaxVision; dx < kMaxVision + 1; ++dx) {
+      for (int dy = -kMaxVision; dy < kMaxVision + 1; ++dy) {
+        int nx = this_x + dx;
+        int ny = this_y + dy;
+        if (nx >= 0 && nx < kSize && ny >= 0 && ny < kSize) {
+          int n_id = nx + ny*kSize;
 
-        if (dev_Cell_Agent_type[n_id] == kClassMale) {
-          if (dev_Cell_Male_female_request[n_id] == cell_id
-              && dev_Cell_Agent_sugar[n_id] > selected_sugar) {
-            selected_agent = n_id;
-            selected_sugar = dev_Cell_Agent_sugar[n_id];
+          if (dev_Cell_Agent_type[n_id] == kClassMale) {
+            if (dev_Cell_Male_female_request[n_id] == cell_id
+                && dev_Cell_Agent_sugar[n_id] > selected_sugar) {
+              selected_agent = n_id;
+              selected_sugar = dev_Cell_Agent_sugar[n_id];
+            }
           }
         }
       }
     }
-  }
 
-  assert((selected_sugar == -1) == (selected_agent == kNullptr));
+    assert((selected_sugar == -1) == (selected_agent == kNullptr));
 
-  if (selected_agent != kNullptr) {
-    dev_Cell_Male_proposal_accepted[selected_agent] = true;
+    if (selected_agent != kNullptr) {
+      dev_Cell_Male_proposal_accepted[selected_agent] = true;
+    }
   }
 }
 
@@ -658,13 +671,15 @@ __global__ void create_agents() {
                       + Cell_random_int(i, 0, kMaxEndowment*3/4);
     int c_metabolism = kMaxMetabolism/3
                        + Cell_random_int(i, 0, kMaxMetabolism*2/3);
+    int c_max_children = Cell_random_int(i, 2, 4);
 
     if (r < kProbMale) {
       // Create male agent.
       new_Male(i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
     } else if (r < kProbMale + kProbFemale) {
       // Create female agent.
-      new_Female(i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
+      new_Female(i, c_vision, /*age=*/ 0, c_max_age, c_endowment,
+                 c_metabolism, c_max_children);
     }   // else: Do not create agent.
   }
 }
@@ -772,6 +787,16 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMalloc(&host_Cell_Agent_permission, sizeof(bool)*kSize*kSize);
   cudaMemcpyToSymbol(dev_Cell_Agent_permission, &host_Cell_Agent_permission,
                      sizeof(bool*), 0, cudaMemcpyHostToDevice);
+
+  int* host_Cell_female_num_children;
+  cudaMalloc(&host_Cell_female_num_children, sizeof(int)*kSize*kSize);
+  cudaMemcpyToSymbol(dev_Cell_Female_num_children, &host_Cell_female_num_children,
+                     sizeof(int*), 0, cudaMemcpyHostToDevice);
+
+  int* host_Cell_female_max_children;
+  cudaMalloc(&host_Cell_female_max_children, sizeof(int)*kSize*kSize);
+  cudaMemcpyToSymbol(dev_Cell_Female_max_children, &host_Cell_female_max_children,
+                     sizeof(int*), 0, cudaMemcpyHostToDevice);
 
   int* host_Cell_Male_female_request;
   cudaMalloc(&host_Cell_Male_female_request, sizeof(int)*kSize*kSize);
