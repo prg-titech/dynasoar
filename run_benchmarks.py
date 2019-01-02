@@ -30,7 +30,7 @@ with open('benchmark_results.csv', 'a') as file:
   for binary, arg, bench_name, bench_type in benchmarks:
     time = []
     for r in range(NUM_RUNS):
-      output = subprocess.check_output([binary, arg])
+      output = subprocess.check_output(["bin/" + binary, arg])
       time.append(int(output))
 
     time.sort()
