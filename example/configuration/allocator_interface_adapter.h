@@ -6,7 +6,7 @@
 
 #include "allocator/tuple_helper.h"
 
-static const size_t kMallocHeapSize = 4U*1024*1024*1024;
+static const size_t kMallocHeapSize = 8ULL*1024*1024*1024;
 
 
 // Defined by custom allocator.
@@ -170,6 +170,7 @@ class SoaAllocator {
     T* result = external_allocator_make_new<T>(args...);
     result->set_type(TYPE_INDEX(Types..., T));
     auto pos = atomicAdd(&num_objects_[TYPE_INDEX(Types..., T)], 1);
+    assert(pos < kMaxObjects);
     objects_[TYPE_INDEX(Types..., T)][pos] = result;
     return result;
   }
@@ -325,7 +326,10 @@ class SoaAllocator {
 
   static const int kCudaBlockSize = 256;
   static const int kNumTypes = sizeof...(Types);
-  static const int kMaxObjects = N_Objects;
+
+  // We are using too much memory for aux. data structures.
+  // TODO: Find a better way.
+  static const int kMaxObjects = N_Objects/2;
   static const unsigned int kInvalidObject =
       std::numeric_limits<unsigned int>::max();
 
@@ -355,6 +359,15 @@ template<typename AllocatorT>
 class AllocatorHandle {
  public:
   AllocatorHandle() {
+    static_assert(sizeof(size_t) == 8, "Expected 64 bit system");
+    cudaDeviceSetLimit(cudaLimitMallocHeapSize, kMallocHeapSize);
+
+#ifndef NDEBUG
+    size_t heap_size;
+    cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
+    assert(heap_size >= kMallocHeapSize);
+#endif  // NDEBUG
+
     initialize_custom_allocator();
     size_t allocated_bytes = 0;
 
@@ -362,12 +375,13 @@ class AllocatorHandle {
     assert(allocator_ != nullptr);
     allocated_bytes += sizeof(AllocatorT);
 
+#ifndef NDEBUG
+    printf("Max. #objects: %lu\n", (long unsigned int) kMaxObjects);
+#endif  // NDEBUG
+
     for (int i = 0; i < kNumTypes; ++i) {
-      gpuErrchk(cudaMalloc(&dev_ptr_objects_[i], sizeof(void*)*kMaxObjects));
-      assert(dev_ptr_objects_[i] != nullptr);
-      gpuErrchk(cudaMalloc(&dev_ptr_new_objects_[i],
-                           sizeof(void*)*kMaxObjects));
-      assert(dev_ptr_new_objects_[i] != nullptr);
+      cudaMalloc(&dev_ptr_objects_[i], sizeof(void*)*kMaxObjects);
+      cudaMalloc(&dev_ptr_new_objects_[i], sizeof(void*)*kMaxObjects);
       allocated_bytes += 2*sizeof(void*)*kMaxObjects;
     }
 
@@ -375,12 +389,18 @@ class AllocatorHandle {
                sizeof(void**)*kNumTypes, cudaMemcpyHostToDevice);
     cudaMemcpy(allocator_->new_objects_, dev_ptr_new_objects_,
                sizeof(void**)*kNumTypes, cudaMemcpyHostToDevice);
-    gpuErrchk(cudaDeviceSynchronize());
 
 #ifndef NDEBUG
-    printf("Allocated bytes for do-all helper: %f MB\n",
+    printf("Trying to allocate for do-all helper: %f MB\n",
            allocated_bytes / 1024.0f / 1024.0f);
-#endif
+#endif  // NDEBUG
+
+    gpuErrchk(cudaDeviceSynchronize());
+
+    for (int i = 0; i < kNumTypes; ++i) {
+      assert(dev_ptr_objects_[i] != nullptr);
+      assert(dev_ptr_new_objects_[i] != nullptr);
+    }
   }
 
   ~AllocatorHandle() {

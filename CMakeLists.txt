@@ -22,7 +22,8 @@ set(CMAKE_CXX_FLAGS_RELEASE  "-O3 -DNDEBUG")
 include_directories(lib/cub)
 
 # Choose an allocator.
-# include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc/mallocMC ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc)
+#include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc/mallocMC ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc)
+
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/soa_alloc)
 
 add_subdirectory(example)

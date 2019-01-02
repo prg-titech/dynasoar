@@ -10,7 +10,7 @@ __device__ ScatterAllocator::DevAllocator* external_device_handle;
 
 
 void initialize_custom_allocator() {
-  external_host_handle = new ScatterAllocator(kMallocHeapSize);
+  external_host_handle = new ScatterAllocator(3ULL*kMallocHeapSize/4);
   auto* dev_allocator = external_host_handle->getAllocatorHandle().devAllocator;
 
   cudaMemcpyToSymbol(external_device_handle, &dev_allocator, 
