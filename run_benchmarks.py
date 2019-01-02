@@ -32,11 +32,12 @@ with open('benchmark_results.csv', 'a') as file:
     for r in range(NUM_RUNS):
       output = subprocess.check_output(["bin/" + binary, arg])
       time.append(int(output))
+      print(int(output))
 
     time.sort()
 
     # Take the median
-    line = bench_name + "," + bench_type + "," + str(time[NUM_RUNS / 2]) + "\n"
+    line = bench_name + "," + bench_type + "," + str(time[int(NUM_RUNS / 2)]) + "\n"
     file.write(line)
     
     print(line)
