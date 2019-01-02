@@ -36,7 +36,7 @@ with open('benchmark_results.csv', 'a') as file:
     time.sort()
 
     # Take the median
-    line = bench_name + "," + bench_type + "," + str(time[NUM_RUNS / 2]) "\n"
+    line = bench_name + "," + bench_type + "," + str(time[NUM_RUNS / 2]) + "\n"
     file.write(line)
     
     print(line)
