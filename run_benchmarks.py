@@ -5,29 +5,29 @@ import subprocess
 NUM_RUNS = 5
 
 benchmarks = [
-  ("collision_baseline_aos", ""),
-  ("collision_baseline_soa", ""),
-  ("collision_soa", ""),
-  ("gol_baseline_aos", "~/Downloads/utm.pgm"),
-  ("gol_baseline_soa", "~/Downloads/utm.pgm"),
-  ("gol_soa_no_cell", "~/Downloads/utm.pgm"),
-  ("nbody_baseline_aos", ""),
-  ("nbody_baseline_soa", ""),
-  ("nbody_soa", ""),
-  ("structure_baseline_aos", ""),
-  ("structure_baseline_soa", ""),
-  ("structure_soa", ""),
-  ("sugarscape_baseline_aos", ""),
-  ("sugarscape_baseline_soa", ""),
-  ("sugarscape_no_cell", ""),
-  ("traffic_baseline_aos", ""),
-  ("traffic_baseline_soa", ""),
-  ("traffic_soa", "")
+  ("collision_baseline_aos", "", "collision", "baseline_aos"),
+  ("collision_baseline_soa", "", "collision", "baseline_soa"),
+  ("collision_soa", "", , "collision", "soaalloc"),
+  ("gol_baseline_aos", "~/Downloads/utm.pgm", "gol", "baseline_aos"),
+  ("gol_baseline_soa", "~/Downloads/utm.pgm", "gol", "baseline_soa"),
+  ("gol_soa_no_cell", "~/Downloads/utm.pgm", "gol", "soaalloc"),
+  ("nbody_baseline_aos", "", "nbody", "baseline_aos"),
+  ("nbody_baseline_soa", "", "nbody", "baseline_soa"),
+  ("nbody_soa", "", "nbody", "soaalloc"),
+  ("structure_baseline_aos", "", "structure", "baseline_aos"),
+  ("structure_baseline_soa", "", "structure", "baseline_soa"),
+  ("structure_soa", "", "structure", "soaalloc"),
+  ("sugarscape_baseline_aos", "", "sugarscape", "baseline_aos"),
+  ("sugarscape_baseline_soa", "", "sugarscape", "baseline_soa"),
+  ("sugarscape_no_cell", "", "sugarscape", "soaalloc"),
+  ("traffic_baseline_aos", "", "traffic", "baseline_aos"),
+  ("traffic_baseline_soa", "", "traffic", "baseline_soa"),
+  ("traffic_soa", "", "traffic", "soaalloc")
 ]
 
 
 with open('benchmark_results.csv', 'a') as file:
-  for binary, arg in benchmarks:
+  for binary, arg, bench_name, bench_type in benchmarks:
     time = []
     for r in xrange(NUM_RUNS):
       output = subprocess.check_output([binary, arg])
@@ -35,8 +35,9 @@ with open('benchmark_results.csv', 'a') as file:
 
     time.sort()
 
-    file.write(binary)
+    file.write(bench_name)
     file.write(",")
-    file.write(str(time[NUM_RUNS / 2]))
+    file.write(bench_type)
+    file.write(",")
+    file.write(str(time[NUM_RUNS / 2]))   # Take the median
     file.write("\n")
-
