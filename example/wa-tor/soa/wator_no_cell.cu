@@ -2,24 +2,89 @@
 #include <stdio.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <limits>
 
 #include "configuration.h"
 #include "wator_no_cell.h"
 
+
+static const int kNumBlockSize = 256;
+static const int kNullptr = std::numeric_limits<IndexT>::max();
 
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
 __device__ curandState_t* dev_Cell_random_state;
-__device__ Agent* dev_Cell_agent;
+__device__ Agent** dev_Cell_agent;
 __device__ DeviceArray<bool, 5>* dev_Cell_neighbor_request;
 
 
-__device__ new_Cell(IndexT cell_id) {
+__device__ void Cell_prepare(IndexT cell_id) {
+  for (int i = 0; i < 5; ++i) {
+    dev_Cell_neighbor_request[cell_id][i] = false;
+  }
+}
+
+__device__ IndexT Cell_neighbor(IndexT cell_id, uint8_t nid) {
+  int x, y;
+  int self_x = cell_id % kSizeX;
+  int self_y = cell_id / kSizeX;
+
+  if (nid == 0) {
+    // left
+    x = self_x == 0 ? kSizeX - 1 : self_x - 1;
+    y = self_y;
+  } else if (nid == 1) {
+    // top
+    x = self_x;
+    y = self_y == 0 ? kSizeY - 1 : self_y - 1;
+  } else if (nid == 2) {
+    // right
+    x = self_x == kSizeX - 1 ? 0 : self_x + 1;
+    y = self_y;
+  } else if (nid == 3) {
+    // bottom
+    x = self_x;
+    y = self_y == kSizeY - 1 ? 0 : self_y + 1;
+  } else {
+    assert(false);
+  }
+
+  return y*kSizeX + x;
+}
+
+__device__ void new_Cell(IndexT cell_id) {
   dev_Cell_agent[cell_id] = nullptr;
   curand_init(kSeed, cell_id, 0, &dev_Cell_random_state[cell_id]);
   Cell_prepare(cell_id);
+}
+
+template<bool(*predicate)(IndexT)>
+__device__ bool Cell_request_random_neighbor(
+    IndexT cell_id, curandState_t& random_state) {
+  uint8_t candidates[4];
+  uint8_t num_candidates = 0;
+
+  for (int i = 0; i < 4; ++i) {
+    if (predicate(Cell_neighbor(cell_id, i))) {
+      candidates[num_candidates++] = i;
+    }
+  }
+
+  if (num_candidates == 0) {
+    return false;
+  } else {
+    uint32_t selected_index = curand(&random_state) % num_candidates;
+    uint8_t selected = candidates[selected_index];
+    uint8_t neighbor_index = (selected + 2) % 4;
+    dev_Cell_neighbor_request[Cell_neighbor(cell_id, selected)][neighbor_index] = true;
+
+    // Check correctness of neighbor calculation.
+    assert(Cell_neighbor(Cell_neighbor(cell_id, selected), neighbor_index) == cell_id);
+
+    return true;
+  }
 }
 
 __device__ void Cell_decide(IndexT cell_id) {
@@ -52,6 +117,12 @@ __device__ void Cell_enter(IndexT cell_id, Agent* agent) {
   agent->set_position(cell_id);
 }
 
+__device__ void Cell_kill(IndexT cell_id) {
+  assert(dev_Cell_agent[cell_id] != nullptr);
+  device_allocator->free<Agent>(dev_Cell_agent[cell_id]);
+  dev_Cell_agent[cell_id] = nullptr;
+}
+
 __device__ bool Cell_has_fish(IndexT cell_id) {
   return dev_Cell_agent[cell_id]->cast<Fish>() != nullptr;
 }
@@ -67,12 +138,6 @@ __device__ bool Cell_is_free(IndexT cell_id) {
 __device__ void Cell_leave(IndexT cell_id) {
   assert(dev_Cell_agent[cell_id] != nullptr);
   dev_Cell_agent[cell_id] = nullptr;
-}
-
-__device__ void Cell_prepare(IndexT cell_id) {
-  for (int i = 0; i < 5; ++i) {
-    dev_Cell_neighbor_request[cell_id][i] = false;
-  }
 }
 
 __device__ void Cell_request_random_fish_neighbor(IndexT cell_id) {
@@ -93,55 +158,20 @@ __device__ void Cell_request_random_free_neighbor(IndexT cell_id) {
   }
 }
 
-template<bool(*predicate)(IndexT)>
-__device__ bool Cell_request_random_neighbor(
-    IndexT cell_id, curandState_t& random_state) {
-  uint8_t candidates[4];
-  uint8_t num_candidates = 0;
-
-  for (int i = 0; i < 4; ++i) {
-    if (predicate(Cell_neighbor(cell_id, i))) {
-      candidates[num_candidates++] = i;
-    }
-  }
-
-  if (num_candidates == 0) {
-    return false;
-  } else {
-    uint32_t selected_index = curand(&random_state) % num_candidates;
-    uint8_t selected = candidates[selected_index];
-    uint8_t neighbor_index = (selected + 2) % 4;
-    neighbors_[selected]->neighbor_request_[neighbor_index] = true;
-
-    // Check correctness of neighbor calculation.
-    assert(neighbors_[selected]->neighbors_[neighbor_index] == this);
-
-    return true;
-  }
-}
-
-__device__ void Cell::set_neighbors(Cell* left, Cell* top,
-                                    Cell* right, Cell* bottom) {
-  neighbors_[0] = left;
-  neighbors_[1] = top;
-  neighbors_[2] = right;
-  neighbors_[3] = bottom;
-}
-
 __device__ Agent::Agent(int seed) { curand_init(seed, 0, 0, &random_state_); }
 
 __device__ curandState_t& Agent::random_state() { return random_state_; }
 
-__device__ void Agent::set_new_position(Cell* new_pos) {
+__device__ void Agent::set_new_position(IndexT new_pos) {
   // Check for race condition. (This is not bullet proof.)
   assert(new_position_ == position_);
 
   new_position_ = new_pos;
 }
 
-__device__ Cell* Agent::position() const { return position_; }
+__device__ IndexT Agent::position() const { return position_; }
 
-__device__ void Agent::set_position(Cell* cell) { position_ = cell; }
+__device__ void Agent::set_position(IndexT cell) { position_ = cell; }
 
 __device__ Fish::Fish(int seed)
     : Agent(seed), egg_timer_(seed % kSpawnThreshold) {}
@@ -151,21 +181,21 @@ __device__ void Fish::prepare() {
   // Fallback: Stay on current cell.
   new_position_ = position_;
 
-  assert(position_ != nullptr);
-  position_->request_random_free_neighbor();
+  assert(position_ != kNullptr);
+  Cell_request_random_free_neighbor(position_);
 }
 
 __device__ void Fish::update() {
-  Cell* old_position = position_;
+  IndexT old_position = position_;
 
   if (old_position != new_position_) {
-    old_position->leave();
-    new_position_->enter(this);
+    Cell_leave(old_position);
+    Cell_enter(new_position_, this);
 
     if (kOptionFishSpawn && egg_timer_ > kSpawnThreshold) {
       auto* new_fish = device_allocator->make_new<Fish>(curand(&random_state_));
       assert(new_fish != nullptr);
-      old_position->enter(new_fish);
+      Cell_enter(old_position, new_fish);
       egg_timer_ = (uint32_t) 0;
     }
   }
@@ -179,58 +209,51 @@ __device__ void Shark::prepare() {
   egg_timer_++;
   energy_--;
 
-  assert(position_ != nullptr);
+  assert(position_ != kNullptr);
   if (kOptionSharkDie && energy_ == 0) {
     // Do nothing. Shark will die.
   } else {
     // Fallback: Stay on current cell.
     new_position_ = position_;
-    position_->request_random_fish_neighbor();
+    Cell_request_random_fish_neighbor(position_);
   }
 }
 
 __device__ void Shark::update() {
   if (kOptionSharkDie && energy_ == 0) {
-    position_->kill();
+    Cell_kill(position_);
   } else {
-    Cell* old_position = position_;
+    IndexT old_position = position_;
 
     if (old_position != new_position_) {
-      if (new_position_->has_fish()) {
+      if (Cell_has_fish(new_position_)) {
         energy_ += kEngeryBoost;
-        new_position_->kill();
+        Cell_kill(new_position_);
       }
 
-      old_position->leave();
-      new_position_->enter(this);
+      Cell_leave(old_position);
+      Cell_enter(new_position_, this);
 
       if (kOptionSharkSpawn && egg_timer_ > kSpawnThreshold) {
         auto* new_shark =
             device_allocator->make_new<Shark>(curand(&random_state_));
         assert(new_shark != nullptr);
-        old_position->enter(new_shark);
+        Cell_enter(old_position, new_shark);
         egg_timer_ = 0;
       }
     }
   }
 }
 
-__device__ void Cell::kill() {
-  assert(agent_ != nullptr);
-  device_allocator->free<Agent>(agent_);
-  agent_ = nullptr;
-}
-
 
 // ----- KERNELS -----
 
-__device__ Cell* cells[kSizeX * kSizeY];
 __device__ int d_checksum;
 
-__device__ void Cell::add_to_checksum() {
-  if (has_fish()) {
+__device__ void Cell_add_to_checksum(IndexT cell_id) {
+  if (Cell_has_fish(cell_id)) {
     atomicAdd(&d_checksum, 3);
-  } else if (has_shark()) {
+  } else if (Cell_has_shark(cell_id)) {
     atomicAdd(&d_checksum, 7);
   }
 }
@@ -242,44 +265,48 @@ __global__ void reset_checksum() {
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
-    Cell* new_cell = device_allocator->make_new<Cell>(i);
-    assert(new_cell != nullptr);
-    cells[i] = new_cell;
+    new_Cell(i);
   }
 }
 
 __global__ void setup_cells() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
-    int x = i % kSizeX;
-    int y = i / kSizeX;
-
-    Cell* left = x > 0 ? cells[y*kSizeX + x - 1]
-                       : cells[y*kSizeX + kSizeX - 1];
-    Cell* right = x < kSizeX - 1 ? cells[y*kSizeX + x + 1]
-                                      : cells[y*kSizeX];
-    Cell* top = y > 0 ? cells[(y - 1)*kSizeX + x]
-                      : cells[(kSizeY - 1)*kSizeX + x];
-    Cell* bottom = y < kSizeY - 1 ? cells[(y + 1)*kSizeX + x]
-                                       : cells[x];
-
-    // left, top, right, bottom
-    cells[i]->set_neighbors(left, top, right, bottom);
-
     // Initialize with random agent.
-    auto& rand_state = cells[i]->random_state();
+    auto& rand_state = dev_Cell_random_state[i];
     uint32_t agent_type = curand(&rand_state) % 4;
     if (agent_type == 0) {
       auto* agent = device_allocator->make_new<Fish>(curand(&rand_state));
       assert(agent != nullptr);
-      cells[i]->enter(agent);
+      Cell_enter(i, agent);
     } else if (agent_type == 1) {
       auto* agent = device_allocator->make_new<Shark>(curand(&rand_state));
       assert(agent != nullptr);
-      cells[i]->enter(agent);
+      Cell_enter(i, agent);
     } else {
       // Free cell.
     }
+  }
+}
+
+__global__ void kernel_Cell_add_to_checksum() {
+  for (int i = threadIdx.x + blockDim.x*blockIdx.x;
+       i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
+    Cell_add_to_checksum(i);
+  }
+}
+
+__global__ void kernel_Cell_prepare() {
+  for (int i = threadIdx.x + blockDim.x*blockIdx.x;
+       i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
+    Cell_prepare(i);
+  }
+}
+
+__global__ void kernel_Cell_decide() {
+  for (int i = threadIdx.x + blockDim.x*blockIdx.x;
+       i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
+    Cell_decide(i);
   }
 }
 
@@ -302,15 +329,33 @@ void defrag() {
 
 void step() {
   // --- FISH ---
-  allocator_handle->parallel_do<Cell, &Cell::prepare>();
+  kernel_Cell_prepare<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   allocator_handle->parallel_do<Fish, &Fish::prepare>();
-  allocator_handle->parallel_do<Cell, &Cell::decide>();
+
+  kernel_Cell_decide<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   allocator_handle->parallel_do<Fish, &Fish::update>();
 
   // --- SHARKS ---
-  allocator_handle->parallel_do<Cell, &Cell::prepare>();
+  kernel_Cell_prepare<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   allocator_handle->parallel_do<Shark, &Shark::prepare>();
-  allocator_handle->parallel_do<Cell, &Cell::decide>();
+
+  kernel_Cell_decide<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   allocator_handle->parallel_do<Shark, &Shark::update>();
 }
 
@@ -320,6 +365,23 @@ void initialize() {
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
+
+  curandState_t* h_Cell_random_state;
+  cudaMalloc(&h_Cell_random_state, sizeof(curandState_t)*kSizeX*kSizeY);
+  cudaMemcpyToSymbol(dev_Cell_random_state, &h_Cell_random_state,
+                     sizeof(curandState_t*), 0, cudaMemcpyHostToDevice);
+
+  Agent** h_Cell_agent;
+  cudaMalloc(&h_Cell_agent, sizeof(Agent*)*kSizeX*kSizeY);
+  cudaMemcpyToSymbol(dev_Cell_agent, &h_Cell_agent,
+                     sizeof(Agent**), 0, cudaMemcpyHostToDevice);
+
+  DeviceArray<bool, 5>* h_Cell_neighbor_request;
+  cudaMalloc(&h_Cell_neighbor_request, sizeof(DeviceArray<bool, 5>)*kSizeX*kSizeY);
+  cudaMemcpyToSymbol(dev_Cell_neighbor_request, &h_Cell_neighbor_request,
+                     sizeof(DeviceArray<bool, 5>*), 0, cudaMemcpyHostToDevice);
+
+  gpuErrchk(cudaDeviceSynchronize());
 
   create_cells<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -334,8 +396,8 @@ __global__ void fill_gui_map() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
   if (tid < kSizeY*kSizeX) {
-    if (cells[tid]->agent() != nullptr) {
-      d_gui_map[tid] = cells[tid]->agent()->get_type();
+    if (dev_Cell_agent[tid] != nullptr) {
+      d_gui_map[tid] = dev_Cell_agent[tid]->get_type();
     } else {
       d_gui_map[tid] = 0;
     }
@@ -356,7 +418,10 @@ void print_stats() {
   reset_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  allocator_handle->parallel_do<Cell, &Cell::add_to_checksum>();
+  kernel_Cell_add_to_checksum<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());;
 
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
