@@ -4,93 +4,103 @@
 #include <inttypes.h>
 
 #include "configuration.h"
-#include "wator.h"
+#include "wator_no_cell.h"
 
 
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
+__device__ curandState_t* dev_Cell_random_state;
+__device__ Agent* dev_Cell_agent;
+__device__ DeviceArray<bool, 5>* dev_Cell_neighbor_request;
 
-__device__ Cell::Cell(int cell_id) : agent_(nullptr) {
-  curand_init(kSeed, cell_id, 0, &random_state_);
-  prepare();
+
+__device__ new_Cell(IndexT cell_id) {
+  dev_Cell_agent[cell_id] = nullptr;
+  curand_init(kSeed, cell_id, 0, &dev_Cell_random_state[cell_id]);
+  Cell_prepare(cell_id);
 }
 
-__device__ Agent* Cell::agent() const { return agent_; }
-
-__device__ void Cell::decide() {
-  if (neighbor_request_[4]) {
+__device__ void Cell_decide(IndexT cell_id) {
+  if (dev_Cell_neighbor_request[cell_id][4]) {
     // This cell has priority.
-    agent_->set_new_position(this);
+    dev_Cell_agent[cell_id]->set_new_position(cell_id);
   } else {
     uint8_t candidates[4];
     uint8_t num_candidates = 0;
 
     for (int i = 0; i < 4; ++i) {
-      if (neighbor_request_[i]) {
+      if (dev_Cell_neighbor_request[cell_id][i]) {
         candidates[num_candidates++] = i;
       }
     }
 
     if (num_candidates > 0) {
-      uint32_t selected_index = curand(&random_state_) % num_candidates;
-      neighbors_[candidates[selected_index]]->agent()->set_new_position(this);
+      uint32_t selected_index = curand(&dev_Cell_random_state[cell_id]) % num_candidates;
+      dev_Cell_agent[Cell_neighbor(cell_id, candidates[selected_index])]
+          ->set_new_position(cell_id);
     }
   }
 }
 
-__device__ void Cell::enter(Agent* agent) {
-  assert(agent_ == nullptr);
+__device__ void Cell_enter(IndexT cell_id, Agent* agent) {
+  assert(dev_Cell_agent[cell_id] == nullptr);
   assert(agent != nullptr);
 
-  agent_ = agent;
-  agent->set_position(this);
+  dev_Cell_agent[cell_id] = agent;
+  agent->set_position(cell_id);
 }
 
-__device__ bool Cell::has_fish() const {
-  return agent_->cast<Fish>() != nullptr;
+__device__ bool Cell_has_fish(IndexT cell_id) {
+  return dev_Cell_agent[cell_id]->cast<Fish>() != nullptr;
 }
 
-__device__ bool Cell::has_shark() const {
-  return agent_->cast<Shark>() != nullptr;
+__device__ bool Cell_has_shark(IndexT cell_id) {
+  return dev_Cell_agent[cell_id]->cast<Shark>() != nullptr;
 }
 
-__device__ bool Cell::is_free() const { return agent_ == nullptr; }
-
-__device__ void Cell::leave() {
-  assert(agent_ != nullptr);
-  agent_ = nullptr;
+__device__ bool Cell_is_free(IndexT cell_id) {
+  return dev_Cell_agent[cell_id] == nullptr;
 }
 
-__device__ void Cell::prepare() {
-  for (int i = 0; i < 5; ++i) { neighbor_request_[i] = false; }
+__device__ void Cell_leave(IndexT cell_id) {
+  assert(dev_Cell_agent[cell_id] != nullptr);
+  dev_Cell_agent[cell_id] = nullptr;
 }
 
-__device__ curandState_t& Cell::random_state() { return random_state_; }
+__device__ void Cell_prepare(IndexT cell_id) {
+  for (int i = 0; i < 5; ++i) {
+    dev_Cell_neighbor_request[cell_id][i] = false;
+  }
+}
 
-__device__ void Cell::request_random_fish_neighbor() {
-  if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
+__device__ void Cell_request_random_fish_neighbor(IndexT cell_id) {
+  if (!Cell_request_random_neighbor<&Cell_has_fish>(
+      cell_id, dev_Cell_agent[cell_id]->random_state())) {
     // No fish found. Look for free cell.
-    if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-      neighbor_request_[4] = true;
+    if (!Cell_request_random_neighbor<&Cell_is_free>(
+        cell_id, dev_Cell_agent[cell_id]->random_state())) {
+      dev_Cell_neighbor_request[cell_id][4] = true;
     }
   }
 }
 
-__device__ void Cell::request_random_free_neighbor() {
-  if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
-    neighbor_request_[4] = true;
+__device__ void Cell_request_random_free_neighbor(IndexT cell_id) {
+  if (!Cell_request_random_neighbor<&Cell_is_free>(
+      cell_id, dev_Cell_agent[cell_id]->random_state())) {
+    dev_Cell_neighbor_request[cell_id][4] = true;
   }
 }
 
-template<bool(Cell::*predicate)() const>
-__device__ bool Cell::request_random_neighbor(curandState_t& random_state) {
+template<bool(*predicate)(IndexT)>
+__device__ bool Cell_request_random_neighbor(
+    IndexT cell_id, curandState_t& random_state) {
   uint8_t candidates[4];
   uint8_t num_candidates = 0;
 
   for (int i = 0; i < 4; ++i) {
-    if ((neighbors_[i]->*predicate)()) {
+    if (predicate(Cell_neighbor(cell_id, i))) {
       candidates[num_candidates++] = i;
     }
   }
