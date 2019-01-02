@@ -2,12 +2,15 @@
 #define EXAMPLE_CONFIGURATION_CUDA_ALLOCATOR_H
 
 #include <assert.h>
+#include <chrono>
 #include <cub/cub.cuh>
 
 #include "allocator/tuple_helper.h"
 
 static const size_t kMallocHeapSize = 8ULL*1024*1024*1024;
 
+// For benchmarks: Measure time spent outside of parallel sections.
+long unsigned int bench_prefix_sum_time = 0;
 
 // Defined by custom allocator.
 void initialize_custom_allocator();
@@ -89,6 +92,10 @@ class SoaAllocator {
   // Zero-initialization of arrays can take a long time.
   __DEV__ SoaAllocator() = delete;
 
+  void DBG_print_benchmark_details() {
+    printf("%lu\n", bench_prefix_sum_time);
+  }
+
   template<typename T>
   struct TypeId {
     static const uint8_t value = TYPE_INDEX(Types..., T);
@@ -107,6 +114,8 @@ class SoaAllocator {
     unsigned int num_objects = this->template num_objects<T>();
 
     if (num_objects > 0) {
+      auto time_start = std::chrono::system_clock::now();
+
       kernel_init_stream_compaction<ThisAllocator, T><<<128, 128>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
       // Run prefix sum algorithm.
@@ -129,6 +138,12 @@ class SoaAllocator {
       gpuErrchk(cudaDeviceSynchronize());
 
       num_objects = this->template num_objects<T>();
+
+      auto time_end = std::chrono::system_clock::now();
+      auto elapsed = time_end - time_start;
+      auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+          .count();
+      bench_prefix_sum_time += millis;
 
       kernel_parallel_do_single_type<ThisAllocator, T, BaseClass, func><<<
           (num_objects + kCudaBlockSize - 1)/kCudaBlockSize,
