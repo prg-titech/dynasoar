@@ -7,7 +7,7 @@ NUM_RUNS = 5
 benchmarks = [
   ("collision_baseline_aos", "", "collision", "baseline_aos"),
   ("collision_baseline_soa", "", "collision", "baseline_soa"),
-  ("collision_soa", "", , "collision", "soaalloc"),
+  ("collision_soa", "", "collision", "soaalloc"),
   ("gol_baseline_aos", "~/Downloads/utm.pgm", "gol", "baseline_aos"),
   ("gol_baseline_soa", "~/Downloads/utm.pgm", "gol", "baseline_soa"),
   ("gol_soa_no_cell", "~/Downloads/utm.pgm", "gol", "soaalloc"),
