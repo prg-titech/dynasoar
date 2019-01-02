@@ -4,9 +4,6 @@
 #include "../allocator_interface_adapter.h"
 
 
-static const size_t kMallocHeapSize = 3*1024U*1024*1024;
-
-
 void initialize_custom_allocator() {
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, kMallocHeapSize);
 

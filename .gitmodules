@@ -1,3 +1,6 @@
 [submodule "lib/cub"]
 	path = lib/cub
 	url = https://github.com/NVlabs/cub.git
+[submodule "example/configuration/mallocmc/mallocMC"]
+	path = example/configuration/mallocmc/mallocMC
+	url = https://github.com/ComputationalRadiationPhysics/mallocMC.git
