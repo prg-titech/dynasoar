@@ -52,3 +52,5 @@ compile_commands.json
 CTestTestfile.cmake
 bin/
 *.pc
+
+benchmark_results.csv

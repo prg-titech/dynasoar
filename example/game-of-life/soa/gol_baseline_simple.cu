@@ -91,13 +91,14 @@ void transfer_dataset() {
   cudaMalloc(&dev_cell_ids, sizeof(int)*dataset.num_alive);
   cudaMemcpy(dev_cell_ids, dataset.alive_cells, sizeof(int)*dataset.num_alive,
              cudaMemcpyHostToDevice);
-
+#ifndef NDEBUG
   printf("Loading on GPU: %i alive cells.\n", dataset.num_alive);
+#endif  // NDEBUG
+
   load_game<<<128, 128>>>(dev_cell_ids, dataset.num_alive,
                           host_cells, host_next_cells);
   gpuErrchk(cudaDeviceSynchronize());
   cudaFree(dev_cell_ids);
-  printf("Done.\n");
 }
 
 
@@ -186,13 +187,15 @@ int main(int argc, char** argv) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-  printf("Time: %lu ms\n", millis);
+#ifndef NDEBUG
+  printf("Checksum: %i\n", checksum());
+#endif  // NDEBUG
+
+  printf("%lu\n", millis);
 
   if (kOptionRender) {
     close_renderer();
   }
-
-  printf("Checksum: %i\n", checksum());
 
   // Free device memory.
   cudaFree(host_cells);

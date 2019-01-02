@@ -330,8 +330,11 @@ int main(int /*argc*/, char** /*argv*/) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-  printf("Time: %lu ms\n", millis);
+  printf("%lu\n", millis);
+
+#ifndef NDEBUG
   printf("Checksum: %f\n", checksum());
+#endif  // NDEBUG
 
   if (kOptionRender) {
     close_renderer();

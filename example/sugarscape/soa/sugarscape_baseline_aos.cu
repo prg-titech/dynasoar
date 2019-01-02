@@ -759,9 +759,13 @@ int main(int /*argc*/, char** /*argv*/) {
   auto elapsed = time_end - time_start;
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
-  printf("Time: %lu ms\n", millis);
 
+#ifndef NDEBUG
   printf("Checksum: %i\n", checksum(host_Cell_sugar, host_Cell_Agent_type));
+#endif  // NDEBUG
+
+  printf("%lu\n", millis);
+
   return 0;
 
   // TODO: Free CUDA memory.

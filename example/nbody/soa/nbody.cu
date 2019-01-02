@@ -148,8 +148,9 @@ int main(int /*argc*/, char** /*argv*/) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-  printf("Time: %lu ms\n", millis);
+  printf("%lu\n", millis);
 
+#ifndef NDEBUG
   kernel_compute_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
@@ -157,7 +158,7 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyFromSymbol(&checksum, device_checksum, sizeof(device_checksum), 0,
                        cudaMemcpyDeviceToHost);
   printf("Checksum: %f\n", checksum);
-
+#endif  // NDEBUG
 
   if (OPTION_DRAW) {
     close_renderer();

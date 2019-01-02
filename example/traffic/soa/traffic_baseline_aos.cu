@@ -622,7 +622,9 @@ void create_street_network() {
   host_data_Cell_pos_y = (float*) malloc(sizeof(float)*host_num_cells);
   host_data_Cell_occupied = (bool*) malloc(sizeof(bool)*host_num_cells);
 
+#ifndef NDEBUG
   printf("Number of cells: %i\n", host_num_cells);
+#endif  // NDEBUG
 }
 
 
@@ -900,6 +902,9 @@ int main(int /*argc*/, char** /*argv*/) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-  printf("Time: %lu ms\n", millis);
+#ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
+#endif  // NDEBUG
+
+  printf("%lu\n", millis);
 }

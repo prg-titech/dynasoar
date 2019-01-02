@@ -19,17 +19,25 @@ dataset_t load_from_file(char* filename) {
   // First line : version
   getline(infile,inputLine);
   if(inputLine.compare("P2") != 0) cerr << "Version error" << endl;
-  else cout << "Version : " << inputLine << endl;
+  else {
+#ifndef NDEBUG
+    cout << "Version : " << inputLine << endl;
+#endif  // NDEBUG
+  }
 
   // Second line : comment
   getline(infile,inputLine);
+#ifndef NDEBUG
   cout << "Comment : " << inputLine << endl;
+#endif  // NDEBUG
 
   // Continue with a stringstream
   ss << infile.rdbuf();
   // Third line : size
   ss >> numcols >> numrows;
+#ifndef NDEBUG
   cout << numcols << " columns and " << numrows << " rows" << endl;
+#endif  // NDEBUG
 
   vector<int>* alive_cells = new vector<int>();
 
@@ -47,7 +55,9 @@ dataset_t load_from_file(char* filename) {
   }
 
   infile.close();
+#ifndef NDEBUG
   cout << "Loaded dataset from file." << endl;
+#endif  // NDEBUG
 
   return dataset_t(/*x=*/ numcols, /*y=*/ numrows,
                    /*alive_cells=*/ alive_cells->data(),

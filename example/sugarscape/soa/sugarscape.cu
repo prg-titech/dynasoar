@@ -587,12 +587,16 @@ int main(int /*argc*/, char** /*argv*/) {
   auto elapsed = time_end - time_start;
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
-  printf("Time: %lu ms\n", millis);
+
+#ifndef NDEBUG
+  printf("Checksum: %i\n", checksum());
+#endif  // NDEBUG
+
+  printf("%lu\n", millis);
 
   if (kOptionRender) {
     close_renderer();
   }
 
-  printf("Checksum: %i\n", checksum());
   return 0;
 }

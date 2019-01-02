@@ -340,9 +340,12 @@ int main(int /*argc*/, char** /*argv*/) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-  printf("Time: %lu ms\n", millis);
+#ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
   printf("#bodies: %i\n", host_draw_counter);
+#endif  // NDEBUG
+
+  printf("%lu\n", millis);
 
   // Free memory
   cudaFree(h_Body_merge_target);

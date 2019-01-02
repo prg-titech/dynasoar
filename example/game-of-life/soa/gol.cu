@@ -224,11 +224,13 @@ void transfer_dataset() {
   cudaMemcpy(dev_cell_ids, dataset.alive_cells, sizeof(int)*dataset.num_alive,
              cudaMemcpyHostToDevice);
 
+#ifndef NDEBUG
   printf("Loading on GPU: %i alive cells.\n", dataset.num_alive);
+#endif  // NDEBUG
+
   load_game<<<128, 128>>>(dev_cell_ids, dataset.num_alive);
   gpuErrchk(cudaDeviceSynchronize());
   cudaFree(dev_cell_ids);
-  printf("Done.\n");
 
   allocator_handle->parallel_do<Alive, &Alive::update>();
 }
@@ -335,9 +337,11 @@ int main(int argc, char** argv) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-  printf("Time: %lu ms\n", millis);
-
+#ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
+#endif  // NDEBUG
+
+  printf("%lu\n", millis);
 
   delete[] host_render_cells;
   cudaFree(host_cells);
