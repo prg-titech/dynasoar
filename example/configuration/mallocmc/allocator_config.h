@@ -1,6 +1,12 @@
 #ifndef EXAMPLE_CONFIGURATION_MALLOCMC_ALLOCATOR_CONFIG_H
 #define EXAMPLE_CONFIGURATION_MALLOCMC_ALLOCATOR_CONFIG_H
 
+#ifdef CHK_ALLOCATOR_DEFINED
+#error Allocator already defined
+#else
+#define CHK_ALLOCATOR_DEFINED
+#endif  // CHK_ALLOCATOR_DEFINED
+
 #include "../allocator_interface_adapter.h"
 #include "mallocmc_config.h"
 

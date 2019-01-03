@@ -22,8 +22,19 @@ set(CMAKE_CXX_FLAGS_RELEASE  "-O3 -DNDEBUG")
 include_directories(lib/cub)
 
 # Choose an allocator.
-#include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc/mallocMC ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc)
+#set(CMAKE_REQUIRED_DEFINITIONS -DALLOCATOR)
 
-include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/soa_alloc)
+if(ALLOCATOR STREQUAL "MallocMC")
+  message(STATUS "Building with MallocMC")
+  include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc/mallocMC ${CMAKE_SOURCE_DIR}/example/configuration/mallocmc)
+elseif(ALLOCATOR STREQUAL "SoaAlloc")
+  message(STATUS "Building with SoaAlloc")
+  include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/soa_alloc)
+elseif(ALLOCATOR STREQUAL "Cuda")
+  message(STATUS "Building with standard CUDA allocator")
+  include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/example/configuration/cuda_alloc)
+else()
+  message(FATAL_ERROR "Set allocator with -DALLOCATOR.")
+endif()
 
 add_subdirectory(example)
