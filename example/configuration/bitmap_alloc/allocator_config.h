@@ -7,10 +7,22 @@
 #define CHK_ALLOCATOR_DEFINED
 #endif  // CHK_ALLOCATOR_DEFINED
 
+template<typename AllocatorT>
+struct AllocatorState {
+  char* data_storage;
+};
+
 #include "../allocator_interface_adapter.h"
 
 
-void initialize_custom_allocator() {}
+void initialize_custom_allocator() {
+  char* host_data_storage;
+  cudaMalloc(&host_data_storage, 3ULL*kMallocHeapSize/4);
+  assert(host_data_storage != nullptr);
+  cudaMemcpyToSymbol(data_storage, &host_data_storage, sizeof(char*), 0,
+                     cudaMemcpyHostToDevice);
+  gpuErrchk(cudaDeviceSynchronize());
+}
 
 
 template<uint32_t N_Objects, class... Types>

@@ -12,9 +12,6 @@ static const size_t kMallocHeapSize = 8ULL*1024*1024*1024;
 // For benchmarks: Measure time spent outside of parallel sections.
 long unsigned int bench_prefix_sum_time = 0;
 
-// Defined by custom allocator.
-void initialize_custom_allocator();
-
 
 // Reads value at a device address and return it.
 template<typename T>
@@ -84,13 +81,15 @@ struct ParallelDoTypeHelper {
 
 
 // TODO: Fix visiblity.
-template<uint32_t N_Objects, class... Types>
-class SoaAllocator {
+template<template<typename> typename AllocatorStateT,
+         uint32_t N_Objects, class... Types>
+class SoaAllocatorAdapter {
  public:
-  using ThisAllocator = SoaAllocator<N_Objects, Types...>;
+  using ThisAllocator = SoaAllocatorAdapter<
+      AllocatorStateT, N_Objects, Types...>;
 
   // Zero-initialization of arrays can take a long time.
-  __DEV__ SoaAllocator() = delete;
+  __DEV__ SoaAllocatorAdapter() = delete;
 
   void DBG_print_benchmark_details() {
     printf("%lu\n", bench_prefix_sum_time);
@@ -177,12 +176,9 @@ class SoaAllocator {
   }
 
   template<class T, typename... Args>
-  __DEV__ T* external_allocator_make_new(Args... args);
-
-  template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
     // Add object to pointer array.
-    T* result = external_allocator_make_new<T>(args...);
+    T* result = allocator_state_.make_new<T>(args...);
     result->set_type(TYPE_INDEX(Types..., T));
     auto pos = atomicAdd(&num_objects_[TYPE_INDEX(Types..., T)], 1);
     assert(pos < kMaxObjects);
@@ -226,9 +222,6 @@ class SoaAllocator {
   };
 
   template<class T>
-  __DEV__ void external_allocator_free(T* obj);
-
-  template<class T>
   __DEV__ void free(T* obj) {
     uint8_t type_id = obj->get_type();
     if (type_id == TYPE_INDEX(Types..., T)) {
@@ -244,7 +237,7 @@ class SoaAllocator {
   __DEV__ void free_typed(T* obj) {
     auto pos = atomicAdd(&num_deleted_objects_[TYPE_INDEX(Types..., T)], 1);
     deleted_objects_[TYPE_INDEX(Types..., T)][pos] = obj;
-    external_allocator_free<T>(obj);
+    allocator_state_.free<T>(obj);
   }
 
   // TODO: Implement missing DBG functions.
@@ -367,6 +360,9 @@ class SoaAllocator {
 
   // Temporary storage.
   unsigned int stream_compaction_temp_[3*kMaxObjects];
+
+  // Allocator-specific state.
+  AllocatorStateT<ThisAllocator> allocator_state_;
 };
 
 
@@ -383,7 +379,6 @@ class AllocatorHandle {
     assert(heap_size >= kMallocHeapSize);
 #endif  // NDEBUG
 
-    initialize_custom_allocator();
     size_t allocated_bytes = 0;
 
     gpuErrchk(cudaMalloc(&allocator_, sizeof(AllocatorT)));
@@ -416,6 +411,9 @@ class AllocatorHandle {
       assert(dev_ptr_objects_[i] != nullptr);
       assert(dev_ptr_new_objects_[i] != nullptr);
     }
+
+    // Initialize allocator.
+    allocator_->allocator_state_.initialize();
   }
 
   ~AllocatorHandle() {

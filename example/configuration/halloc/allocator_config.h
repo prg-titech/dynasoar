@@ -7,6 +7,9 @@
 #define CHK_ALLOCATOR_DEFINED
 #endif  // CHK_ALLOCATOR_DEFINED
 
+template<typename AllocatorT>
+struct AllocatorState {};
+
 #include "../allocator_interface_adapter.h"
 #include "halloc.cu"
 #include "utils.cu"
