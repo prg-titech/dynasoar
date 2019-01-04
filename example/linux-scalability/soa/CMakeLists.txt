@@ -1,0 +1,2 @@
+cuda_add_executable(linux_scalability_soa linux_scalability.cu)
+target_link_libraries(linux_scalability_soa cuda)
