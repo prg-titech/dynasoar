@@ -41,4 +41,13 @@ struct is_device_array : std::false_type {};
 template<typename T, size_t N>
 struct is_device_array<DeviceArray<T, N>> : std::true_type {};
 
+// Reads value at a device address and return it.
+template<typename T>
+T read_from_device(T* ptr) {
+  T host_storage;
+  cudaMemcpy(&host_storage, ptr, sizeof(T), cudaMemcpyDeviceToHost);
+  gpuErrchk(cudaDeviceSynchronize());
+  return host_storage;
+}
+
 #endif  // UTIL_UTIL_H

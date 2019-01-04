@@ -13,16 +13,6 @@ static const size_t kMallocHeapSize = 8ULL*1024*1024*1024;
 long unsigned int bench_prefix_sum_time = 0;
 
 
-// Reads value at a device address and return it.
-template<typename T>
-T read_from_device(T* ptr) {
-  T host_storage;
-  cudaMemcpy(&host_storage, ptr, sizeof(T), cudaMemcpyDeviceToHost);
-  gpuErrchk(cudaDeviceSynchronize());
-  return host_storage;
-}
-
-
 template<typename AllocatorT, typename T>
 __global__ void kernel_init_stream_compaction(AllocatorT* allocator) {
   allocator->template initialize_stream_compaction_array<T>();
@@ -331,6 +321,9 @@ class SoaAllocatorAdapter {
         &num_objects_[TYPE_INDEX(Types..., T)]);
   }
 
+
+  // Size of largest type in bytes.
+  static const int kLargestTypeSize = TupleHelper<Types...>::kLargestTypeSize;
 
   static const int kCudaBlockSize = 256;
   static const int kNumTypes = sizeof...(Types);

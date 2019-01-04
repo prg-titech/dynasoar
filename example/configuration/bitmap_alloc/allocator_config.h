@@ -7,47 +7,61 @@
 #define CHK_ALLOCATOR_DEFINED
 #endif  // CHK_ALLOCATOR_DEFINED
 
-template<typename AllocatorT>
-struct AllocatorState {
-  char* data_storage;
-};
 
+#include "bitmap/bitmap.h"
 #include "../allocator_interface_adapter.h"
 
 
-void initialize_custom_allocator() {
-  char* host_data_storage;
-  cudaMalloc(&host_data_storage, 3ULL*kMallocHeapSize/4);
-  assert(host_data_storage != nullptr);
-  cudaMemcpyToSymbol(data_storage, &host_data_storage, sizeof(char*), 0,
-                     cudaMemcpyHostToDevice);
-  gpuErrchk(cudaDeviceSynchronize());
+template<typename BitmapT>
+__global__ void kernel_bitmap_alloc_init_bitmap(BitmapT* bitmap) {
+  bitmap->initialize(true);
 }
+
+
+template<typename AllocatorT>
+struct AllocatorState {
+  static const int kObjectSize = AllocatorT::kLargestTypeSize;
+
+  char* data_storage;
+  Bitmap<uint32_t, AllocatorT::kMaxObjects> global_free;
+
+  void initialize() {
+    char* host_data_storage;
+    cudaMalloc(&host_data_storage, 3ULL*kMallocHeapSize/4);
+    assert(host_data_storage != nullptr);
+    cudaMemcpy(&host_data_storage, &data_storage, sizeof(char*),
+               cudaMemcpyHostToDevice);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    kernel_bitmap_alloc_init_bitmap<<<128, 128>>>(&global_free);
+    gpuErrchk(cudaDeviceSynchronize());
+  }
+
+  template<class T, typename... Args>
+  __device__ T* make_new(Args... args) {
+    // Use malloc and placement-new so that we can catch OOM errors.
+    auto slot = global_free.deallocate();
+    void* ptr = data_storage + slot*kObjectSize;
+    assert(ptr != nullptr);
+    return new(ptr) T(args...); 
+  }
+
+  template<class T>
+  __device__ void free(T* obj) {
+    assert(obj != nullptr);
+    assert(reinterpret_cast<uint64_t>(obj)
+        >= reinterpret_cast<uint64_t>(data_storage));
+    obj->~T();
+    uint32_t slot = (reinterpret_cast<uint64_t>(obj)
+        - reinterpret_cast<uint64_t>(data_storage)) / kObjectSize;
+    assert((reinterpret_cast<uint64_t>(obj)
+        - reinterpret_cast<uint64_t>(data_storage)) % kObjectSize == 0);
+    global_free.allocate<true>(slot);
+  }
+};
 
 
 template<uint32_t N_Objects, class... Types>
-template<class T, typename... Args>
-__device__ T* SoaAllocator<N_Objects, Types...>
-    ::external_allocator_make_new(Args... args) {
-  // Use malloc and placement-new so that we can catch OOM errors.
-  void* ptr = malloc(sizeof(T));
-  assert(ptr != nullptr);
-  return new(ptr) T(args...);
-}
-
-
-// SoaAllocator::free shadows CUDA free.
-__device__ void cuda_free(void* ptr) { free(ptr); }
-
-
-template<uint32_t N_Objects, class... Types>
-template<class T>
-__device__ void SoaAllocator<N_Objects, Types...>
-    ::external_allocator_free(T* obj) {
-  assert(obj != nullptr);
-  obj->~T();
-  void* ptr = obj;
-  cuda_free(ptr);
-}
+using SoaAllocator = SoaAllocatorAdapter<AllocatorState, N_Objects, Types...>;
 
 #endif  // EXAMPLE_CONFIGURATION_CUDA_ALLOC_ALLOCATOR_CONFIG_H

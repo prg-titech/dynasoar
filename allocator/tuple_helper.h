@@ -94,6 +94,10 @@ struct TupleHelper<T, Types...> {
       kIsThisClassMinBlock,
       /*T=*/ T,
       /*F=*/ typename TupleHelper<Types...>::Type64BlockSizeMin>::type;
+
+  static const int kLargestTypeSize =
+      sizeof(T) > TupleHelper<Types...>::kLargestTypeSize
+      ? sizeof(T) : TupleHelper<Types...>::kLargestTypeSize;
 };
 
 template<>
@@ -109,6 +113,7 @@ struct TupleHelper<> {
   static const int kThisClass64BlockSize = std::numeric_limits<int>::max();
   static const int k64BlockMinSize = kThisClass64BlockSize;
   using Type64BlockSizeMin = void;
+  static const int kLargestTypeSize = 0;
 };
 
 // This helper calculates the size and #objects of a block of type T,

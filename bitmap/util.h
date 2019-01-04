@@ -28,15 +28,6 @@ __forceinline__ __device__ unsigned warp_id()
     return ret;
 }
 
-// Reads value at a device address and return it.
-template<typename T>
-T read_from_device(T* ptr) {
-  T host_storage;
-  cudaMemcpy(&host_storage, ptr, sizeof(T), cudaMemcpyDeviceToHost);
-  gpuErrchk(cudaDeviceSynchronize());
-  return host_storage;
-}
-
 // A wrapper that runs a device member function.
 template<typename C, void (C::*func)()>
 __global__ void member_func_kernel(C* ptr) {
