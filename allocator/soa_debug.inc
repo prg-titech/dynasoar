@@ -127,8 +127,8 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
   printf("│ #Bitmap levels:       %11i                                     │\n",
           decltype(global_free_)::kLevels);
   printf("│ Data buffer size:      %6.6f MB                                  │\n", kDataBufferSize/1024.0/1024.0);
-  printf("│ Allocator overead:    %11i bytes + block overhead              │\n",
-         (int) sizeof(ThisAllocator));
+  printf("│ Allocator overead:    %6.6f MB + block overhead                  │\n",
+         sizeof(ThisAllocator)/1024.0f/1024.0f);
   printf("│ Total memory usage:   %6.6f MB                                   │\n",
          (sizeof(ThisAllocator) + ThisAllocator::kDataBufferSize)/1024.0f/1024.0f);
   printf("└───────────────────────────────────────────────────────────────────────┘\n");
