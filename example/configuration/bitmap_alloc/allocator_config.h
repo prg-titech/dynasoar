@@ -29,7 +29,7 @@ struct AllocatorState {
     char* host_data_storage;
     cudaMalloc(&host_data_storage, 3ULL*kMallocHeapSize/4);
     assert(host_data_storage != nullptr);
-    cudaMemcpy(&host_data_storage, &data_storage, sizeof(char*),
+    cudaMemcpy(&data_storage, &host_data_storage, sizeof(char*),
                cudaMemcpyHostToDevice);
     gpuErrchk(cudaDeviceSynchronize());
 
