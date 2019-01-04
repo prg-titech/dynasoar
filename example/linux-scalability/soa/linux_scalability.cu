@@ -41,6 +41,7 @@ int main() {
   auto time_before = std::chrono::system_clock::now();
 
   // Run benchmark.
+  // TODO: Will run OOM with custom allocators if >1 iterations. (ptr array)
   for (int i = 0; i < kNumIterations; ++i) {
     kernel_benchmark<<<kNumBlocks, kNumThreads>>>(kNumAllocPerThread, ptrs);
     gpuErrchk(cudaDeviceSynchronize());

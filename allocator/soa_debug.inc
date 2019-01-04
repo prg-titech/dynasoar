@@ -127,6 +127,8 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
   printf("│ #Bitmap levels:       %11i                                     │\n",
           decltype(global_free_)::kLevels);
   printf("│ Data buffer size:      %6.6f MB                                  │\n", kDataBufferSize/1024.0/1024.0);
+  printf("│ Allocator overead:    %11i bytes + block overhead              │\n",
+         sizeof(ThisAllocator));
   printf("└───────────────────────────────────────────────────────────────────────┘\n");
 
   TupleHelper<Types...>::template for_all<
