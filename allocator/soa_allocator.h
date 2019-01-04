@@ -135,7 +135,7 @@ class SoaAllocator {
       assert(leader >= 0 && leader < 32);
       // Use lane mask to empty all bits higher than the current thread.
       // The rank of this thread is the number of bits set to 1 in the result.
-      const unsigned int rank = lane_id();
+      const unsigned int rank = __lane_id();
       assert(rank < 32);
 
       // Values to be calculated by the leader.

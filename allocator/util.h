@@ -3,7 +3,7 @@
 
 #include "util/util.h"
 
-__forceinline__ __device__ unsigned lane_id()
+__forceinline__ __device__ unsigned __lane_id()
 {
   unsigned ret;
   asm volatile ("mov.u32 %0, %laneid;" : "=r"(ret));
