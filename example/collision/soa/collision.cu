@@ -299,7 +299,7 @@ int main(int /*argc*/, char** /*argv*/) {
   printf("#bodies: %i\n", host_draw_counter);
 #endif  // NDEBUG
 
-  printf("%lu\n", millis);
+  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
 
   if (kOptionRender) {
     close_renderer();

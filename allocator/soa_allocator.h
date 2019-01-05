@@ -63,6 +63,10 @@ class SoaAllocator {
   // TODO: Consider moving out of soa_debug.inc.
   template<class T>
   __DEV__ static bool is_type(const T* ptr);
+
+  long unsigned int DBG_get_enumeration_time() {
+    return bench_prefix_sum_time;
+  }
   // ---- END ----
 
 

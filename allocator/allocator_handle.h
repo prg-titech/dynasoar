@@ -65,6 +65,10 @@ class AllocatorHandle {
     cudaFree(data_buffer_);
   }
 
+  long unsigned int DBG_get_enumeration_time() {
+    return allocator_->DBG_get_enumeration_time();
+  }
+
   // Returns a device pointer to the allocator.
   AllocatorT* device_pointer() { return allocator_; }
 

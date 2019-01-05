@@ -148,7 +148,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-  printf("%lu\n", millis);
+  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
 
 #ifndef NDEBUG
   kernel_compute_checksum<<<1, 1>>>();

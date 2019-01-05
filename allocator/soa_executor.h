@@ -1,6 +1,9 @@
 #ifndef ALLOCATOR_SOA_EXECUTOR_H
 #define ALLOCATOR_SOA_EXECUTOR_H
 
+// For benchmarks: Measure time spent outside of parallel sections.
+long unsigned int bench_prefix_sum_time = 0;
+
 template<typename AllocatorT, typename T>
 __global__ void kernel_init_iteration(AllocatorT* allocator) {
   allocator->template initialize_iteration<T>();
@@ -67,6 +70,9 @@ struct ParallelExecutor {
 
     static void parallel_do(AllocatorT* allocator, int shared_mem_size,
                             Args... args) {
+      auto time_start = std::chrono::system_clock::now();
+      auto time_end = time_start;
+
       // Initialize iteration: Perform scan operation on bitmap.
       allocator->allocated_[kTypeIndex].scan();
 
@@ -82,13 +88,22 @@ struct ParallelExecutor {
             kCudaBlockSize>>>(allocator);
         gpuErrchk(cudaDeviceSynchronize());
 
+        time_end = std::chrono::system_clock::now();
+
         uint32_t total_threads = num_soa_blocks * kSize;
         kernel_parallel_do<ThisClass>
             <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
               kCudaBlockSize,
               shared_mem_size>>>(allocator, args...);
         gpuErrchk(cudaDeviceSynchronize());
+      } else {
+        time_end = std::chrono::system_clock::now();
       }
+
+      auto elapsed = time_end - time_start;
+      auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+          .count();
+      bench_prefix_sum_time += millis;
     }
 
     template<void(AllocatorT::*pre_func)(Args...)>
@@ -97,6 +112,9 @@ struct ParallelExecutor {
 
       static void parallel_do(AllocatorT* allocator, int shared_mem_size,
                               Args... args) {
+        auto time_start = std::chrono::system_clock::now();
+        auto time_end = time_start;
+
         allocator->allocated_[kTypeIndex].scan();
 
         // Determine number of CUDA threads.
@@ -111,13 +129,23 @@ struct ParallelExecutor {
               kCudaBlockSize>>>(allocator);
           gpuErrchk(cudaDeviceSynchronize());
 
+          time_end = std::chrono::system_clock::now();
+
           uint32_t total_threads = num_soa_blocks * kSize;
           kernel_parallel_do_with_pre<ThisClass, PreClass>
               <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
                 kCudaBlockSize,
                 shared_mem_size>>>(allocator, args...);
           gpuErrchk(cudaDeviceSynchronize());
+        } else {
+          time_end = std::chrono::system_clock::now();
         }
+
+
+        auto elapsed = time_end - time_start;
+        auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+            .count();
+        bench_prefix_sum_time += millis;
       }
 
       __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {

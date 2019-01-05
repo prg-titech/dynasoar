@@ -81,8 +81,8 @@ class SoaAllocatorAdapter {
   // Zero-initialization of arrays can take a long time.
   __DEV__ SoaAllocatorAdapter() = delete;
 
-  void DBG_print_benchmark_details() {
-    printf("%lu\n", bench_prefix_sum_time);
+  long unsigned int DBG_get_enumeration_time() {
+    return bench_prefix_sum_time;
   }
 
   template<typename T>
@@ -411,6 +411,10 @@ class AllocatorHandle {
 
   ~AllocatorHandle() {
     cudaFree(allocator_);
+  }
+
+  long unsigned int DBG_get_enumeration_time() {
+    return allocator_->DBG_get_enumeration_time();
   }
 
   // TODO: This function does not enumerate subtypes.

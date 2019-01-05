@@ -341,7 +341,7 @@ int main(int argc, char** argv) {
   printf("Checksum: %i\n", checksum());
 #endif  // NDEBUG
 
-  printf("%lu\n", millis);
+  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
 
   delete[] host_render_cells;
   cudaFree(host_cells);

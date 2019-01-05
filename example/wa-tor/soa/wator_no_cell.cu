@@ -455,7 +455,7 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
     total_time += time_running;
   }
 
-  printf("%i,%i,", kSizeY, total_time);
+  printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
   print_stats();
   return 0;
 }
