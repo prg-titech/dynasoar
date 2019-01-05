@@ -9,12 +9,13 @@ def run_benchmarks(benchmarks, allocator):
     for binary, arg, bench_name, bench_type in benchmarks:
       time = []
       for r in range(NUM_RUNS):
-        output = subprocess.check_output(["bin/" + binary, arg])
-        data = output.strip().decode("ascii")
-        time.append(data)
-        print(data)
-
-      time.sort()
+        try:
+          output = subprocess.check_output(["bin/" + binary, arg])
+          data = output.strip().decode("ascii")
+          time.append(data)
+          print(data)
+        except CalledProcessError:
+          print("Process error")
 
       # Take the median
       line = bench_name + "," + bench_type + "," + ",".join(map(str, time)) + "\n"
