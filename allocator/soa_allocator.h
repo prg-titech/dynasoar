@@ -65,7 +65,8 @@ class SoaAllocator {
   __DEV__ static bool is_type(const T* ptr);
 
   long unsigned int DBG_get_enumeration_time() {
-    return bench_prefix_sum_time;
+    // Microseconds to milliseconds.
+    return bench_prefix_sum_time*100;
   }
   // ---- END ----
 

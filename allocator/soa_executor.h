@@ -2,6 +2,7 @@
 #define ALLOCATOR_SOA_EXECUTOR_H
 
 // For benchmarks: Measure time spent outside of parallel sections.
+// Measure time in microseconds because numbers are small.
 long unsigned int bench_prefix_sum_time = 0;
 
 template<typename AllocatorT, typename T>
@@ -101,7 +102,7 @@ struct ParallelExecutor {
       }
 
       auto elapsed = time_end - time_start;
-      auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      auto millis = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
           .count();
       bench_prefix_sum_time += millis;
     }
@@ -143,7 +144,7 @@ struct ParallelExecutor {
 
 
         auto elapsed = time_end - time_start;
-        auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+        auto millis = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
             .count();
         bench_prefix_sum_time += millis;
       }
