@@ -1,6 +1,7 @@
 #ifndef ALLOCATOR_ALLOCATOR_HANDLE_H
 #define ALLOCATOR_ALLOCATOR_HANDLE_H
 
+#include "allocator/configuration.h"
 #include "allocator/tuple_helper.h"
 #include "allocator/util.h"
 
@@ -73,12 +74,14 @@ class AllocatorHandle {
     allocator_->parallel_do<T, func>();
   }
 
+#ifdef OPTION_DEFRAG
   // Defrag/compact all objects of type T. Also updates all affected pointers
   // in the data buffer.
   template<class T>
   void parallel_defrag(int max_records, int min_records = 1) {
     allocator_->parallel_defrag<T>(max_records, min_records);
   }
+#endif  // OPTION_DEFRAG
 
  private:
   AllocatorT* allocator_ = nullptr;

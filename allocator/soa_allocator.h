@@ -102,11 +102,14 @@ class SoaAllocator {
     for (int i = 0; i < kNumTypes; ++i) {
       allocated_[i].initialize(false);
       active_[i].initialize(false);
+#ifdef OPTION_DEFRAG
       leq_50_[i].initialize(false);
+#endif  // OPTION_DEFRAG
 
       if (threadIdx.x == 0 && blockIdx.x == 0) {
+#ifdef OPTION_DEFRAG
         num_leq_50_[i] = 0;
-        num_allocated_[i] = 0;
+#endif  // OPTION_DEFRAG
       }
     }
 
@@ -165,6 +168,7 @@ class SoaAllocator {
           auto before_undo = atomicOr(free_bitmap, allocation_bitmap);
           int slots_before_undo = __popcll(before_undo);
 
+#ifdef OPTION_DEFRAG
           if (BlockHelper<T>::kSize - slots_before_undo
                   > BlockHelper<T>::kLeq50Threshold
               && BlockHelper<T>::kSize - slots_before_undo - num_allocated
@@ -172,6 +176,7 @@ class SoaAllocator {
             ASSERT_SUCCESS(leq_50_[actual_type_id].allocate<true>(block_idx));
             atomicAdd(&num_leq_50_[actual_type_id], 1);
           }
+#endif  // OPTION_DEFRAG
 
           // Cases to handle: block now active again or block empty now.
           if (slots_before_undo == 0) {
@@ -182,8 +187,10 @@ class SoaAllocator {
             if (invalidate_block<T>(block_idx)) {
               // Block is invalidated and no new allocations can be performed.
               ASSERT_SUCCESS(active_[actual_type_id].deallocate<true>(block_idx));
+#ifdef OPTION_DEFRAG
               ASSERT_SUCCESS(leq_50_[actual_type_id].deallocate<true>(block_idx));
               atomicSub(&num_leq_50_[actual_type_id], 1);
+#endif // OPTION_DEFRAG
               ASSERT_SUCCESS(allocated_[actual_type_id].deallocate<true>(block_idx));
               ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
             }
@@ -248,9 +255,11 @@ class SoaAllocator {
       func, this, args...);
   }
 
+#ifdef OPTION_DEFRAG
   // Should be invoked from host side.
   template<typename T>
   void parallel_defrag(int max_records, int min_records = 1);
+#endif  // OPTION_DEFRAG
 
   template<typename T>
   __DEV__ void initialize_iteration() {
@@ -319,6 +328,7 @@ class SoaAllocator {
           ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
         }
 
+#ifdef OPTION_DEFRAG
         // Check if more than 50% full now.
         int prev_full = BlockHelper<T>::kSize - __popcll(before_update);
         if (prev_full <= BlockHelper<T>::kLeq50Threshold
@@ -326,6 +336,7 @@ class SoaAllocator {
           ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
           atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
         }
+#endif  // OPTION_DEFRAG
       }
 
       // Stop loop if no more free bits available in this block or all
@@ -343,10 +354,12 @@ class SoaAllocator {
     assert(get_block<T>(block_idx)->free_bitmap == 0);
     ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
 
+#ifdef OPTION_DEFRAG
     if (dealloc_leq_50) {
       ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
       atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
     }
+#endif  // OPTION_DEFRAG
 
     ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
     ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
@@ -362,9 +375,11 @@ class SoaAllocator {
     // Note: Different ordering of branches can lead to deadlock!
     if (dealloc_state == kBlockNowActive) {
       ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
+#ifdef OPTION_DEFRAG
     } else if (dealloc_state == kBlockNowLeq50Full) {
       ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
       atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+#endif  // OPTION_DEFRAG
     } else if (dealloc_state == kBlockNowEmpty) {
       // Assume that block is empty.
       // TODO: Special case if N == 2 or N == 1 for leq_50_.
@@ -463,8 +478,10 @@ class SoaAllocator {
         assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
         ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
+#ifdef OPTION_DEFRAG
         ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
         atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+#endif  // OPTION_DEFRAG
         ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
       }
     } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
@@ -526,6 +543,7 @@ class SoaAllocator {
         // At least one bit was modified. Rollback invalidation.
         auto before_rollback = atomicOr(&block->free_bitmap, old_free_bitmap);
         if (before_rollback > 0ULL) {
+#ifdef OPTION_DEFRAG
           if ((BlockHelper<T>::kSize - __popcll(old_free_bitmap)
                   > BlockHelper<T>::kLeq50Threshold)
               && (BlockHelper<T>::kSize - __popcll(before_rollback)
@@ -534,6 +552,7 @@ class SoaAllocator {
             ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
             atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
           }
+#endif  // OPTION_DEFRAG
 
           // At least 1 other thread deallocated an object (set a bit). That
           // thread is attempting to make the block active. For this to
@@ -560,13 +579,14 @@ class SoaAllocator {
   Bitmap<uint32_t, N> global_free_;
 
   Bitmap<uint32_t, N> allocated_[kNumTypes];
-  unsigned int num_allocated_[kNumTypes];
 
   Bitmap<uint32_t, N> active_[kNumTypes];
 
+#ifdef OPTION_DEFRAG
   // Bit set if block is <= 50% full and active.
   Bitmap<uint32_t, N> leq_50_[kNumTypes];
   unsigned int num_leq_50_[kNumTypes];
+#endif  // OPTION_DEFRAG
 
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
@@ -597,7 +617,10 @@ __DEV__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
 
 
 // This are textual headers. Must be included at the end of the file.
+#ifdef OPTION_DEFRAG
 #include "allocator/soa_defrag.inc"
+#endif  // OPTION_DEFRAG
+
 #include "allocator/soa_debug.inc"
 
 #endif  // ALLOCATOR_SOA_ALLOCATOR_H

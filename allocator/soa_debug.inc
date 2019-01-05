@@ -58,9 +58,13 @@ struct AllocatorWrapperDebug {
           .DBG_count_num_ones();
       *total_num_blk_alloc += num_blk_alloc;
 
+#ifdef OPTION_DEFRAG
       int num_blk_leq50 = allocator->leq_50_[BlockHelper<T>::kIndex]
           .DBG_count_num_ones();
       *total_num_blk_leq50 += num_blk_leq50;
+#else
+      int num_blk_leq50 = 0;
+#endif  // OPTION_DEFRAG
 
       int num_blk_active = allocator->active_[BlockHelper<T>::kIndex]
           .DBG_count_num_ones();

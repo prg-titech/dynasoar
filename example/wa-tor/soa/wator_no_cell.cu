@@ -320,12 +320,14 @@ __global__ void print_checksum() {
          d_checksum, fish_use, fish_num, shark_use, shark_num);
 }
 
+#ifdef OPTION_DEFRAG
 void defrag() {
   allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 32,
                                           /*min_records=*/ 32);
   allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 32,
                                            /*min_records=*/ 32);
 }
+#endif  // OPTION_DEFRAG
 
 void step() {
   // --- FISH ---
@@ -439,11 +441,13 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
     auto time_before = std::chrono::system_clock::now();
     step();
 
+#ifdef OPTION_DEFRAG
     if (kOptionDefrag) {
-      for (int j = 0; j < 000; ++j) {
+      for (int j = 0; j < 10; ++j) {
         defrag();
       }
     }
+#endif  // OPTION_DEFRAG
 
     auto time_after = std::chrono::system_clock::now();
     int time_running = std::chrono::duration_cast<std::chrono::milliseconds>(
