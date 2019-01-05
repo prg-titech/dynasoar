@@ -37,6 +37,7 @@ class SoaAllocator {
                 "N_Objects Must be divisible by BlockSize.");
 
 
+#ifdef OPTION_DEFRAG
   // ---- Defragmentation (soa_defrag.inc) ----
   __DEV__ void initialize_leq_collisions();
 
@@ -46,7 +47,7 @@ class SoaAllocator {
   __DEV__ void load_records_to_shared_mem(ThisAllocator* allocator,
                                           int num_records);
   // ---- END ----
-
+#endif  // OPTION_DEFRAG
 
   // ---- Debugging (soa_debug.inc) ----
   template<class T>

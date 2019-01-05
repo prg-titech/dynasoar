@@ -19,8 +19,10 @@ struct AllocatorWrapperDebug {
              (int) sizeof(T));
       printf("│ #objects / block   │ %8i                                         │\n",
              (int) BlockHelper<T>::kSize);
+#ifdef OPTION_DEFRAG
       printf("│ leq50 threshold    │ %8i                                         │\n",
              (int) BlockHelper<T>::kLeq50Threshold);
+#endif  // OPTION_DEFRAG
       printf("│ block size         │ %8i bytes                                   │\n",
              (int) sizeof(typename BlockHelper<T>::BlockType));
       printf("│ base class         │ %48s │\n",
