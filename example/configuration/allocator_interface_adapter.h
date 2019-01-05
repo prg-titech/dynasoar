@@ -106,8 +106,10 @@ class SoaAllocatorAdapter {
     if (num_objects > 0) {
       auto time_start = std::chrono::system_clock::now();
 
-      kernel_init_stream_compaction<ThisAllocator, T><<<128, 128>>>(this);
+      kernel_init_stream_compaction<ThisAllocator, T><<<
+          (num_objects + 256 - 1)/256, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
+
       // Run prefix sum algorithm.
       // TODO: Prefix sum broken for num_objects < 256.
       auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
@@ -120,7 +122,8 @@ class SoaAllocatorAdapter {
       gpuErrchk(cudaDeviceSynchronize());
 
       // Compact array.
-      kernel_compact_object_array<ThisAllocator, T><<<128, 128>>>(this);
+      kernel_compact_object_array<ThisAllocator, T><<<
+          (num_objects + 256 - 1)/256, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
 
       // Update arrays and counts.
