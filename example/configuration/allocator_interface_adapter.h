@@ -82,7 +82,8 @@ class SoaAllocatorAdapter {
   __DEV__ SoaAllocatorAdapter() = delete;
 
   long unsigned int DBG_get_enumeration_time() {
-    return bench_prefix_sum_time;
+    // Convert microseconds to milliseconds.
+    return bench_prefix_sum_time/100;
   }
 
   template<typename T>
@@ -130,9 +131,9 @@ class SoaAllocatorAdapter {
 
       auto time_end = std::chrono::system_clock::now();
       auto elapsed = time_end - time_start;
-      auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
           .count();
-      bench_prefix_sum_time += millis;
+      bench_prefix_sum_time += micros;
 
       kernel_parallel_do_single_type<ThisAllocator, T, BaseClass, func><<<
           (num_objects + kCudaBlockSize - 1)/kCudaBlockSize,

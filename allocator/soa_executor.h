@@ -102,9 +102,9 @@ struct ParallelExecutor {
       }
 
       auto elapsed = time_end - time_start;
-      auto millis = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
           .count();
-      bench_prefix_sum_time += millis;
+      bench_prefix_sum_time += micros;
     }
 
     template<void(AllocatorT::*pre_func)(Args...)>
@@ -144,9 +144,9 @@ struct ParallelExecutor {
 
 
         auto elapsed = time_end - time_start;
-        auto millis = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
             .count();
-        bench_prefix_sum_time += millis;
+        bench_prefix_sum_time += micros;
       }
 
       __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {
