@@ -23,7 +23,7 @@ def run_benchmarks(benchmarks, allocator):
 
 
 # Baseline benchmark.
-subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release -DALLOCATOR=SoaAlloc ."])
+subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release", "-DALLOCATOR=SoaAlloc", "."])
 subprocess.call(["make"])
 benchmarks = [
   ("collision_baseline_aos", "", "collision", "baseline_aos"),
@@ -43,7 +43,7 @@ run_benchmarks(benchmarks, "baseline")
 
 
 # SoaAlloc benchmark.
-subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release -DALLOCATOR=SoaAlloc ."])
+subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release", "-DALLOCATOR=SoaAlloc", "."])
 subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
@@ -58,7 +58,7 @@ run_benchmarks(benchmarks, "soaalloc")
 
 
 # mallocMC benchmark.
-subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release -DALLOCATOR=mallocMC ."])
+subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release", "-DALLOCATOR=mallocMC", "."])
 subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
@@ -73,7 +73,7 @@ run_benchmarks(benchmarks, "mallocmc")
 
 
 # halloc benchmark.
-subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release -DALLOCATOR=halloc ."])
+subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release", "-DALLOCATOR=halloc", "."])
 subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
@@ -88,7 +88,7 @@ run_benchmarks(benchmarks, "halloc")
 
 
 # bitmap benchmark.
-subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release -DALLOCATOR=bitmap ."])
+subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release", "-DALLOCATOR=bitmap", "."])
 subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
@@ -103,7 +103,7 @@ run_benchmarks(benchmarks, "bitmap")
 
 
 # cuda benchmark.
-subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release -DALLOCATOR=cuda ."])
+subprocess.call(["cmake", "-DCMAKE_BUILD_TYPE=Release", "-DALLOCATOR=cuda", "."])
 subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),

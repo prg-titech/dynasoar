@@ -12,6 +12,7 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -maxrregcount=64)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 if(NOT CMAKE_BUILD_TYPE)
+  message(STATUS "No build type set. Assuming Debug.")
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
