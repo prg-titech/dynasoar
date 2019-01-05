@@ -14,7 +14,7 @@ def run_benchmarks(benchmarks, allocator):
           data = output.strip().decode("ascii")
           time.append(data)
           print(data)
-        except CalledProcessError:
+        except subprocess.CalledProcessError:
           print("Process error")
 
       # Take the median
