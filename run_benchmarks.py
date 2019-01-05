@@ -10,8 +10,9 @@ def run_benchmarks(benchmarks, allocator):
       time = []
       for r in range(NUM_RUNS):
         output = subprocess.check_output(["bin/" + binary, arg])
-        time.append(output.strip())
-        print(output.strip())
+        data = output.strip().decode("ascii")
+        time.append(data)
+        print(data)
 
       time.sort()
 
@@ -48,7 +49,7 @@ subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
   ("gol_soa_no_cell", "/home/matthias/Downloads/utm.pgm", "gol", "allocator"),
-  ("linux_scalability_soa", "", "linux", "allocator")
+  ("linux_scalability_soa", "", "linux", "allocator"),
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
@@ -64,7 +65,7 @@ subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
   ("gol_soa_no_cell", "/home/matthias/Downloads/utm.pgm", "gol", "allocator"),
-  ("linux_scalability_soa", "", "linux", "allocator")
+  ("linux_scalability_soa", "", "linux", "allocator"),
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
@@ -80,7 +81,7 @@ subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
   ("gol_soa_no_cell", "/home/matthias/Downloads/utm.pgm", "gol", "allocator"),
-  ("linux_scalability_soa", "", "linux", "allocator")
+  ("linux_scalability_soa", "", "linux", "allocator"),
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
@@ -96,7 +97,7 @@ subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
   ("gol_soa_no_cell", "/home/matthias/Downloads/utm.pgm", "gol", "allocator"),
-  ("linux_scalability_soa", "", "linux", "allocator")
+  ("linux_scalability_soa", "", "linux", "allocator"),
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
@@ -112,7 +113,7 @@ subprocess.call(["make"])
 benchmarks = [
   ("collision_soa", "", "collision", "allocator"),
   ("gol_soa_no_cell", "/home/matthias/Downloads/utm.pgm", "gol", "allocator"),
-  ("linux_scalability_soa", "", "linux", "allocator")
+  ("linux_scalability_soa", "", "linux", "allocator"),
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
