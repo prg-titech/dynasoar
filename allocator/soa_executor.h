@@ -33,12 +33,7 @@ struct ParallelDoTypeHelper {
     template<bool Check, int Dummy>
     struct ClassSelector {
       static bool call(AllocatorT* allocator) {
-        // Initialize iteration: Perform scan operation on bitmap.
-        kernel_init_iteration<AllocatorT, IterT><<<128, 128>>>(allocator);
-        gpuErrchk(cudaDeviceSynchronize());
-
         allocator->template parallel_do_single_type<IterT, BaseClass, func>();
-
         return true;  // true means "continue processing".
       }
     };
@@ -72,6 +67,7 @@ struct ParallelExecutor {
 
     static void parallel_do(AllocatorT* allocator, int shared_mem_size,
                             Args... args) {
+      // Initialize iteration: Perform scan operation on bitmap.
       allocator->allocated_[kTypeIndex].scan();
 
       // Determine number of CUDA threads.
@@ -81,8 +77,12 @@ struct ParallelExecutor {
       uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
       if (num_soa_blocks > 0) {
-        uint32_t total_threads = num_soa_blocks * kSize;
+        kernel_init_iteration<AllocatorT, IterT><<<
+            (num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
+            kCudaBlockSize>>>(allocator);
+        gpuErrchk(cudaDeviceSynchronize());
 
+        uint32_t total_threads = num_soa_blocks * kSize;
         kernel_parallel_do<ThisClass>
             <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
               kCudaBlockSize,
@@ -107,6 +107,9 @@ struct ParallelExecutor {
 
         if (num_soa_blocks > 0) {
           uint32_t total_threads = num_soa_blocks * kSize;
+
+          kernel_init_iteration<AllocatorT, IterT><<<128, 128>>>(allocator);
+          gpuErrchk(cudaDeviceSynchronize());
 
           kernel_parallel_do_with_pre<ThisClass, PreClass>
               <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,

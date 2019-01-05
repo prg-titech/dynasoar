@@ -52,7 +52,8 @@ benchmarks = [
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
-  ("traffic_soa", "", "traffic", "allocator")
+  ("traffic_soa", "", "traffic", "allocator"),
+  ("wator_soa_no_cell", "", "wator", "allocator")
 ]
 run_benchmarks(benchmarks, "soaalloc")
 
@@ -67,7 +68,8 @@ benchmarks = [
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
-  ("traffic_soa", "", "traffic", "allocator")
+  ("traffic_soa", "", "traffic", "allocator"),
+  ("wator_soa_no_cell", "", "wator", "allocator")
 ]
 run_benchmarks(benchmarks, "mallocmc")
 
@@ -82,7 +84,8 @@ benchmarks = [
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
-  ("traffic_soa", "", "traffic", "allocator")
+  ("traffic_soa", "", "traffic", "allocator"),
+  ("wator_soa_no_cell", "", "wator", "allocator")
 ]
 run_benchmarks(benchmarks, "halloc")
 
@@ -97,7 +100,8 @@ benchmarks = [
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
-  ("traffic_soa", "", "traffic", "allocator")
+  ("traffic_soa", "", "traffic", "allocator"),
+  ("wator_soa_no_cell", "", "wator", "allocator")
 ]
 run_benchmarks(benchmarks, "bitmap")
 
@@ -112,6 +116,7 @@ benchmarks = [
   ("nbody_soa", "", "nbody", "allocator"),
   ("structure_soa", "", "structure", "allocator"),
   ("sugarscape_no_cell", "", "sugarscape", "allocator"),
-  ("traffic_soa", "", "traffic", "allocator")
+  ("traffic_soa", "", "traffic", "allocator"),
+  ("wator_soa_no_cell", "", "wator", "allocator")
 ]
 run_benchmarks(benchmarks, "cuda")

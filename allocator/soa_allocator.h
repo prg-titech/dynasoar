@@ -254,12 +254,15 @@ class SoaAllocator {
 
   template<typename T>
   __DEV__ void initialize_iteration() {
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N;
+    const auto num_blocks = allocated_[BlockHelper<T>::kIndex].scan_num_bits();
+
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < num_blocks;
          i += blockDim.x * gridDim.x) {
-      if (allocated_[BlockHelper<T>::kIndex][i]) {
-        // Initialize block.
-        get_block<T>(i)->initialize_iteration();
-      }
+      auto idx = allocated_[BlockHelper<T>::kIndex].scan_get_index(i);
+      assert(allocated_[BlockHelper<T>::kIndex][idx]);
+
+      // Initialize block for iteration.
+      get_block<T>(idx)->initialize_iteration();
     }
   }
 
