@@ -18,7 +18,9 @@ template<typename AllocatorT>
 struct AllocatorState {
   static const bool kHasParallelDo = false;
 
-  void initialize() {}
+  void initialize(size_t allocator_heap_size) {
+    cudaDeviceSetLimit(cudaLimitMallocHeapSize, allocator_heap_size);
+  }
 
   template<class T, typename... Args>
   __device__ T* make_new(Args... args) {

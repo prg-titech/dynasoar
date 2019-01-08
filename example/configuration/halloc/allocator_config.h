@@ -16,8 +16,8 @@ template<typename AllocatorT>
 struct AllocatorState {
   static const bool kHasParallelDo = false;
 
-  void initialize() {
-    ha_init(halloc_opts_t(3ULL*kMallocHeapSize/4));
+  void initialize(size_t allocator_heap_size) {
+    ha_init(halloc_opts_t(allocator_heap_size));
   }
 
   template<class T, typename... Args>

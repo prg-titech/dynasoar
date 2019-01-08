@@ -16,8 +16,8 @@ struct AllocatorState {
 
   ScatterAllocator::DevAllocator* allocator_handle;
 
-  void initialize() {
-    auto* host_handle = new ScatterAllocator(3ULL*kMallocHeapSize/4);
+  void initialize(size_t allocator_heap_size) {
+    auto* host_handle = new ScatterAllocator(allocator_heap_size);
     auto* device_handle = host_handle->getAllocatorHandle().devAllocator;
 
     cudaMemcpy(&allocator_handle, &device_handle, sizeof(void*),

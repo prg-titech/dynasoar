@@ -396,9 +396,13 @@ class SoaAllocatorAdapter {
 template<typename AllocatorT>
 class AllocatorHandle {
  public:
-  AllocatorHandle() {
+  AllocatorHandle(size_t allocator_heap_size = 0) {
     static_assert(sizeof(size_t) == 8, "Expected 64 bit system");
     cudaDeviceSetLimit(cudaLimitMallocHeapSize, kMallocHeapSize);
+
+    if (allocator_heap_size == 0) {
+      allocator_heap_size = 3ULL*kMallocHeapSize/4;
+    }
 
 #ifndef NDEBUG
     size_t heap_size;
@@ -440,7 +444,7 @@ class AllocatorHandle {
     }
 
     // Initialize allocator.
-    allocator_->allocator_state_.initialize();
+    allocator_->allocator_state_.initialize(allocator_heap_size);
   }
 
   ~AllocatorHandle() {
