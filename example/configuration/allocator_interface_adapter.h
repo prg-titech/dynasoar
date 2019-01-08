@@ -173,8 +173,10 @@ class SoaAllocatorAdapter {
   // Call a member function on all objects of type.
   // Device version (sequential).
   // TODO: This does not enumerate subtypes.
-  template<class T, typename F, typename... Args>
-  __DEV__ void device_do(F func, Args... args) {
+  template<class T, typename F, typename U = AllocatorStateT<ThisAllocator>,
+           typename... Args>
+  __DEV__ typename std::enable_if<!U::kHasParallelDo, void>::type
+  device_do(F func, Args... args) {
     auto num_obj = num_objects_[TypeHelper<T>::kIndex];
 
     for (int i = 0; i < num_obj; ++i) {
@@ -183,14 +185,25 @@ class SoaAllocatorAdapter {
     }
   }
 
+  template<class T, typename F, typename U = AllocatorStateT<ThisAllocator>,
+           typename... Args>
+  __DEV__ typename std::enable_if<U::kHasParallelDo, void>::type
+  device_do(F func, Args... args) {
+    allocator_state_.device_do<T, F, Args...>(func, args...);
+  }
+
   template<class T, typename... Args>
   __DEV__ T* make_new(Args... args) {
     // Add object to pointer array.
     T* result = allocator_state_.make_new<T>(args...);
     result->set_type(TypeHelper<T>::kIndex);
-    auto pos = atomicAdd(&num_objects_[TypeHelper<T>::kIndex], 1);
-    assert(pos < kMaxObjects);
-    objects_[TypeHelper<T>::kIndex][pos] = result;
+
+    if (!AllocatorStateT<ThisAllocator>::kHasParallelDo) {
+      auto pos = atomicAdd(&num_objects_[TypeHelper<T>::kIndex], 1);
+      assert(pos < kMaxObjects);
+      objects_[TypeHelper<T>::kIndex][pos] = result;
+    }
+
     return result;
   }
 
@@ -243,8 +256,11 @@ class SoaAllocatorAdapter {
 
   template<class T>
   __DEV__ void free_typed(T* obj) {
-    auto pos = atomicAdd(&num_deleted_objects_[TypeHelper<T>::kIndex], 1);
-    deleted_objects_[TypeHelper<T>::kIndex][pos] = obj;
+    if (!AllocatorStateT<ThisAllocator>::kHasParallelDo) {
+      auto pos = atomicAdd(&num_deleted_objects_[TypeHelper<T>::kIndex], 1);
+      deleted_objects_[TypeHelper<T>::kIndex][pos] = obj;
+    }
+
     allocator_state_.free<T>(obj);
   }
 

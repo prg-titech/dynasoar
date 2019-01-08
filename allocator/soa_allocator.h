@@ -253,6 +253,7 @@ class SoaAllocator {
   // Call a member function on all objects of type.
   // Device version (sequential).
   // TODO: This does not enumerate subtypes.
+  // TODO: This also enumerates newly-created objects.
   template<class T, typename F, typename... Args>
   __DEV__ void device_do(F func, Args... args) {
     // device_do iterates over objects in a block.

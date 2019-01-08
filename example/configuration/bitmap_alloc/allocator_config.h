@@ -37,6 +37,17 @@ __global__ void kernel_bitmap_parallel_do_single_type(
 }
 
 
+template<typename T, typename F, typename AllocatorStateT, typename... Args>
+struct BitmapSequentialExecutor {
+  __device__ static void device_do(uint32_t pos, F func,
+                                   AllocatorStateT* state, Args... args) {
+    T* obj = reinterpret_cast<T*>(
+        state->data_storage + pos*AllocatorStateT::kObjectSize);
+    (obj->*func)(args...);
+  }
+};
+
+
 template<typename AllocatorT>
 struct AllocatorState {
   static const bool kHasParallelDo = true;
@@ -60,6 +71,8 @@ struct AllocatorState {
 
   template<class T, class BaseClass, void(BaseClass::*func)()>
   void parallel_do_single_type() {
+    auto time_start = std::chrono::system_clock::now();
+
     const auto type_index = AllocatorT::template TypeHelper<T>::kIndex;
     allocated[type_index].scan();
 
@@ -67,6 +80,12 @@ struct AllocatorState {
     uint32_t* d_num_obj_ptr =
         &allocated[type_index].data_.enumeration_result_size;
     uint32_t num_obj = copy_from_device(d_num_obj_ptr);
+
+    auto time_end = std::chrono::system_clock::now();
+    auto elapsed = time_end - time_start;
+    auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+        .count();
+    bench_prefix_sum_time += micros;
 
     if (num_obj > 0) {
       kernel_bitmap_parallel_do_single_type<T, BaseClass, func><<<
@@ -98,6 +117,14 @@ struct AllocatorState {
         - reinterpret_cast<uint64_t>(data_storage)) % kObjectSize == 0);
     allocated[AllocatorT::template TypeHelper<T>::kIndex].deallocate<true>(slot);
     global_free.allocate<true>(slot);
+  }
+
+  template<class T, typename F, typename... Args>
+  __device__ void device_do(F func, Args... args) {
+    // device_do iterates over objects in a block.
+    allocated[AllocatorT::template TypeHelper<T>::kIndex].enumerate(
+      &BitmapSequentialExecutor<T, F, AllocatorState<AllocatorT>, Args...>::device_do,
+      func, this, args...);
   }
 };
 
