@@ -7,7 +7,7 @@ using CellT = int;
 
 extern dataset_t dataset;
 
-static const int kNumIterations = 100;  // 10000
+static const int kNumIterations = 300;  // 10000
 static const bool kOptionRender = false;
 
 #endif  // EXAMPLE_GAME_OF_LIFE_SOA_CONFIGURATION_H
