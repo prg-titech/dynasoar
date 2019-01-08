@@ -4,7 +4,7 @@
 // Size of simulation.
 static const int kSeed = 42;
 static const int kSizeX = 2048;
-static const int kSizeY = 1024;
+static const int kSizeY = 1792;
 
 // Simulation constants.
 static const int kSpawnThreshold = 4;
