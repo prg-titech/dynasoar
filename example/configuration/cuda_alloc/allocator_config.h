@@ -16,6 +16,8 @@ __device__ void cuda_free(void* ptr) { free(ptr); }
 
 template<typename AllocatorT>
 struct AllocatorState {
+  static const bool kHasParallelDo = false;
+
   void initialize() {}
 
   template<class T, typename... Args>

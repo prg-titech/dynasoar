@@ -12,18 +12,39 @@
 #include "../allocator_interface_adapter.h"
 
 
-template<typename BitmapT>
-__global__ void kernel_bitmap_alloc_init_bitmap(BitmapT* bitmap) {
-  bitmap->initialize(true);
+template<typename AllocatorT, typename AllocatorStateT>
+__global__ void kernel_bitmap_alloc_init_bitmap(AllocatorStateT* state) {
+  state->global_free.initialize(true);
+
+  for (int i = 0; i < AllocatorT::kNumTypes; ++i) {
+    state->allocated[i].initialize(false);
+  }
+}
+
+
+template<class T, class BaseClass, void(BaseClass::*func)(),
+         typename AllocatorStateT, typename BitmapT>
+__global__ void kernel_bitmap_parallel_do_single_type(
+    AllocatorStateT* state, BitmapT* bitmap) {
+  const int num_objs = bitmap->data_.enumeration_result_size;
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < num_objs; i += blockDim.x * gridDim.x) {
+    auto pos = bitmap->scan_get_index(i);
+    T* obj = reinterpret_cast<T*>(
+        state->data_storage + pos*AllocatorStateT::kObjectSize);
+    (obj->*func)();
+  }
 }
 
 
 template<typename AllocatorT>
 struct AllocatorState {
+  static const bool kHasParallelDo = true;
   static const int kObjectSize = AllocatorT::kLargestTypeSize;
 
   char* data_storage;
   Bitmap<uint32_t, AllocatorT::kMaxObjects> global_free;
+  Bitmap<uint32_t, AllocatorT::kMaxObjects> allocated[AllocatorT::kNumTypes];
 
   void initialize() {
     char* host_data_storage;
@@ -33,14 +54,33 @@ struct AllocatorState {
                cudaMemcpyHostToDevice);
     gpuErrchk(cudaDeviceSynchronize());
 
-    kernel_bitmap_alloc_init_bitmap<<<128, 128>>>(&global_free);
+    kernel_bitmap_alloc_init_bitmap<AllocatorT><<<128, 128>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
+  }
+
+  template<class T, class BaseClass, void(BaseClass::*func)()>
+  void parallel_do_single_type() {
+    const auto type_index = AllocatorT::template TypeHelper<T>::kIndex;
+    allocated[type_index].scan();
+
+    // Determine number of CUDA threads.
+    uint32_t* d_num_obj_ptr =
+        &allocated[type_index].data_.enumeration_result_size;
+    uint32_t num_obj = copy_from_device(d_num_obj_ptr);
+
+    if (num_obj > 0) {
+      kernel_bitmap_parallel_do_single_type<T, BaseClass, func><<<
+          (num_obj + 256 - 1)/256, 256>>>(
+              this, &allocated[AllocatorT::template TypeHelper<T>::kIndex]);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
   }
 
   template<class T, typename... Args>
   __device__ T* make_new(Args... args) {
     // Use malloc and placement-new so that we can catch OOM errors.
     auto slot = global_free.deallocate();
+    allocated[AllocatorT::template TypeHelper<T>::kIndex].allocate<true>(slot);
     void* ptr = data_storage + slot*kObjectSize;
     assert(ptr != nullptr);
     return new(ptr) T(args...); 
@@ -56,6 +96,7 @@ struct AllocatorState {
         - reinterpret_cast<uint64_t>(data_storage)) / kObjectSize;
     assert((reinterpret_cast<uint64_t>(obj)
         - reinterpret_cast<uint64_t>(data_storage)) % kObjectSize == 0);
+    allocated[AllocatorT::template TypeHelper<T>::kIndex].deallocate<true>(slot);
     global_free.allocate<true>(slot);
   }
 };

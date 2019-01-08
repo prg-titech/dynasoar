@@ -81,6 +81,11 @@ class SoaAllocatorAdapter {
   // Zero-initialization of arrays can take a long time.
   __DEV__ SoaAllocatorAdapter() = delete;
 
+  template<typename T>
+  struct TypeHelper {
+    static const int kIndex = TYPE_INDEX(Types..., T);
+  };
+
   long unsigned int DBG_get_enumeration_time() {
     // Convert microseconds to milliseconds.
     return bench_prefix_sum_time/1000;
@@ -88,7 +93,7 @@ class SoaAllocatorAdapter {
 
   template<typename T>
   struct TypeId {
-    static const uint8_t value = TYPE_INDEX(Types..., T);
+    static const uint8_t value = TypeHelper<T>::kIndex;
   };
 
   template<class T, void(T::*func)()>
@@ -98,8 +103,17 @@ class SoaAllocatorAdapter {
         ::template InnerHelper>(this);
   }
 
-  template<class T, class BaseClass, void(BaseClass::*func)()>
-  void parallel_do_single_type() {
+  template<class T, class BaseClass, void(BaseClass::*func)(),
+           typename U = AllocatorStateT<ThisAllocator>>
+  typename std::enable_if<U::kHasParallelDo, void>::type
+  parallel_do_single_type() {
+    allocator_state_.parallel_do_single_type<T, BaseClass, func>();
+  }
+
+  template<class T, class BaseClass, void(BaseClass::*func)(),
+           typename U = AllocatorStateT<ThisAllocator>>
+  typename std::enable_if<!U::kHasParallelDo, void>::type
+  parallel_do_single_type() {
     // Get total number of objects.
     unsigned int num_objects = this->template num_objects<T>();
 
@@ -151,7 +165,7 @@ class SoaAllocatorAdapter {
   __DEV__ void parallel_do_single_type(unsigned int num_obj) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x;
          i < num_obj; i += blockDim.x * gridDim.x) {
-      T* obj = reinterpret_cast<T*>(objects_[TYPE_INDEX(Types..., T)][i]);
+      T* obj = reinterpret_cast<T*>(objects_[TypeHelper<T>::kIndex][i]);
       (obj->*func)();
     }
   }
@@ -161,10 +175,10 @@ class SoaAllocatorAdapter {
   // TODO: This does not enumerate subtypes.
   template<class T, typename F, typename... Args>
   __DEV__ void device_do(F func, Args... args) {
-    auto num_obj = num_objects_[TYPE_INDEX(Types..., T)];
+    auto num_obj = num_objects_[TypeHelper<T>::kIndex];
 
     for (int i = 0; i < num_obj; ++i) {
-      T* obj = reinterpret_cast<T*>(objects_[TYPE_INDEX(Types..., T)][i]);
+      T* obj = reinterpret_cast<T*>(objects_[TypeHelper<T>::kIndex][i]);
       (obj->*func)(args...);
     }
   }
@@ -173,10 +187,10 @@ class SoaAllocatorAdapter {
   __DEV__ T* make_new(Args... args) {
     // Add object to pointer array.
     T* result = allocator_state_.make_new<T>(args...);
-    result->set_type(TYPE_INDEX(Types..., T));
-    auto pos = atomicAdd(&num_objects_[TYPE_INDEX(Types..., T)], 1);
+    result->set_type(TypeHelper<T>::kIndex);
+    auto pos = atomicAdd(&num_objects_[TypeHelper<T>::kIndex], 1);
     assert(pos < kMaxObjects);
-    objects_[TYPE_INDEX(Types..., T)][pos] = result;
+    objects_[TypeHelper<T>::kIndex][pos] = result;
     return result;
   }
 
@@ -191,7 +205,7 @@ class SoaAllocatorAdapter {
       template<bool Check, int Dummy>
       struct ClassSelector {
         __DEV__ static bool call(ThisAllocator* allocator, BaseClass* obj) {
-          if (obj->get_type() == TYPE_INDEX(Types..., T)) {
+          if (obj->get_type() == TypeHelper<T>::kIndex) {
             allocator->free_typed(static_cast<T*>(obj));
             return false;  // No need to check other types.
           } else {
@@ -218,7 +232,7 @@ class SoaAllocatorAdapter {
   template<class T>
   __DEV__ void free(T* obj) {
     uint8_t type_id = obj->get_type();
-    if (type_id == TYPE_INDEX(Types..., T)) {
+    if (type_id == TypeHelper<T>::kIndex) {
       free_typed(obj);
     } else {
       bool result = TupleHelper<Types...>
@@ -229,8 +243,8 @@ class SoaAllocatorAdapter {
 
   template<class T>
   __DEV__ void free_typed(T* obj) {
-    auto pos = atomicAdd(&num_deleted_objects_[TYPE_INDEX(Types..., T)], 1);
-    deleted_objects_[TYPE_INDEX(Types..., T)][pos] = obj;
+    auto pos = atomicAdd(&num_deleted_objects_[TypeHelper<T>::kIndex], 1);
+    deleted_objects_[TypeHelper<T>::kIndex][pos] = obj;
     allocator_state_.free<T>(obj);
   }
 
@@ -240,7 +254,7 @@ class SoaAllocatorAdapter {
 
   template<class T>
   __DEV__ uint32_t DBG_used_slots() { 
-    return num_objects_[TYPE_INDEX(Types..., T)];
+    return num_objects_[TypeHelper<T>::kIndex];
   }
 
   static void DBG_print_stats() {}
@@ -257,16 +271,16 @@ class SoaAllocatorAdapter {
 
   template<typename T>
   __DEV__ void initialize_stream_compaction_array() {
-    auto num_obj = num_objects_[TYPE_INDEX(Types..., T)];
+    auto num_obj = num_objects_[TypeHelper<T>::kIndex];
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x;
          i < num_obj; i += blockDim.x * gridDim.x) {
-      void* ptr = objects_[TYPE_INDEX(Types..., T)][i];
+      void* ptr = objects_[TypeHelper<T>::kIndex][i];
       bool object_deleted = false;
 
       // TODO: Can use binary search?
-      for (int j = 0; j < num_deleted_objects_[TYPE_INDEX(Types..., T)]; ++j) {
-        void*& deleted_obj_ptr = deleted_objects_[TYPE_INDEX(Types..., T)][j];
+      for (int j = 0; j < num_deleted_objects_[TypeHelper<T>::kIndex]; ++j) {
+        void*& deleted_obj_ptr = deleted_objects_[TypeHelper<T>::kIndex][j];
         if (ptr == deleted_obj_ptr) {
           // Remove pointer from deleted set with CAS because new objects can
           // be allocated in the location of deleted objects in the same
@@ -285,14 +299,14 @@ class SoaAllocatorAdapter {
 
   template<typename T>
   __DEV__ void compact_object_array() {
-    auto num_obj = num_objects_[TYPE_INDEX(Types..., T)];
+    auto num_obj = num_objects_[TypeHelper<T>::kIndex];
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x;
          i < num_obj; i += blockDim.x * gridDim.x) {
       if (stream_compaction_array_[i] == 1) {
         // Retain element.
-        new_objects_[TYPE_INDEX(Types..., T)][stream_compaction_output_[i]] =
-            objects_[TYPE_INDEX(Types..., T)][i];
+        new_objects_[TypeHelper<T>::kIndex][stream_compaction_output_[i]] =
+            objects_[TypeHelper<T>::kIndex][i];
       }
     }
   }
@@ -300,7 +314,7 @@ class SoaAllocatorAdapter {
   template<typename T>
   __DEV__ void update_object_count() {
     // Update counts.
-    auto num_obj = num_objects_[TYPE_INDEX(Types..., T)];
+    auto num_obj = num_objects_[TypeHelper<T>::kIndex];
     assert(num_obj < kMaxObjects);
     assert(num_obj > 0);
 
@@ -308,21 +322,21 @@ class SoaAllocatorAdapter {
                        + stream_compaction_output_[num_obj - 1];
     assert(new_num_obj < kMaxObjects);
     assert(new_num_obj
-           == num_obj - num_deleted_objects_[TYPE_INDEX(Types..., T)]);
+           == num_obj - num_deleted_objects_[TypeHelper<T>::kIndex]);
 
-    num_objects_[TYPE_INDEX(Types..., T)] = new_num_obj;
-    num_deleted_objects_[TYPE_INDEX(Types..., T)] = 0;
+    num_objects_[TypeHelper<T>::kIndex] = new_num_obj;
+    num_deleted_objects_[TypeHelper<T>::kIndex] = 0;
 
     // Swap arrays.
-    void** tmp = objects_[TYPE_INDEX(Types..., T)];
-    objects_[TYPE_INDEX(Types..., T)] = new_objects_[TYPE_INDEX(Types..., T)];
-    new_objects_[TYPE_INDEX(Types..., T)] = tmp;
+    void** tmp = objects_[TypeHelper<T>::kIndex];
+    objects_[TypeHelper<T>::kIndex] = new_objects_[TypeHelper<T>::kIndex];
+    new_objects_[TypeHelper<T>::kIndex] = tmp;
   }
 
   template<typename T>
   unsigned int num_objects() {
     return read_from_device<unsigned int>(
-        &num_objects_[TYPE_INDEX(Types..., T)]);
+        &num_objects_[TypeHelper<T>::kIndex]);
   }
 
 

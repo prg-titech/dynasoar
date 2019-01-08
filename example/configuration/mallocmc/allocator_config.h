@@ -12,6 +12,8 @@
 
 template<typename AllocatorT>
 struct AllocatorState {
+  static const bool kHasParallelDo = false;
+
   ScatterAllocator::DevAllocator* allocator_handle;
 
   void initialize() {
