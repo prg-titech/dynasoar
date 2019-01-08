@@ -433,7 +433,7 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();
 
   int total_time = 0;
-  for (int i = 0; i < 500; ++i) {
+  for (int i = 0; i < kNumIterations; ++i) {
     if (kOptionPrintStats) {
       print_stats();
     }
