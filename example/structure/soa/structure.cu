@@ -308,7 +308,7 @@ int main(int /*argc*/, char** /*argv*/) {
   }
 
   // Create new allocator.
-  allocator_handle = new AllocatorHandle<AllocatorT>();
+  allocator_handle = new AllocatorHandle<AllocatorT>(485000000);
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
