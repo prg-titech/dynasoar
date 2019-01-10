@@ -92,7 +92,7 @@ __DEV__ void Body::compute_force() {
 
   force_x_ = 0.0f;
   force_y_ = 0.0f;
-  device_allocator->template device_do<Body>(&Body::apply_force, this);
+  device_allocator->device_do<Body>(&Body::apply_force, this);
 }
 
 
