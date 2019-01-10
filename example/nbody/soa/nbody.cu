@@ -107,6 +107,8 @@ int main(int /*argc*/, char** /*argv*/) {
     init_renderer();
   }
 
+  printf("Block size: %i\n", (int) sizeof(SoaBlock<Body,0,64>));
+
   // Host-side variables for rendering.
   float host_Body_pos_x[kNumBodies];
   float host_Body_pos_y[kNumBodies];
