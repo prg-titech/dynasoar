@@ -61,6 +61,10 @@ __device__ void Cell_leave(int cell_id) {
 
 
 __device__ void Cell_grow_sugar(int cell_id) {
+  if(threadIdx.x == 0 && blockIdx.x == 0) {
+     device_allocator->DBG_print_state_stats();
+  }
+
   dev_Cell_sugar[cell_id] += min(
       dev_Cell_sugar_capacity[cell_id] - dev_Cell_sugar[cell_id],
       dev_Cell_grow_rate[cell_id]);
