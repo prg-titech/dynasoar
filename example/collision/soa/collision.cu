@@ -257,6 +257,8 @@ int main(int /*argc*/, char** /*argv*/) {
     init_renderer();
   }
 
+  printf("Block size: %i\n", (int) sizeof(SoaBlock<Body,0,64>));
+  
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
