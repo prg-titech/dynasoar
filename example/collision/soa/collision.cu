@@ -257,10 +257,10 @@ int main(int /*argc*/, char** /*argv*/) {
     init_renderer();
   }
 
-  printf("Block size: %i\n", (int) sizeof(SoaBlock<Body,0,64>));
-  
+  //printf("Block size: %i\n", (int) sizeof(SoaBlock<Body,0,64>));
+
   // Create new allocator.
-  allocator_handle = new AllocatorHandle<AllocatorT>();
+  allocator_handle = new AllocatorHandle<AllocatorT>(900000*4/3);
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
