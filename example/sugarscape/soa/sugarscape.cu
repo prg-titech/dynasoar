@@ -281,9 +281,9 @@ __device__ void Cell::take_sugar(int amount) { sugar_ -= amount; }
 
 
 __device__ void Cell::grow_sugar() {
-  // if(threadIdx.x == 0 && blockIdx.x == 0) {
-  //   device_allocator->DBG_print_state_stats();
-  // }
+  if(threadIdx.x == 0 && blockIdx.x == 0) {
+     device_allocator->DBG_print_state_stats();
+  }
 
   sugar_ += min(sugar_capacity_ - sugar_, grow_rate_);
 }
