@@ -17,27 +17,50 @@ using IndexT = int;
 
 struct Cell {
   curandState_t random_state;
-  curandState_t car_random_state;
   DeviceArray<IndexT, kMaxDegree> incoming;
   DeviceArray<IndexT, kMaxDegree> outgoing;
-  DeviceArray<IndexT, kMaxVelocity> car_path;
-  int car_path_length;
-  int car_velocity;
-  int car_max_velocity;
   int num_incoming;
   int num_outgoing;
+  IndexT car;
   int max_velocity;
   int current_max_velocity;
   float x;
   float y;
-  bool has_car;
   bool is_target;
   char type;
 };
 
+struct Car {
+  DeviceArray<IndexT, kMaxVelocity> path;
+  curandState_t random_state;
+  IndexT position;
+  int path_length;
+  int velocity;
+  int max_velocity;
+};
+
 __device__ Cell* dev_cells;
+
+
+// Need 2 arrays of both, so we can swap.
+__device__ int* d_Car_active;
+__device__ int* d_Car_active_2;
+__device__ Car* dev_cars;
+__device__ Car* dev_cars_2;
+
+// For prefix sum array compaction.
+__device__ int* d_prefix_sum_temp;
+__device__ int* d_prefix_sum_output;
+int* h_prefix_sum_temp;
+int* h_prefix_sum_output;
+int* h_Car_active;
+int* h_Car_active_2;
+
 __device__ int d_num_cells;
+__device__ int d_num_cars;
+__device__ int d_num_cars_2;
 int host_num_cells;
+int host_num_cars;
 
 
 class TrafficLight {
@@ -150,7 +173,7 @@ __device__ float Cell_x(IndexT self) { return dev_cells[self].x; }
 
 __device__ float Cell_y(IndexT self) { return dev_cells[self].y; }
 
-__device__ bool Cell_is_free(IndexT self) { return !dev_cells[self].has_car; }
+__device__ bool Cell_is_free(IndexT self) { return dev_cells[self].car == kNullptr; }
 
 __device__ bool Cell_is_sink(IndexT self) { return dev_cells[self].num_outgoing == 0; }
 
@@ -159,31 +182,25 @@ __device__ bool Cell_is_target(IndexT self) { return dev_cells[self].is_target; 
 __device__ void Cell_set_target(IndexT self) { dev_cells[self].is_target = true; }
 
 __device__ int Car_random_int(IndexT self, int a, int b) {
-  return curand(&dev_cells[self].car_random_state) % (b - a) + a;
+  return curand(&dev_cars[self].random_state) % (b - a) + a;
 }
 
-__device__ int Car_velocity(IndexT self) { return dev_cells[self].car_velocity; }
+__device__ int Car_velocity(IndexT self) { return dev_cars[self].velocity; }
 
-__device__ int Car_max_velocity(IndexT self) { return dev_cells[self].car_max_velocity; }
+__device__ int Car_max_velocity(IndexT self) { return dev_cars[self].max_velocity; }
+
+__device__ IndexT Car_position(IndexT self) { return dev_cars[self].position; }
 
 
 __device__ void Cell_occupy(IndexT self, IndexT car) {
   assert(Cell_is_free(self));
-  dev_cells[self].has_car = true;
-  dev_cells[self].car_velocity = dev_cells[car].car_velocity;
-  dev_cells[self].car_max_velocity = dev_cells[car].car_max_velocity;
-  dev_cells[self].car_random_state = dev_cells[car].car_random_state;
-
-  for (int i = 0; i < kMaxVelocity; ++i) {
-    dev_cells[self].car_path[i] = dev_cells[car].car_path[i];
-  }
-  dev_cells[self].car_path_length = dev_cells[car].car_path_length;
+  dev_cells[self].car = car;
 }
 
 
 __device__ void Cell_release(IndexT self) {
   assert(!Cell_is_free(self));
-  dev_cells[self].has_car = false;
+  dev_cells[self].car = kNullptr;
 }
 
 
@@ -202,23 +219,23 @@ __device__ void Car_step_initialize_iteration(IndexT self) {
   // select a new path in every iteration. Otherwise, cars might get "stuck"
   // on a full network if many cars are waiting for the one in front of them in
   // a cycle.
-  dev_cells[self].car_path_length = 0;
+  dev_cars[self].path_length = 0;
 }
 
 
 __device__ void Car_step_accelerate(IndexT self) {
   // Speed up the car by 1 or 2 units.
   int speedup = Car_random_int(self, 0, 2) + 1;
-  dev_cells[self].car_velocity = dev_cells[self].car_max_velocity < dev_cells[self].car_velocity + speedup
-      ? dev_cells[self].car_max_velocity : dev_cells[self].car_velocity + speedup;
+  dev_cars[self].velocity = dev_cars[self].max_velocity < dev_cars[self].velocity + speedup
+      ? dev_cars[self].max_velocity : dev_cars[self].velocity + speedup;
 }
 
 
 __device__ void Car_step_extend_path(IndexT self) {
-  IndexT cell = self;
+  IndexT cell = dev_cars[self].position;
   IndexT next_cell;
 
-  for (int i = 0; i < dev_cells[self].car_velocity; ++i) {
+  for (int i = 0; i < dev_cars[self].velocity; ++i) {
     if (Cell_is_sink(cell) || Cell_is_target(cell)) {
       break;
     }
@@ -229,49 +246,49 @@ __device__ void Car_step_extend_path(IndexT self) {
     if (!Cell_is_free(next_cell)) break;
 
     cell = next_cell;
-    dev_cells[self].car_path[i] = cell;
-    dev_cells[self].car_path_length = dev_cells[self].car_path_length + 1;
+    dev_cars[self].path[i] = cell;
+    dev_cars[self].path_length = dev_cars[self].path_length + 1;
   }
 
-  dev_cells[self].car_velocity = dev_cells[self].car_path_length;
+  dev_cars[self].velocity = dev_cars[self].path_length;
 }
 
 
 __device__ void Car_step_constraint_velocity(IndexT self) {
   // This is actually only needed for the very first iteration, because a car
   // may be positioned on a traffic light cell.
-  if (dev_cells[self].car_velocity > Cell_current_max_velocity(self)) {
-    dev_cells[self].car_velocity = Cell_current_max_velocity(self);
+  if (dev_cars[self].velocity > Cell_current_max_velocity(dev_cars[self].position)) {
+    dev_cars[self].velocity = Cell_current_max_velocity(dev_cars[self].position);
   }
 
   int path_index = 0;
   int distance = 1;
 
-  while (distance <= dev_cells[self].car_velocity) {
+  while (distance <= dev_cars[self].velocity) {
     // Invariant: Movement of up to `distance - 1` many cells at `velocity_`
     //            is allowed.
     // Now check if next cell can be entered.
-    IndexT next_cell = dev_cells[self].car_path[path_index];
+    IndexT next_cell = dev_cars[self].path[path_index];
 
     // Avoid collision.
     if (!Cell_is_free(next_cell)) {
       // Cannot enter cell.
       --distance;
-      dev_cells[self].car_velocity = distance;
+      dev_cars[self].velocity = distance;
       break;
     } // else: Can enter next cell.
 
-    if (dev_cells[self].car_velocity > Cell_current_max_velocity(next_cell)) {
+    if (dev_cars[self].velocity > Cell_current_max_velocity(next_cell)) {
       // Car is too fast for this cell.
       if (Cell_current_max_velocity(next_cell) > distance - 1) {
         // Even if we slow down, we would still make progress.
-        dev_cells[self].car_velocity = Cell_current_max_velocity(next_cell);
+        dev_cars[self].velocity = Cell_current_max_velocity(next_cell);
       } else {
         // Do not enter the next cell.
         --distance;
         assert(distance >= 0);
 
-        dev_cells[self].car_velocity = distance;
+        dev_cars[self].velocity = distance;
         break;
       }
     }
@@ -283,42 +300,43 @@ __device__ void Car_step_constraint_velocity(IndexT self) {
   --distance;
 
 #ifndef NDEBUG
-  for (int i = 0; i < dev_cells[self].car_velocity; ++i) {
-    assert(Cell_is_free(dev_cells[self].car_path[i]));
-    assert(i == 0 || dev_cells[self].car_path[i - 1] != dev_cells[self].car_path[i]);
+  for (int i = 0; i < dev_cars[self].velocity; ++i) {
+    assert(Cell_is_free(dev_cars[self].path[i]));
+    assert(i == 0 || dev_cars[self].path[i - 1] != dev_cars[self].path[i]);
   }
   // TODO: Check why the cast is necessary.
-  assert(distance <= dev_cells[self].car_velocity);
+  assert(distance <= dev_cars[self].velocity);
 #endif  // NDEBUG
 }
 
 
 __device__ void Car_step_move(IndexT self) {
-  IndexT cell = self;
-  IndexT car = self;
-  for (int i = 0; i < dev_cells[self].car_velocity; ++i) {
-    assert(dev_cells[self].car_path[i] != cell);
+  IndexT cell = dev_cars[self].position;
+  for (int i = 0; i < dev_cars[self].velocity; ++i) {
+    assert(dev_cars[self].path[i] != cell);
 
-    cell = dev_cells[self].car_path[i];
+    cell = dev_cars[self].path[i];
     assert(Cell_is_free(cell));
 
-    Cell_release(car);
-    Cell_occupy(cell, car);
-    car = cell;
+    Cell_release(dev_cars[self].position);
+    Cell_occupy(cell, self);
+    dev_cars[self].position = cell;
   }
 
-  if (Cell_is_sink(car) || Cell_is_target(car)) {
+  if (Cell_is_sink(dev_cars[self].position) || Cell_is_target(dev_cars[self].position)) {
     // Remove car from the simulation. Will be added again in the next
     // iteration.
-    Cell_release(car);
+    Cell_release(dev_cars[self].position);
+    dev_cars[self].position = kNullptr;
+    d_Car_active[self] = 0;
   }
 }
 
 
 __device__ void Car_step_slow_down(IndexT self) {
   // 20% change of slowdown.
-  if (curand_uniform(&dev_cells[self].car_random_state) < 0.2 && dev_cells[self].car_velocity > 0) {
-    dev_cells[self].car_velocity = dev_cells[self].car_velocity - 1;
+  if (curand_uniform(&dev_cars[self].random_state) < 0.2 && dev_cars[self].velocity > 0) {
+    dev_cars[self].velocity = dev_cars[self].velocity - 1;
   }
 }
 
@@ -338,16 +356,21 @@ __device__ void TrafficLight::step() {
 
 
 __device__ IndexT new_Car(int seed, IndexT cell, int max_velocity) {
+  IndexT idx = atomicAdd(&d_num_cars, 1);
+  assert(idx >= 0 && idx < kMaxNumCars);
+
+  assert(!d_Car_active[idx]);
+  dev_cars[idx].position = cell;
+  dev_cars[idx].path_length = 0;
+  dev_cars[idx].velocity = 0;
+  dev_cars[idx].max_velocity = max_velocity;
+  d_Car_active[idx] = 1;
+
   assert(Cell_is_free(cell));
-  dev_cells[cell].has_car = true;
+  Cell_occupy(cell, idx);
+  curand_init(seed, 0, 0, &dev_cars[idx].random_state);
 
-  dev_cells[cell].car_path_length = 0;
-  dev_cells[cell].car_velocity = 0;
-  dev_cells[cell].car_max_velocity = max_velocity;
-
-  curand_init(seed, 0, 0, &dev_cells[cell].car_random_state);
-
-  return cell;
+  return idx;
 }
 
 
@@ -368,6 +391,7 @@ __device__ void ProducerCell_create_car(IndexT self) {
 __device__ IndexT new_Cell(int max_velocity, float x, float y) {
   IndexT idx = atomicAdd(&d_num_cells, 1);
   
+  dev_cells[idx].car = kNullptr;
   dev_cells[idx].max_velocity = max_velocity;
   dev_cells[idx].current_max_velocity = max_velocity;
   dev_cells[idx].num_incoming = 0;
@@ -376,7 +400,6 @@ __device__ IndexT new_Cell(int max_velocity, float x, float y) {
   dev_cells[idx].y = y;
   dev_cells[idx].is_target = false;
   dev_cells[idx].type = kCellTypeNormal;
-  dev_cells[idx].has_car = false;
 
   return idx;
 }
@@ -672,18 +695,27 @@ __device__ void Car_step_prepare_path(IndexT self) {
 
 __global__ void kernel_Car_step_prepare_path() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cells; i += blockDim.x * gridDim.x) {
-    if (dev_cells[i].has_car) {
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
+    if (d_Car_active[i]) {
       Car_step_prepare_path(i);
     }
   }
 }
 
 
+__global__ void kernel_fill_car_indices() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
+    d_Car_active[i] = 0;
+    d_Car_active_2[i] = 0;
+  }
+}
+
+
 __global__ void kernel_Car_step_move() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cells; i += blockDim.x * gridDim.x) {
-    if (dev_cells[i].has_car) {
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
+    if (d_Car_active[i]) {
       Car_step_move(i);
     }
   }
@@ -693,8 +725,8 @@ __global__ void kernel_Car_step_move() {
 __device__ int d_checksum;
 __global__ void kernel_compute_checksum() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cells; i += blockDim.x * gridDim.x) {
-    if (dev_cells[i].has_car) {
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
+    if (d_Car_active[i]) {
       atomicAdd(&d_checksum, 1);
     }
   }
@@ -717,16 +749,17 @@ void step() {
       (host_num_cells + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
-
+  
+  cudaMemcpyFromSymbol(&host_num_cars, d_num_cars, sizeof(int), 0, cudaMemcpyDeviceToHost);
   step_traffic_lights();
 
   kernel_Car_step_prepare_path<<<
-      (host_num_cells + kNumBlockSize - 1) / kNumBlockSize,
+      (host_num_cars + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   kernel_Car_step_move<<<
-      (host_num_cells + kNumBlockSize - 1) / kNumBlockSize,
+      (host_num_cars + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
@@ -738,8 +771,117 @@ void allocate_memory() {
   cudaMemcpyToSymbol(dev_cells, &h_cells, sizeof(Cell*),
                      0, cudaMemcpyHostToDevice);
 
+  Car* h_cars;
+  cudaMalloc(&h_cars, sizeof(Car)*kMaxNumCars);
+  cudaMemcpyToSymbol(dev_cars, &h_cars, sizeof(Car*),
+                     0, cudaMemcpyHostToDevice);
+
+  cudaMalloc(&h_Car_active, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_active, &h_Car_active, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  Car* h_cars_2;
+  cudaMalloc(&h_cars_2, sizeof(Car)*kMaxNumCars);
+  cudaMemcpyToSymbol(dev_cars_2, &h_cars_2, sizeof(Car*),
+                     0, cudaMemcpyHostToDevice);
+
+  cudaMalloc(&h_Car_active_2, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_Car_active_2, &h_Car_active_2, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+
+  cudaMalloc(&h_prefix_sum_temp, 3*sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_prefix_sum_temp, &h_prefix_sum_temp, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  cudaMalloc(&h_prefix_sum_output, sizeof(int)*kMaxNumCars);
+  cudaMemcpyToSymbol(d_prefix_sum_output, &h_prefix_sum_output, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  kernel_fill_car_indices<<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   int zero = 0;
   cudaMemcpyToSymbol(d_num_cells, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
+  cudaMemcpyToSymbol(d_num_cars, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
+}
+
+
+__global__ void kernel_compact_initialize() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < kMaxNumCars; i += blockDim.x * gridDim.x) {
+    d_Car_active_2[i] = 0;
+  }
+}
+
+
+__global__ void kernel_compact_cars() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < d_num_cars; i += blockDim.x * gridDim.x) {
+    if (d_Car_active[i]) {
+      int target = d_prefix_sum_output[i];
+
+      // Copy i --> target.
+      dev_cars_2[target] = dev_cars[i];
+      d_Car_active_2[target] = 1;
+
+      // Update pointer in Cell.
+      dev_cells[dev_cars[i].position].car = target;
+
+      atomicAdd(&d_num_cars_2, 1);
+    }
+  }
+}
+
+
+__global__ void kernel_compact_swap_pointers() {
+  {
+    auto* tmp = dev_cars;
+    dev_cars = dev_cars_2;
+    dev_cars_2 = tmp;
+  }
+
+  {
+    auto* tmp = d_Car_active;
+    d_Car_active = d_Car_active_2;
+    d_Car_active_2 = tmp;
+  }
+
+  d_num_cars = d_num_cars_2;
+}
+
+
+void compact_car_array() {
+  int zero = 0;
+  cudaMemcpyToSymbol(d_num_cars_2, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
+  cudaMemcpyFromSymbol(&host_num_cars, d_num_cars, sizeof(int), 0, cudaMemcpyDeviceToHost);
+
+  // TODO: Prefix sum broken for num_objects < 256.
+  auto prefix_sum_size = host_num_cars < 256 ? 256 : host_num_cars;
+  size_t temp_size = 3*kMaxNumCars;
+  cub::DeviceScan::ExclusiveSum(h_prefix_sum_temp,
+                                temp_size,
+                                h_Car_active,
+                                h_prefix_sum_output,
+                                prefix_sum_size);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_compact_initialize<<<
+      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_compact_cars<<<
+      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_compact_swap_pointers<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  auto* tmp = h_Car_active;
+  h_Car_active = h_Car_active_2;
+  h_Car_active_2 = tmp;
 }
 
 
@@ -751,6 +893,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kNumIterations; ++i) {
     step();
+
+    compact_car_array();
   }
 
   auto time_end = std::chrono::system_clock::now();
