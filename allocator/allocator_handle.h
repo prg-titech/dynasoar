@@ -18,7 +18,7 @@ class AllocatorHandle {
   AllocatorHandle(const AllocatorHandle<AllocatorT>&) = delete;
 
   // Initialize the allocator: Allocator class and data buffer.
-  AllocatorHandle(size_t /*heap_size*/) {  // heap size ignored
+  AllocatorHandle(size_t heap_size=0) {  // heap size ignored
 #ifndef NDEBUG
     int device_id;
     gpuErrchk(cudaGetDevice(&device_id));
