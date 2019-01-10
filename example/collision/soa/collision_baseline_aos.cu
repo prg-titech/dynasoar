@@ -261,6 +261,7 @@ int main(int /*argc*/, char** /*argv*/) {
   Body* h_bodies;
 
   cudaMalloc(&h_bodies, sizeof(Body)*kNumBodies);
+  printf("Size of Body: %i\n", (int) sizeof(Body));
 
   cudaMemcpyToSymbol(d_bodies, &h_bodies,
                      sizeof(Body*), 0, cudaMemcpyHostToDevice);
