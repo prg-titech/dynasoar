@@ -57,7 +57,7 @@ struct AllocatorState {
   Bitmap<uint32_t, AllocatorT::kMaxObjects> global_free;
   Bitmap<uint32_t, AllocatorT::kMaxObjects> allocated[AllocatorT::kNumTypes];
 
-  void initialize() {
+  void initialize(size_t /*allocator_size*/) {  // ignored
     char* host_data_storage;
     cudaMalloc(&host_data_storage, 3ULL*kMallocHeapSize/4);
     assert(host_data_storage != nullptr);

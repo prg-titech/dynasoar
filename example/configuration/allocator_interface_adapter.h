@@ -364,7 +364,7 @@ class SoaAllocatorAdapter {
 
   // We are using too much memory for aux. data structures.
   // TODO: Find a better way.
-  static const int kMaxObjects = N_Objects/2;
+  static const int kMaxObjects = N_Objects;
   static const unsigned int kInvalidObject =
       std::numeric_limits<unsigned int>::max();
 
