@@ -226,22 +226,25 @@ __device__ void Shark_prepare(int cell_id) {
 }
 
 __device__ void Shark_update(int cell_id) {
+  auto new_pos = dev_cells[cell_id].agent_new_position;
+
   if (kOptionSharkDie && dev_cells[cell_id].agent_energy == 0) {
     Cell_kill(cell_id);
   } else {
-    if (cell_id != dev_cells[cell_id].agent_new_position) {
-      if (Cell_has_fish(dev_cells[cell_id].agent_new_position)) {
+    if (cell_id != new_pos) {
+      if (Cell_has_fish(new_pos)) {
         dev_cells[cell_id].agent_energy += kEngeryBoost;
-        Cell_kill(dev_cells[cell_id].agent_new_position);
+        Cell_kill(new_pos);
       }
 
-      assert(dev_cells[dev_cells[cell_id].agent_new_position].agent_type == kAgentTypeNone);
-      Cell_enter(dev_cells[cell_id].agent_new_position, cell_id);
+      assert(dev_cells[new_pos].agent_type != kAgentTypeFish);
+      assert(dev_cells[new_pos].agent_type == kAgentTypeNone);
+      Cell_enter(new_pos, cell_id);
       Cell_leave(cell_id);
 
-      if (kOptionSharkSpawn && dev_cells[dev_cells[cell_id].agent_new_position].agent_egg_counter > kSpawnThreshold) {
-        new_Shark(cell_id, curand(&dev_cells[dev_cells[cell_id].agent_new_position].agent_random_state));
-        dev_cells[dev_cells[cell_id].agent_new_position].agent_egg_counter = 0;
+      if (kOptionSharkSpawn && dev_cells[new_pos].agent_egg_counter > kSpawnThreshold) {
+        new_Shark(cell_id, curand(&dev_cells[new_pos].agent_random_state));
+        dev_cells[new_pos].agent_egg_counter = 0;
       }
     }
   }
