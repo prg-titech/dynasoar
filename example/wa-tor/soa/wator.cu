@@ -359,6 +359,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 
   int total_time = 0;
   for (int i = 0; i < kNumIterations; ++i) {
+#ifndef NDEBUG
+    printf("%i\n", i);
+#endif  // NDEBUG
+
     if (kOptionPrintStats) {
       print_stats();
     }
@@ -379,6 +383,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
         time_after - time_before).count();
     total_time += time_running;
   }
+
+#ifndef NDEBUG
+  print_stats();
+#endif  // NDEBUG
 
   printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
   return 0;
