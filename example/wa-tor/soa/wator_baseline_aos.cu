@@ -19,9 +19,9 @@ struct Cell {
   curandState_t random_state;
   curandState_t agent_random_state;
   DeviceArray<bool, 5> neighbor_request;
-  int agent_new_position;
-  int agent_egg_counter;
-  int agent_energy;
+  IndexT agent_new_position;
+  uint32_t agent_egg_counter;
+  uint32_t agent_energy;
   bool agent_active;
   char agent_type;
 };
@@ -194,13 +194,14 @@ __device__ void Fish_prepare(int cell_id) {
 }
 
 __device__ void Fish_update(int cell_id) {
-  if (cell_id != dev_cells[cell_id].agent_new_position) {
-    Cell_enter(dev_cells[cell_id].agent_new_position, cell_id);
+  auto new_pos = dev_cells[cell_id].agent_new_position;
+  if (cell_id != new_pos) {
+    Cell_enter(new_pos, cell_id);
     Cell_leave(cell_id);
 
-    if (kOptionFishSpawn && dev_cells[dev_cells[cell_id].agent_new_position].agent_egg_counter > kSpawnThreshold) {
-      new_Fish(cell_id, curand(&dev_cells[dev_cells[cell_id].agent_new_position].agent_random_state));
-      dev_cells[dev_cells[cell_id].agent_new_position].agent_egg_counter = 0;
+    if (kOptionFishSpawn && dev_cells[new_pos].agent_egg_counter > kSpawnThreshold) {
+      new_Fish(cell_id, curand(&dev_cells[new_pos].agent_random_state));
+      dev_cells[new_pos].agent_egg_counter = 0;
     }
   }
 }
