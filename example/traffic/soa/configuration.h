@@ -6,10 +6,10 @@ static const int kMaxVelocity = 10;
 static const int kMaxDegree = 4;
 static const int kNumIntersections = 17500;
 static const float kCellLength = 0.005f;
-static const float kProducerRatio = 0.04f;
-static const float kTargetRatio = 0.01f;
+static const float kProducerRatio = 0.02f;
+static const float kTargetRatio = 0.003f;
 static const int kNumIterations = 12000;
-static const float kCarAllocationRatio = 0.04f;
+static const float kCarAllocationRatio = 0.02f;
 static const bool kOptionRender = false;
 
 // Only for baseline version.
