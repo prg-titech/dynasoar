@@ -167,7 +167,6 @@ __device__ void Car::step_move() {
     assert(path_[i] != cell);
 
     cell = path_[i];
-    assert(cell != this);
     assert(cell->is_free());
   }
 

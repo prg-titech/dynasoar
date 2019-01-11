@@ -13,7 +13,7 @@ class Cell;
 class ProducerCell;
 class TrafficLight;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Car, Cell, ProducerCell>;
+using AllocatorT = SoaAllocator<22*64*64*64, Car, Cell, ProducerCell>;
 
 class Cell : public SoaBase<AllocatorT> {
  public:
