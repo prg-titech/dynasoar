@@ -10,3 +10,5 @@ cuda_add_executable(traffic_baseline_2class_soa traffic_baseline_2class.cu)
 cuda_add_executable(traffic_baseline_2class_aos traffic_baseline_2class_aos.cu)
 
 cuda_add_executable(traffic_baseline_aos traffic_baseline_aos.cu)
+
+cuda_add_executable(traffic_baseline traffic_baseline.cu)

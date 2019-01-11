@@ -162,24 +162,28 @@ __device__ void Car::step_constraint_velocity() {
 
 __device__ void Car::step_move() {
   Cell* cell = position_;
+
   for (int i = 0; i < velocity_; ++i) {
     assert(path_[i] != cell);
 
     cell = path_[i];
+    assert(cell != this);
     assert(cell->is_free());
+  }
 
+  if (velocity_ > 0) {
     position()->release();
     cell->occupy(this);
     position_ = cell;
-  }
 
-  if (position()->is_sink() || position()->is_target()) {
-    // Remove car from the simulation. Will be added again in the next
-    // iteration.
-    position()->release();
-    position_ = nullptr;
-    //printf("KILLED!\n");
-    device_allocator->free<Car>(this);
+    if (position()->is_sink() || position()->is_target()) {
+      // Remove car from the simulation. Will be added again in the next
+      // iteration.
+      position()->release();
+      position_ = nullptr;
+      //printf("KILLED!\n");
+      device_allocator->free<Car>(this);
+    }
   }
 }
 
