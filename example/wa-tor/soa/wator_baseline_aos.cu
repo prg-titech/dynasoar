@@ -126,7 +126,6 @@ __device__ void Cell_enter(IndexT cell_id, IndexT agent) {
   // TODO: Assign agent but do not commit yet!
   dev_cells[cell_id].agent_random_state = dev_cells[agent].agent_random_state;
   dev_cells[cell_id].agent_type = dev_cells[agent].agent_type;
-  dev_cells[cell_id].agent_active = false;  // Is this correct?
   dev_cells[cell_id].agent_energy = dev_cells[agent].agent_energy;
   dev_cells[cell_id].agent_egg_counter = dev_cells[agent].agent_egg_counter;
   dev_cells[cell_id].agent_new_position = dev_cells[agent].agent_new_position;
@@ -135,6 +134,7 @@ __device__ void Cell_enter(IndexT cell_id, IndexT agent) {
 __device__ void Cell_kill(IndexT cell_id) {
   assert(dev_cells[cell_id].agent_type != kAgentTypeNone);
   dev_cells[cell_id].agent_type = kAgentTypeNone;
+  dev_cells[cell_id].agent_active = false;
 }
 
 __device__ bool Cell_has_fish(IndexT cell_id) {
@@ -152,6 +152,7 @@ __device__ bool Cell_is_free(IndexT cell_id) {
 __device__ void Cell_leave(IndexT cell_id) {
   assert(dev_cells[cell_id].agent_type != kAgentTypeNone);
   dev_cells[cell_id].agent_type = kAgentTypeNone;
+  dev_cells[cell_id].agent_active = false;
 }
 
 __device__ void Cell_request_random_fish_neighbor(IndexT cell_id) {
@@ -383,6 +384,11 @@ void step() {
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+  kernel_Agent_set_active<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   // --- SHARKS ---
   kernel_Cell_prepare<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
@@ -404,7 +410,6 @@ void step() {
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  // --- SET ACTIVE ---
   kernel_Agent_set_active<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
