@@ -112,6 +112,7 @@ __device__ void Cell_decide(IndexT cell_id) {
     }
 
     if (num_candidates > 0) {
+      assert(dev_cells[cell_id].agent_type != kAgentTypeShark);
       uint32_t selected_index = curand(&dev_cells[cell_id].random_state) % num_candidates;
       dev_cells[Cell_neighbor(cell_id, candidates[selected_index])].agent_new_position = cell_id;
     }
@@ -120,6 +121,7 @@ __device__ void Cell_decide(IndexT cell_id) {
 
 __device__ void Cell_enter(IndexT cell_id, IndexT agent) {
   assert(dev_cells[cell_id].agent_type == kAgentTypeNone);
+  assert(dev_cells[agent].agent_type != kAgentTypeNone);
 
   // TODO: Assign agent but do not commit yet!
   dev_cells[cell_id].agent_random_state = dev_cells[agent].agent_random_state;
