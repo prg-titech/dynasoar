@@ -320,6 +320,19 @@ __global__ void print_checksum() {
          d_checksum, fish_use, fish_num, shark_use, shark_num);
 }
 
+void print_stats() {
+  reset_checksum<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_Cell_add_to_checksum<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());;
+
+  print_checksum<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
 #ifdef OPTION_DEFRAG
 void defrag() {
   allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 32,
@@ -417,19 +430,6 @@ void update_gui_map() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-
-void print_stats() {
-  reset_checksum<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  kernel_Cell_add_to_checksum<<<
-      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
-      kNumBlockSize>>>();
-  gpuErrchk(cudaDeviceSynchronize());;
-
-  print_checksum<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();

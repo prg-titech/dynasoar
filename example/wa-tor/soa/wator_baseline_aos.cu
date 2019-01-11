@@ -362,6 +362,19 @@ __global__ void print_checksum() {
          d_checksum, 0, 0, 0, 0);
 }
 
+void print_stats() {
+  reset_checksum<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_Cell_add_to_checksum<<<
+      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());;
+
+  print_checksum<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
 void step() {
   // --- FISH ---
   kernel_Cell_prepare<<<
@@ -460,19 +473,6 @@ void update_gui_map() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-
-void print_stats() {
-  reset_checksum<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  kernel_Cell_add_to_checksum<<<
-      (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
-      kNumBlockSize>>>();
-  gpuErrchk(cudaDeviceSynchronize());;
-
-  print_checksum<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();
