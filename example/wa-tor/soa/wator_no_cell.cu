@@ -358,7 +358,6 @@ void step() {
 
   allocator_handle->parallel_do<Fish, &Fish::update>();
 
-print_stats();
   // --- SHARKS ---
   kernel_Cell_prepare<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
@@ -373,7 +372,6 @@ print_stats();
   gpuErrchk(cudaDeviceSynchronize());
 
   allocator_handle->parallel_do<Shark, &Shark::update>();
-print_stats();
 }
 
 void initialize() {

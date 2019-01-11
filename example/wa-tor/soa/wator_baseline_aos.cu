@@ -397,7 +397,6 @@ void step() {
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
-print_stats();
 
   kernel_Agent_set_active<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
@@ -424,7 +423,6 @@ print_stats();
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
-print_stats();
 
   kernel_Agent_set_active<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
