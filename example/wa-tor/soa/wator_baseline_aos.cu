@@ -127,7 +127,7 @@ __device__ void Cell_enter(IndexT cell_id, IndexT agent) {
   dev_cells[cell_id].agent_active = false;  // Is this correct?
   dev_cells[cell_id].agent_energy = dev_cells[agent].agent_energy;
   dev_cells[cell_id].agent_egg_counter = dev_cells[agent].agent_egg_counter;
-  dev_cells[cell_id].agent_new_position = dev_cells[agent].new_position;
+  dev_cells[cell_id].agent_new_position = dev_cells[agent].agent_new_position;
 }
 
 __device__ void Cell_kill(IndexT cell_id) {
@@ -154,10 +154,10 @@ __device__ void Cell_leave(IndexT cell_id) {
 
 __device__ void Cell_request_random_fish_neighbor(IndexT cell_id) {
   if (!Cell_request_random_neighbor<&Cell_has_fish>(
-      cell_id, dev_cells[cell_id]->agent_random_state)) {
+      cell_id, dev_cells[cell_id].agent_random_state)) {
     // No fish found. Look for free cell.
     if (!Cell_request_random_neighbor<&Cell_is_free>(
-        cell_id, dev_cells[cell_id]->agent_random_state)) {
+        cell_id, dev_cells[cell_id].agent_random_state)) {
       dev_cells[cell_id].neighbor_request[4] = true;
     }
   }
@@ -165,7 +165,7 @@ __device__ void Cell_request_random_fish_neighbor(IndexT cell_id) {
 
 __device__ void Cell_request_random_free_neighbor(IndexT cell_id) {
   if (!Cell_request_random_neighbor<&Cell_is_free>(
-      cell_id, dev_cells[cell_id]->agent_random_state)) {
+      cell_id, dev_cells[cell_id].agent_random_state)) {
     dev_cells[cell_id].neighbor_request[4] = true;
   }
 }
@@ -175,7 +175,7 @@ __device__ void new_Agent(int cell_id, int seed) {
   dev_cells[cell_id].agent_active = false;
 }
 
-__device__ new_Fish(int cell_id, int seed) {
+__device__ void new_Fish(int cell_id, int seed) {
   new_Agent(cell_id, seed);
   dev_cells[cell_id].agent_type = kAgentTypeFish;
   dev_cells[cell_id].agent_egg_counter = seed % kSpawnThreshold;
@@ -430,8 +430,8 @@ __global__ void fill_gui_map() {
   int tid = threadIdx.x + blockDim.x*blockIdx.x;
 
   if (tid < kSizeY*kSizeX) {
-    if (dev_Cell_agent[tid] != nullptr) {
-      d_gui_map[tid] = dev_Cell_agent[tid]->get_type();
+    if (dev_cells[tid].agent_type != kAgentTypeNone) {
+      d_gui_map[tid] = dev_cells[tid].agent_type;
     } else {
       d_gui_map[tid] = 0;
     }
