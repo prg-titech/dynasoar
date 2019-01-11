@@ -345,6 +345,7 @@ void step() {
 
   allocator_handle->parallel_do<Fish, &Fish::update>();
 
+print_stats();
   // --- SHARKS ---
   kernel_Cell_prepare<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
@@ -359,6 +360,7 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
 
   allocator_handle->parallel_do<Shark, &Shark::update>();
+print_stats();
 }
 
 void initialize() {
@@ -436,7 +438,6 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
   for (int i = 0; i < kNumIterations; ++i) {
 #ifndef NDEBUG
     printf("%i\n", i);
-    print_stats();
 #endif  // NDEBUG
 
     if (kOptionPrintStats) {

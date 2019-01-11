@@ -383,6 +383,7 @@ void step() {
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
+print_stats();
 
   kernel_Agent_set_active<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
@@ -409,6 +410,7 @@ void step() {
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
+print_stats();
 
   kernel_Agent_set_active<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
@@ -479,7 +481,6 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
   for (int i = 0; i < kNumIterations; ++i) {
 #ifndef NDEBUG
     printf("%i\n", i);
-    print_stats();
 #endif  // NDEBUG
 
     if (kOptionPrintStats) {
