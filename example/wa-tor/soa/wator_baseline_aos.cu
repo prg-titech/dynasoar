@@ -235,6 +235,7 @@ __device__ void Shark_update(int cell_id) {
         Cell_kill(dev_cells[cell_id].agent_new_position);
       }
 
+      assert(dev_cells[dev_cells[cell_id].agent_new_position].agent_type == kAgentTypeNone);
       Cell_enter(dev_cells[cell_id].agent_new_position, cell_id);
       Cell_leave(cell_id);
 
