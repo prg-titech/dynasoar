@@ -279,8 +279,8 @@ __global__ void print_checksum() {
   uint32_t shark_use = device_allocator->DBG_used_slots<Shark>();
   uint32_t shark_num = device_allocator->DBG_allocated_slots<Shark>();
 
-  printf("%i,%u,%u,%u,%u\n",
-         d_checksum, fish_use, fish_num, shark_use, shark_num);
+  printf("%u,%u,%u,%u\n",
+         fish_use, fish_num, shark_use, shark_num);
 }
 
 #ifdef OPTION_DEFRAG
@@ -345,11 +345,6 @@ void update_gui_map() {
 
 
 void print_stats() {
-  reset_checksum<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  allocator_handle->parallel_do<Cell, &Cell::add_to_checksum>();
-
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
@@ -357,15 +352,14 @@ void print_stats() {
 int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();
 
-  int total_time = 0;
   for (int i = 0; i < kNumIterations; ++i) {
 #ifndef NDEBUG
     printf("%i\n", i);
 #endif  // NDEBUG
 
-    if (kOptionPrintStats) {
+    //if (kOptionPrintStats) {
       print_stats();
-    }
+    //}
 
     auto time_before = std::chrono::system_clock::now();
     step();
@@ -377,17 +371,11 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
       }
     }
 #endif  // OPTION_DEFRAG
-
-    auto time_after = std::chrono::system_clock::now();
-    int time_running = std::chrono::duration_cast<std::chrono::milliseconds>(
-        time_after - time_before).count();
-    total_time += time_running;
   }
 
 #ifndef NDEBUG
   print_stats();
 #endif  // NDEBUG
 
-  printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
   return 0;
 }
