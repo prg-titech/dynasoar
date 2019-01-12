@@ -296,9 +296,9 @@ class SoaAllocator {
 
     do {
       // Bit set to 1 if slot is free.
-      unsigned int rotation_len = warp_id() % 64;
+      //unsigned int rotation_len = 0; //warp_id() % 64;
       // TODO: Can we use return value from atomic update in second iteration?
-      BlockBitmapT updated_mask = rotl(free_bitmap, rotation_len);
+      BlockBitmapT updated_mask = free_bitmap; //rotl(free_bitmap, rotation_len);
 
       // If there are not enough free slots, allocate as many as possible.
       int free_slots = __popcll(updated_mask);
@@ -313,7 +313,7 @@ class SoaAllocator {
         // Clear bit at position `next_bit_pos` in updated mask.
         updated_mask &= updated_mask - 1;
         // Save location of selected bit.
-        int next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
+        int next_bit_pos_unrot = next_bit_pos;
         newly_selected_bits |= 1ULL << next_bit_pos_unrot;
       }
 
