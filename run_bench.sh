@@ -1,5 +1,5 @@
 #!/bin/bash
-cmake -DCMAKE_BUILD_TYPE=Release -DALLOCATOR=SoaAlloc .
+cmake -DCMAKE_BUILD_TYPE=Release -DALLOCATOR=halloc .
 
 for (( i=1; i<=256; i++))
 do
@@ -9,7 +9,7 @@ do
   make wator_soa_no_cell
 
   res=`bin/wator_soa_no_cell`
-  echo $res >> results/soaalloc.csv
-  cat results/soaalloc.csv
+  echo $res >> results/halloc.csv
+  cat results/halloc.csv
 done
 
