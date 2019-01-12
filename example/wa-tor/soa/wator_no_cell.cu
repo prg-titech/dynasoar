@@ -327,9 +327,6 @@ __global__ void print_checksum() {
 }
 
 void print_stats() {
-  reset_checksum<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
   kernel_Cell_add_to_checksum<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
@@ -349,6 +346,9 @@ void defrag() {
 #endif  // OPTION_DEFRAG
 
 void step() {
+  reset_checksum<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
   // --- FISH ---
   kernel_Cell_prepare<<<
       (kSizeX*kSizeY + kNumBlockSize - 1) / kNumBlockSize,
