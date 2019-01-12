@@ -11,7 +11,7 @@ class Agent;
 class Fish;
 class Shark;
 
-using AllocatorT = SoaAllocator<16*64*64*64, Agent, Fish, Shark>;
+using AllocatorT = SoaAllocator<32*64*64*64, Agent, Fish, Shark>;
 using IndexT = int;
 
 
