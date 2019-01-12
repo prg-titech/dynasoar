@@ -464,6 +464,6 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
   print_stats();
 #endif  // NDEBUG
 
-  printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
+  printf("%i,%i,%lu\n", kSizeX*kSizeY, total_time, allocator_handle->DBG_get_enumeration_time());
   return 0;
 }

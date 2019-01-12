@@ -1,11 +1,13 @@
 #ifndef EXAMPLE_WA_TOR_SOA_CONFIGURATION_H
 #define EXAMPLE_WA_TOR_SOA_CONFIGURATION_H
 
+#include "extra_config.h"
+
 // Size of simulation.
 static const int kSeed = 42;
 static const int kSizeX = 2048;
-static const int kSizeY = 2560;
 
+// Allow 256MB heap size.
 // Simulation constants.
 static const int kSpawnThreshold = 4;
 static const int kEngeryBoost = 4;
