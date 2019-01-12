@@ -138,26 +138,26 @@ class SoaAllocator {
     T* result = nullptr;
 
     do {
-      const unsigned active = __activemask();
+      //const unsigned active = __activemask();
       // Leader thread is the first thread whose mask bit is set to 1.
-      const int leader = __ffs(active) - 1;
-      assert(leader >= 0 && leader < 32);
+      //const int leader = __ffs(active) - 1;
+      //assert(leader >= 0 && leader < 32);
       // Use lane mask to empty all bits higher than the current thread.
       // The rank of this thread is the number of bits set to 1 in the result.
-      const unsigned int rank = __lane_id();
-      assert(rank < 32);
+      //const unsigned int rank = __lane_id();
+      //assert(rank < 32);
 
       // Values to be calculated by the leader.
       uint32_t block_idx;
       BlockBitmapT allocation_bitmap;
-      if (rank == leader) {
-        assert(__popc(__activemask()) == 1);    // Only one thread executing.
+      //if (rank == leader) {
+        //assert(__popc(__activemask()) == 1);    // Only one thread executing.
 
         block_idx = find_active_block<T>();
         auto* block = get_block<T>(block_idx);
         BlockBitmapT* free_bitmap = &block->free_bitmap;
         allocation_bitmap = allocate_in_block<T>(
-            free_bitmap, __popc(active), block_idx);
+            free_bitmap, 1, block_idx);
         int num_allocated = __popcll(allocation_bitmap);
 
         uint8_t actual_type_id = block->type_id;
@@ -202,15 +202,14 @@ class SoaAllocator {
             }
           }
         }
-      }
+      //}
 
-      assert(__activemask() == active);
+      //assert(__activemask() == active);
       // Get pointer from allocation (nullptr if no allocation).
-      allocation_bitmap = __shfl_sync(active, allocation_bitmap, leader);
-      block_idx = __shfl_sync(active, block_idx, leader);
+      //allocation_bitmap = __shfl_sync(active, allocation_bitmap, leader);
+      //block_idx = __shfl_sync(active, block_idx, leader);
       assert(block_idx < N);
-      result = get_ptr_from_allocation<T>(
-          block_idx, __popc(__lanemask_lt() & active), allocation_bitmap);
+      result = get_ptr_from_allocation<T>(block_idx, allocation_bitmap);
     } while (result == nullptr);
 
     return new(result) T(args...);
@@ -506,16 +505,10 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ T* get_ptr_from_allocation(uint32_t block_idx, int rank,
+  __DEV__ T* get_ptr_from_allocation(uint32_t block_idx,
                                      BlockBitmapT allocation) {
     assert(block_idx < N);
-    assert(rank < 32);
-
-    // Get index of rank-th first bit set to 1.
-    for (int i = 0; i < rank; ++i) {
-      // Clear last bit.
-      allocation &= allocation - 1;
-    }
+    //assert(rank < 32);
 
     int position = __ffsll(allocation);
 
