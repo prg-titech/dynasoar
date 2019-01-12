@@ -316,8 +316,8 @@ __global__ void print_checksum() {
   uint32_t shark_use = device_allocator->DBG_used_slots<Shark>();
   uint32_t shark_num = device_allocator->DBG_allocated_slots<Shark>();
 
-  printf("%i,%u,%u,%u,%u\n",
-         d_checksum, fish_use, fish_num, shark_use, shark_num);
+  printf("%u,%u,%u,%u\n",
+         fish_use, fish_num, shark_use, shark_num);
 }
 
 void print_stats() {
@@ -460,10 +460,8 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
       time_after - time_before).count();
   total_time = time_running;
 
-#ifndef NDEBUG
+  printf("%i,%i,%lu,", kSizeX*kSizeY, total_time, allocator_handle->DBG_get_enumeration_time());
   print_stats();
-#endif  // NDEBUG
-
-  printf("%i,%i,%lu\n", kSizeX*kSizeY, total_time, allocator_handle->DBG_get_enumeration_time());
+  printf("\n");
   return 0;
 }
