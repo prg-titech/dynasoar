@@ -88,7 +88,7 @@ class SoaAllocatorAdapter {
 
   long unsigned int DBG_get_enumeration_time() {
     // Convert microseconds to milliseconds.
-    return bench_prefix_sum_time/1000;
+    return bench_prefix_sum_time;
   }
 
   template<typename T>
