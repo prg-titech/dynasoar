@@ -1,1 +1,1 @@
-static const int kSizeY = 4992;
+static const int kSizeY = 1184;

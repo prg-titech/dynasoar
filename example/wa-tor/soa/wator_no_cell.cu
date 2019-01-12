@@ -376,7 +376,7 @@ void step() {
 
 void initialize() {
   // Create new allocator.
-  allocator_handle = new AllocatorHandle<AllocatorT>(488ULL*1024*1024);
+  allocator_handle = new AllocatorHandle<AllocatorT>(512ULL*1024*1024);
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
