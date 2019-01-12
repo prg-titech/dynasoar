@@ -485,14 +485,12 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
       print_stats();
     }
 
-    unsigned long int total_enumeration_time = allocator_handle->DBG_get_enumeration_time();
     auto time_before = std::chrono::system_clock::now();
     step();
     auto time_after = std::chrono::system_clock::now();
     unsigned long int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-    unsigned long int enum_time = allocator_handle->DBG_get_enumeration_time() - total_enumeration_time;
-    unsigned long int iteration_time = time_running - enum_time;
+    unsigned long int iteration_time = time_running;
     printf("%lu\n", iteration_time);
   }
 
