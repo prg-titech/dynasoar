@@ -19,6 +19,8 @@ __device__ curandState_t* dev_Cell_random_state;
 __device__ Agent** dev_Cell_agent;
 __device__ DeviceArray<bool, 5>* dev_Cell_neighbor_request;
 
+__device__ int num_alloc;
+__device__ int num_dealloc;
 
 __device__ void Cell_prepare(IndexT cell_id) {
   for (int i = 0; i < 5; ++i) {
@@ -120,6 +122,7 @@ __device__ void Cell_enter(IndexT cell_id, Agent* agent) {
 __device__ void Cell_kill(IndexT cell_id) {
   assert(dev_Cell_agent[cell_id] != nullptr);
   device_allocator->free<Agent>(dev_Cell_agent[cell_id]);
+  atomicAdd(&num_dealloc, 1);
   dev_Cell_agent[cell_id] = nullptr;
 }
 
@@ -194,6 +197,7 @@ __device__ void Fish::update() {
 
     if (kOptionFishSpawn && egg_timer_ > kSpawnThreshold) {
       auto* new_fish = device_allocator->make_new<Fish>(curand(&random_state_));
+      atomicAdd(&num_alloc, 1);
       assert(new_fish != nullptr);
       Cell_enter(old_position, new_fish);
       egg_timer_ = (uint32_t) 0;
@@ -237,6 +241,7 @@ __device__ void Shark::update() {
       if (kOptionSharkSpawn && egg_timer_ > kSpawnThreshold) {
         auto* new_shark =
             device_allocator->make_new<Shark>(curand(&random_state_));
+        atomicAdd(&num_alloc, 1);
         assert(new_shark != nullptr);
         Cell_enter(old_position, new_shark);
         egg_timer_ = 0;
@@ -259,7 +264,8 @@ __device__ void Cell_add_to_checksum(IndexT cell_id) {
 }
 
 __global__ void reset_checksum() {
-  d_checksum = 0;
+  num_alloc = 0;
+  num_dealloc = 0;
 }
 
 __global__ void create_cells() {
@@ -311,13 +317,13 @@ __global__ void kernel_Cell_decide() {
 }
 
 __global__ void print_checksum() {
-  uint32_t fish_use = device_allocator->DBG_used_slots<Fish>();
-  uint32_t fish_num = device_allocator->DBG_allocated_slots<Fish>();
-  uint32_t shark_use = device_allocator->DBG_used_slots<Shark>();
-  uint32_t shark_num = device_allocator->DBG_allocated_slots<Shark>();
+  //uint32_t fish_use = device_allocator->DBG_used_slots<Fish>();
+  //uint32_t fish_num = device_allocator->DBG_allocated_slots<Fish>();
+  //uint32_t shark_use = device_allocator->DBG_used_slots<Shark>();
+  //uint32_t shark_num = device_allocator->DBG_allocated_slots<Shark>();
 
-  printf("%i,%u,%u,%u,%u\n",
-         d_checksum, fish_use, fish_num, shark_use, shark_num);
+  printf("%i,%i\n",
+         num_alloc, num_dealloc);
 }
 
 void print_stats() {
