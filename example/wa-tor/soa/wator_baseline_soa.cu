@@ -509,7 +509,6 @@ void update_gui_map() {
 int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();
 
-  int total_time = 0;
   for (int i = 0; i < kNumIterations; ++i) {
 #ifndef NDEBUG
     printf("%i\n", i);
@@ -519,19 +518,20 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
       print_stats();
     }
 
+    unsigned long int total_enumeration_time = allocator_handle->DBG_get_enumeration_time();
     auto time_before = std::chrono::system_clock::now();
     step();
-
     auto time_after = std::chrono::system_clock::now();
-    int time_running = std::chrono::duration_cast<std::chrono::milliseconds>(
+    unsigned long int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-    total_time += time_running;
+    unsigned long int enum_time = allocator_handle->DBG_get_enumeration_time() - total_enumeration_time;
+    unsigned long int iteration_time = time_running - enum_time;
+    printf("%lu\n", iteration_time);
   }
 
 #ifndef NDEBUG
   print_stats();
 #endif  // NDEBUG
 
-  printf("%i\n", total_time);
   return 0;
 }
