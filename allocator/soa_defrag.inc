@@ -5,8 +5,38 @@ static const unsigned int kDefragIndexEmpty =
 static const unsigned int kDefragIndexBlocked =
     std::numeric_limits<unsigned int>::max() - 1;
 
+__DEV__ int DBG_num_defrag_blocks;
+
 __DEV__ int block_idx_hash(uint32_t block_idx, int num_buckets) {
   return block_idx % num_buckets;
+}
+
+template<class T, typename AllocatorT>
+__global__ void kernel_initialize_leq(AllocatorT* allocator,
+                                      int num_records) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  assert(blockDim.x * gridDim.x >= num_records);
+
+#ifndef NDEBUG
+  if (tid == 0) { DBG_num_defrag_blocks = 0; }
+#endif  // NDEBUG
+
+  if (tid < num_records) {
+    allocator->initialize_leq_collisions();
+  }
+}
+
+template<class T, typename AllocatorT>
+__global__ void kernel_defrag_move(AllocatorT* allocator, int num_records) {
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  // TODO: Move to intialization kernel.
+  if (tid == 0) {
+    allocator->num_defrag_records_ = num_records;
+  }
+
+  if (tid < num_records*32) {
+    allocator->template defrag_move<T>(num_records);
+  }
 }
 
 template<typename AllocatorT>
@@ -246,6 +276,9 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move(int num_records) {
 
       if (before == kDefragIndexEmpty) {
         assert(defrag_records_[record_id].source_block_idx == source_block_idx);
+#ifndef NDEBUG
+        atomicAdd(&DBG_num_defrag_blocks, 1);
+#endif  // NDEBUG
         break;
       } else {
         // Collision detected.
@@ -380,7 +413,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
   auto num_leq_blocks =
       copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
   int num_records = min(max_records, num_leq_blocks/2);
-  num_records = max(0, num_records);
+  assert(num_records >= 0);
 
   if (num_records >= min_records) {
     // Create working copy of leq_50_ bitmap.
@@ -398,6 +431,14 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
         ::template for_all<AllocatorWrapperDefrag<ThisAllocator>
         ::template SoaPointerUpdater<T>::template ClassIterator>(
             this, num_records);
+
+#ifndef NDEBUG
+    int num_blocks_defragmented;
+    cudaMemcpyFromSymbol(&num_blocks_defragmented, DBG_num_defrag_blocks,
+                         sizeof(int), 0, cudaMemcpyDeviceToHost);
+    printf("Block defragmented [%s]:  %i\n", typeid(T).name(),
+           num_blocks_defragmented);
+#endif  // NDEBUG
   }
 }
 

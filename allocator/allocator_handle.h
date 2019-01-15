@@ -11,6 +11,12 @@ __global__ void init_allocator_kernel(AllocatorT* allocator,
   allocator->initialize(data_buffer);
 }
 
+template<typename AllocatorT>
+__global__ void kernel_print_state_stats(AllocatorT* allocator) {
+  assert(gridDim.x == 1 && blockDim.x == 1);
+  allocator->DBG_print_state_stats();
+}
+
 // A wrapper class for accessing the allocator from host side.
 template<typename AllocatorT>
 class AllocatorHandle {
@@ -86,6 +92,11 @@ class AllocatorHandle {
     allocator_->parallel_defrag<T>(max_records, min_records);
   }
 #endif  // OPTION_DEFRAG
+
+  void DBG_print_state_stats() {
+    kernel_print_state_stats<<<1, 1>>>(allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
+  }
 
  private:
   AllocatorT* allocator_ = nullptr;

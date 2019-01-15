@@ -285,10 +285,10 @@ __global__ void print_checksum() {
 
 #ifdef OPTION_DEFRAG
 void defrag() {
-  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 32,
-                                          /*min_records=*/ 32);
-  allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 32,
-                                           /*min_records=*/ 32);
+  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 128,
+                                          /*min_records=*/ 1);
+  allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 128,
+                                           /*min_records=*/ 1);
 }
 #endif  // OPTION_DEFRAG
 
@@ -364,7 +364,8 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #endif  // NDEBUG
 
     if (kOptionPrintStats) {
-      print_stats();
+      // print_stats();
+      allocator_handle->DBG_print_state_stats();
     }
 
     auto time_before = std::chrono::system_clock::now();
@@ -372,7 +373,7 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 
 #ifdef OPTION_DEFRAG
     if (kOptionDefrag) {
-      for (int j = 0; j < 10; ++j) {
+      for (int j = 0; j < 1; ++j) {
         defrag();
       }
     }

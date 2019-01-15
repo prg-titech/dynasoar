@@ -16,34 +16,6 @@ __forceinline__ __device__ unsigned int __lanemask_lt() {
   return mask;
 }
 
-template<class T, typename AllocatorT>
-__global__ void kernel_initialize_leq(AllocatorT* allocator,
-                                      int num_records) {
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  assert(blockDim.x * gridDim.x >= num_records);
-  if (tid < num_records) {
-    allocator->initialize_leq_collisions();
-  }
-}
-
-template<class T, typename AllocatorT>
-__global__ void kernel_defrag_move(AllocatorT* allocator, int num_records) {
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  // TODO: Move to intialization kernel.
-  if (tid == 0) {
-    allocator->num_defrag_records_ = num_records;
-  }
-
-  if (tid < num_records*32) {
-    allocator->template defrag_move<T>(num_records);
-  }
-}
-
-template<class T, typename AllocatorT>
-__global__ void kernel_defrag_scan(AllocatorT* allocator, int num_records) {
-  allocator->template defrag_scan<T>(num_records);
-}
-
 template<typename T>
 T copy_from_device(T* device_ptr) {
   T result;
