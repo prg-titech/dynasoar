@@ -98,6 +98,12 @@ class AllocatorHandle {
     gpuErrchk(cudaDeviceSynchronize());
   }
 
+#ifdef OPTION_DEFRAG
+  void DBG_print_defrag_time() {
+    allocator_->DBG_print_defrag_time();
+  }
+#endif  // OPTION_DEFRAG
+
  private:
   AllocatorT* allocator_ = nullptr;
   char* data_buffer_ = nullptr;

@@ -13,7 +13,7 @@ static const int kEngeryStart = 2;
 static const bool kOptionSharkDie = true;
 static const bool kOptionFishSpawn = true;
 static const bool kOptionSharkSpawn = true;
-static const bool kOptionDefrag = false;
+static const bool kOptionDefrag = true;
 static const bool kOptionPrintStats = false;
 static const int kNumIterations = 100;
 

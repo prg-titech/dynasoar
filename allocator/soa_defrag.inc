@@ -118,11 +118,13 @@ struct AllocatorWrapperDefrag {
             int record_id = block_idx_hash(scan_block_idx, num_records);
             assert(record_id < num_records);
             if (records[record_id].source_block_idx == scan_block_idx) {
-              //printf("FOUND: %i at %i\n", (int) scan_block_idx, record_id);
               // This pointer must be rewritten.
               int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
-              assert(src_obj_id < BlockHelper<DefragT>::kSize);
-              assert((records[record_id].source_bitmap & (1ULL << src_obj_id)) != 0);
+
+              // ... but this pointer could contain garbage data.
+              // In that case, we do not want need to rewrite.
+              bool valid_pointer = records[record_id].source_bitmap & (1ULL << src_obj_id);
+              if (!valid_pointer) return;
 
               // First src_obj_id bits are set to 1.
               BlockBitmapT cnt_mask = src_obj_id ==
@@ -190,10 +192,6 @@ struct AllocatorWrapperDefrag {
         bool process_class = SoaClassHelper<ScanClassT>::template for_all<
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
-          // TODO: Optimize. No need to do another scan here.
-          kernel_init_iteration<AllocatorT, ScanClassT><<<128, 128>>>(allocator);
-          gpuErrchk(cudaDeviceSynchronize());
-
           ParallelExecutor<AllocatorT, ScanClassT, ScanClassT, void,
                            SoaBase<AllocatorT>, /*Args...=*/ AllocatorT*, int>
               ::template FunctionWrapper<&SoaBase<AllocatorT>
@@ -264,26 +262,29 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move(int num_records) {
   BlockBitmapT source_bitmap, target_bitmap;
 
   if (slot_id == 0) {
+    source_block_idx = leq_50_[BlockHelper<T>::kIndex].scan_get_index(2*record_id);
+    target_block_idx = leq_50_[BlockHelper<T>::kIndex].scan_get_index(2*record_id + 1);
+
     for (int i = 0; i < 3; ++i) {  // 3 tries
       source_block_idx = leq_50_[BlockHelper<T>::kIndex].deallocate_seed(record_id + i);
       assert(source_block_idx != (Bitmap<uint32_t, N>::kIndexError));
 
       record_id = block_idx_hash(source_block_idx, num_records);
       assert(record_id < num_records);
-      unsigned int before = atomicCAS(&defrag_records_[record_id].source_block_idx,
+      unsigned int before = atomicCAS(&defrag_records_.source_block_idx[record_id],
                                       kDefragIndexEmpty,
                                       source_block_idx);
 
       if (before == kDefragIndexEmpty) {
-        assert(defrag_records_[record_id].source_block_idx == source_block_idx);
+        assert(defrag_records_.source_block_idx[record_id] == source_block_idx);
 #ifndef NDEBUG
         atomicAdd(&DBG_num_defrag_blocks, 1);
 #endif  // NDEBUG
         break;
       } else {
         // Collision detected.
-        assert(defrag_records_[record_id].source_block_idx != source_block_idx
-            && defrag_records_[record_id].source_block_idx != kDefragIndexEmpty);
+        assert(defrag_records_.source_block_idx[record_id] != source_block_idx
+            && defrag_records_.source_block_idx[record_id] != kDefragIndexEmpty);
         ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(source_block_idx));
         source_block_idx = kDefragIndexEmpty;
       }
@@ -296,7 +297,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move(int num_records) {
       // Block target block's slot.
       // TODO: Not ideal. It reduces the number of defrag records.
       int target_hash = block_idx_hash(target_block_idx, num_records);
-      atomicCAS(&defrag_records_[target_hash].source_block_idx,
+      atomicCAS(&defrag_records_.source_block_idx[target_hash],
                 kDefragIndexEmpty,
                 kDefragIndexBlocked);
 
@@ -310,9 +311,9 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move(int num_records) {
       target_bitmap = atomicOr(&get_block<T>(target_block_idx)->free_bitmap, 0ULL);
 
       // Copy to global memory for scan step.
-      defrag_records_[record_id].target_block_idx = target_block_idx;
-      defrag_records_[record_id].source_bitmap = source_bitmap;
-      defrag_records_[record_id].target_bitmap = target_bitmap;
+      defrag_records_.target_block_idx[record_id] = target_block_idx;
+      defrag_records_.source_bitmap[record_id] = source_bitmap;
+      defrag_records_.target_bitmap[record_id] = target_bitmap;
 
       assert(__popcll(target_bitmap) >= __popcll(source_bitmap));
     }
@@ -397,12 +398,18 @@ __DEV__ void SoaAllocator<N_Objects, Types...>
                                  int num_records) {
   extern __shared__ DefragRecord<BlockBitmapT> records[];
   for (int i = threadIdx.x; i < num_defrag_records_; i += blockDim.x) {
-    records[i] = defrag_records_[i];
+    records[i].copy_from(defrag_records_, i);
   }
 
   __syncthreads();
 }
 
+
+// For benchmarks: Measure time spent outside of parallel sections.
+// Measure time in microseconds because numbers are small.
+long unsigned int bench_init_leq_time = 0;
+long unsigned int bench_defrag_move_time = 0;
+long unsigned int bench_rewrite_time = 0;
 
 // Should be invoked from host side.
 template<uint32_t N_Objects, class... Types>
@@ -416,9 +423,15 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
   assert(num_records >= 0);
 
   if (num_records >= min_records) {
-    // Create working copy of leq_50_ bitmap.
+    auto time_1 = std::chrono::system_clock::now();
+
+    // TODO: This can be done at the end of every iteration.
     kernel_initialize_leq<T><<<256, 256>>>(this, num_records);
     gpuErrchk(cudaDeviceSynchronize());
+
+    auto time_2 = std::chrono::system_clock::now();
+    bench_init_leq_time += std::chrono::duration_cast<std::chrono::microseconds>(
+        time_2 - time_1).count();
 
     // Move objects. 4 SOA block per CUDA block. 32 threads per block.
     // (Because blocks are at most 50% full.)
@@ -426,11 +439,19 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
         (num_records + 4 - 1) / 4, 128>>>(this, num_records);
     gpuErrchk(cudaDeviceSynchronize());
 
+    auto time_3 = std::chrono::system_clock::now();
+    bench_defrag_move_time += std::chrono::duration_cast<std::chrono::microseconds>(
+        time_3 - time_2).count();
+
     // Scan and rewrite pointers.
     TupleHelper<Types...>
         ::template for_all<AllocatorWrapperDefrag<ThisAllocator>
         ::template SoaPointerUpdater<T>::template ClassIterator>(
             this, num_records);
+
+    auto time_4 = std::chrono::system_clock::now();
+    bench_rewrite_time += std::chrono::duration_cast<std::chrono::microseconds>(
+        time_4 - time_3).count();
 
 #ifndef NDEBUG
     int num_blocks_defragmented;
@@ -443,7 +464,15 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
 }
 
 template<uint32_t N_Objects, class... Types>
+void SoaAllocator<N_Objects, Types...>::DBG_print_defrag_time() {
+  printf("%lu, %lu, %lu\n",
+         bench_init_leq_time,
+         bench_defrag_move_time,
+         bench_rewrite_time);
+}
+
+template<uint32_t N_Objects, class... Types>
 __DEV__ void SoaAllocator<N_Objects, Types...>::initialize_leq_collisions() {
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  defrag_records_[tid].source_block_idx = kDefragIndexEmpty;
+  defrag_records_.source_block_idx[tid] = kDefragIndexEmpty;
 }

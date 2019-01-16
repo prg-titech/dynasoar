@@ -390,5 +390,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #endif  // NDEBUG
 
   printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
+
+#ifdef OPTION_DEFRAG
+  allocator_handle->DBG_print_defrag_time();
+#endif  // OPTION_DEFRAG
+
   return 0;
 }

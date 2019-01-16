@@ -44,6 +44,8 @@ class SoaAllocator {
   template<typename T>
   __DEV__ void defrag_move(int num_records);
 
+  void DBG_print_defrag_time();
+
   __DEV__ void load_records_to_shared_mem(ThisAllocator* allocator,
                                           int num_records);
   // ---- END ----
@@ -597,7 +599,8 @@ class SoaAllocator {
 
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
-  DefragRecord<BlockBitmapT> defrag_records_[kMaxDefragRecords];
+  //DefragRecord<BlockBitmapT> defrag_records_[kMaxDefragRecords];
+  SoaDefragRecords<BlockBitmapT, kMaxDefragRecords> defrag_records_;
 
   char* data_;
 

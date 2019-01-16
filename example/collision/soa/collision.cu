@@ -270,7 +270,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
-    // printf("%i\n", i);
+    printf("%i\n", i);
     // allocator_handle->parallel_defrag<Body>(/*max_records=*/ 32,
     //                                         /*min_records=*/ 1);
 
@@ -287,6 +287,13 @@ int main(int /*argc*/, char** /*argv*/) {
       draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
            host_draw_counter);
     }
+
+    //allocator_handle->DBG_print_state_stats();
+
+#ifdef OPTION_DEFRAG
+    allocator_handle->parallel_defrag<Body>(/*max_records=*/ 128,
+                                            /*min_records=*/ 1);
+#endif  // OPTION_DEFRAG
   }
 
   auto time_end = std::chrono::system_clock::now();
@@ -300,6 +307,10 @@ int main(int /*argc*/, char** /*argv*/) {
 #endif  // NDEBUG
 
   printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+
+#ifdef OPTION_DEFRAG
+  allocator_handle->DBG_print_defrag_time();
+#endif  // OPTION_DEFRAG
 
   if (kOptionRender) {
     close_renderer();
