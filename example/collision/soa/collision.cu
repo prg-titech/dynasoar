@@ -291,8 +291,10 @@ int main(int /*argc*/, char** /*argv*/) {
     //allocator_handle->DBG_print_state_stats();
 
 #ifdef OPTION_DEFRAG
-    allocator_handle->parallel_defrag<Body>(/*max_records=*/ 128,
-                                            /*min_records=*/ 1);
+    if (i % 20 == 0) {
+      allocator_handle->parallel_defrag<Body>(/*max_records=*/ 128,
+                                              /*min_records=*/ 1);
+    }
 #endif  // OPTION_DEFRAG
   }
 

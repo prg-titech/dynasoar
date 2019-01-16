@@ -5,7 +5,8 @@ static const unsigned int kDefragIndexEmpty =
 static const unsigned int kDefragIndexBlocked =
     std::numeric_limits<unsigned int>::max() - 1;
 
-__DEV__ int DBG_num_defrag_blocks;
+// Number of defragmented blocks.
+__DEV__ int num_defrag_blocks;
 
 __DEV__ int block_idx_hash(uint32_t block_idx, int num_buckets) {
   return block_idx % num_buckets;
@@ -17,9 +18,7 @@ __global__ void kernel_initialize_leq(AllocatorT* allocator,
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
   assert(blockDim.x * gridDim.x >= num_records);
 
-#ifndef NDEBUG
-  if (tid == 0) { DBG_num_defrag_blocks = 0; }
-#endif  // NDEBUG
+  if (tid == 0) { num_defrag_blocks = 0; }
 
   if (tid < num_records) {
     allocator->initialize_leq_collisions();
@@ -277,9 +276,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move(int num_records) {
 
       if (before == kDefragIndexEmpty) {
         assert(defrag_records_.source_block_idx[record_id] == source_block_idx);
-#ifndef NDEBUG
-        atomicAdd(&DBG_num_defrag_blocks, 1);
-#endif  // NDEBUG
+        atomicAdd(&num_defrag_blocks, 1);
         break;
       } else {
         // Collision detected.
@@ -416,17 +413,19 @@ template<uint32_t N_Objects, class... Types>
 template<typename T>
 void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
                                                         int min_records) {
+  assert(max_records < 8*256);
+
   // Determine number of records.
   auto num_leq_blocks =
       copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
   int num_records = min(max_records, num_leq_blocks/2);
   assert(num_records >= 0);
 
-  if (num_records >= min_records) {
+  while (num_records >= min_records) {
     auto time_1 = std::chrono::system_clock::now();
 
     // TODO: This can be done at the end of every iteration.
-    kernel_initialize_leq<T><<<256, 256>>>(this, num_records);
+    kernel_initialize_leq<T><<<8, 256>>>(this, num_records);
     gpuErrchk(cudaDeviceSynchronize());
 
     auto time_2 = std::chrono::system_clock::now();
@@ -453,13 +452,16 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
     bench_rewrite_time += std::chrono::duration_cast<std::chrono::microseconds>(
         time_4 - time_3).count();
 
-#ifndef NDEBUG
     int num_blocks_defragmented;
-    cudaMemcpyFromSymbol(&num_blocks_defragmented, DBG_num_defrag_blocks,
+    cudaMemcpyFromSymbol(&num_blocks_defragmented, num_defrag_blocks,
                          sizeof(int), 0, cudaMemcpyDeviceToHost);
+
+#ifndef NDEBUG
     printf("Block defragmented [%s]:  %i\n", typeid(T).name(),
            num_blocks_defragmented);
 #endif  // NDEBUG
+
+    num_records -= num_blocks_defragmented;
   }
 }
 
