@@ -93,6 +93,27 @@ struct AllocatorWrapperDebug {
       return true;
     }
   };
+
+  // Print runtime block usage statistics about this allocator.
+  template<typename T>
+  struct SoaTypeFragmentationCalculator {
+    __DEV__ bool operator()(AllocatorT* allocator, int* total_num_obj_alloc,
+                            int* total_num_obj_used) {
+      int num_obj_alloc = 0;
+      int num_obj_used = 0;
+
+      for (int i = 0; i < AllocatorT::kN; ++i) {
+        if (allocator->allocated_[BlockHelper<T>::kIndex][i]) {
+          auto* block = allocator->template get_block<T>(i);
+          num_obj_alloc += BlockHelper<T>::kSize;
+          num_obj_used += block->DBG_allocated_bits();
+        }
+      }
+
+      *total_num_obj_alloc += num_obj_alloc;
+      *total_num_obj_used += num_obj_used;
+    }
+  };
 };
 
 // The number of allocated slots of a type. (#blocks * blocksize)
@@ -168,6 +189,20 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_print_state_stats() {
          total_num_blk_alloc, total_num_blk_leq50, total_num_blk_active,
          total_num_obj_alloc, total_num_obj_used, total_obj_frag);
   printf("└────┴──────────┴──────────┴──────────┴┴──────────┴──────────┴──────────┘\n");
+}
+
+template<uint32_t N_Objects, class... Types>
+__DEV__ float SoaAllocator<N_Objects, Types...>::DBG_calculate_fragmentation() {
+  // Accumulators for statistics.
+  int total_num_obj_alloc = 0;
+  int total_num_obj_used = 0;
+
+  TupleHelper<Types...>::template dev_for_all<
+      AllocatorWrapperDebug<ThisAllocator>::SoaTypeFragmentationCalculator>(
+          this, &total_num_obj_alloc, &total_num_obj_used);
+  float total_obj_frag = 1 - static_cast<float>(total_num_obj_used)
+      / total_num_obj_alloc;
+  return total_obj_frag;
 }
 
 // Helper data structure for checking if a pointer (encoded type ID) belongs

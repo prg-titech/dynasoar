@@ -60,6 +60,8 @@ class SoaAllocator {
 
   static void DBG_print_stats();
 
+  __DEV__ float DBG_calculate_fragmentation();
+
   __DEV__ void DBG_print_state_stats();
 
   // TODO: Consider moving out of soa_debug.inc.
