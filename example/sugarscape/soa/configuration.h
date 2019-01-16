@@ -26,5 +26,6 @@ static const int kMaxChildren = 8;
 
 // Debug/rendering
 static const bool kOptionRender = false;
+static const bool kOptionPrintStats = true;
 
 #endif  // EXAMPLE_SUGARSCAPE_SOA_CONFIGURATION_H

@@ -590,6 +590,11 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
+    if (kOptionPrintStats) {
+      // print_stats();
+      allocator_handle->DBG_print_state_stats();
+    }
+
     step();
 
 #ifdef OPTION_DEFRAG
@@ -609,6 +614,10 @@ int main(int /*argc*/, char** /*argv*/) {
 #endif  // NDEBUG
 
   printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+
+#ifdef OPTION_DEFRAG
+  allocator_handle->DBG_print_defrag_time();
+#endif  // OPTION_DEFRAG
 
   if (kOptionRender) {
     close_renderer();
