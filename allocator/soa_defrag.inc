@@ -261,9 +261,6 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move(int num_records) {
   BlockBitmapT source_bitmap, target_bitmap;
 
   if (slot_id == 0) {
-    source_block_idx = leq_50_[BlockHelper<T>::kIndex].scan_get_index(2*record_id);
-    target_block_idx = leq_50_[BlockHelper<T>::kIndex].scan_get_index(2*record_id + 1);
-
     for (int i = 0; i < 3; ++i) {  // 3 tries
       source_block_idx = leq_50_[BlockHelper<T>::kIndex].deallocate_seed(record_id + i);
       assert(source_block_idx != (Bitmap<uint32_t, N>::kIndexError));
