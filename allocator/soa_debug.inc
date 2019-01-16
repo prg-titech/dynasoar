@@ -112,6 +112,8 @@ struct AllocatorWrapperDebug {
 
       *total_num_obj_alloc += num_obj_alloc;
       *total_num_obj_used += num_obj_used;
+
+      return true;
     }
   };
 };
@@ -191,6 +193,10 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_print_state_stats() {
   printf("└────┴──────────┴──────────┴──────────┴┴──────────┴──────────┴──────────┘\n");
 }
 
+__DEV__ int DBG_stat_max_total_alloc = 0;
+__DEV__ int DBG_stat_max_total_used = 0;
+__DEV__ float DBG_stat_max_total_frag = 0.0f;
+
 template<uint32_t N_Objects, class... Types>
 __DEV__ float SoaAllocator<N_Objects, Types...>::DBG_calculate_fragmentation() {
   // Accumulators for statistics.
@@ -203,6 +209,29 @@ __DEV__ float SoaAllocator<N_Objects, Types...>::DBG_calculate_fragmentation() {
   float total_obj_frag = 1 - static_cast<float>(total_num_obj_used)
       / total_num_obj_alloc;
   return total_obj_frag;
+}
+
+template<uint32_t N_Objects, class... Types>
+__DEV__ void SoaAllocator<N_Objects, Types...>::DBG_collect_stats() {
+  // Accumulators for statistics.
+  int total_num_obj_alloc = 0;
+  int total_num_obj_used = 0;
+
+  TupleHelper<Types...>::template dev_for_all<
+      AllocatorWrapperDebug<ThisAllocator>::SoaTypeFragmentationCalculator>(
+          this, &total_num_obj_alloc, &total_num_obj_used);
+  float total_obj_frag = 1 - static_cast<float>(total_num_obj_used)
+      / total_num_obj_alloc;
+
+  DBG_stat_max_total_alloc = max(DBG_stat_max_total_alloc, total_num_obj_alloc);
+  DBG_stat_max_total_used = max(DBG_stat_max_total_used, total_num_obj_used);
+  DBG_stat_max_total_frag = max(DBG_stat_max_total_frag, total_obj_frag);
+}
+
+template<uint32_t N_Objects, class... Types>
+__DEV__ void SoaAllocator<N_Objects, Types...>::DBG_print_collected_stats() {
+  printf("%i, %i, %f\n", DBG_stat_max_total_alloc, DBG_stat_max_total_used,
+         DBG_stat_max_total_frag);
 }
 
 // Helper data structure for checking if a pointer (encoded type ID) belongs

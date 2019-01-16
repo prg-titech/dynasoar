@@ -75,6 +75,18 @@ class AllocatorHandle {
     return allocator_->DBG_get_enumeration_time();
   }
 
+  void DBG_collect_stats() {
+    member_func_kernel<AllocatorT, &AllocatorT::DBG_collect_stats>
+        <<<1, 1>>>(allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
+  }
+
+  void DBG_print_collected_stats() {
+    member_func_kernel<AllocatorT, &AllocatorT::DBG_print_collected_stats>
+        <<<1, 1>>>(allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
+  }
+
   // Returns a device pointer to the allocator.
   AllocatorT* device_pointer() { return allocator_; }
 

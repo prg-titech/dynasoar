@@ -50,4 +50,10 @@ T read_from_device(T* ptr) {
   return host_storage;
 }
 
+// A wrapper that runs a device member function.
+template<typename C, void (C::*func)()>
+__global__ void member_func_kernel(C* ptr) {
+  (ptr->*func)();
+}
+
 #endif  // UTIL_UTIL_H

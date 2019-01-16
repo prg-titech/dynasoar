@@ -28,10 +28,4 @@ __forceinline__ __device__ unsigned warp_id()
     return ret;
 }
 
-// A wrapper that runs a device member function.
-template<typename C, void (C::*func)()>
-__global__ void member_func_kernel(C* ptr) {
-  (ptr->*func)();
-}
-
 #endif  // BITMAP_UTIL_H

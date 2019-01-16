@@ -64,6 +64,10 @@ class SoaAllocator {
 
   __DEV__ void DBG_print_state_stats();
 
+  __DEV__ void DBG_collect_stats();
+
+  __DEV__ void DBG_print_collected_stats();
+
   // TODO: Consider moving out of soa_debug.inc.
   template<class T>
   __DEV__ static bool is_type(const T* ptr);

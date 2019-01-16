@@ -364,15 +364,15 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #endif  // NDEBUG
 
     if (kOptionPrintStats) {
-      // print_stats();
-      allocator_handle->DBG_print_state_stats();
+      //allocator_handle->DBG_print_state_stats();
+      allocator_handle->DBG_collect_stats();
     }
 
     auto time_before = std::chrono::system_clock::now();
     step();
 
 #ifdef OPTION_DEFRAG
-    if (kOptionDefrag && i % 10 == 0) {
+    if (kOptionDefrag && i % 1 == 0) {
       defrag();
     }
 #endif  // OPTION_DEFRAG
@@ -392,6 +392,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #ifdef OPTION_DEFRAG
   allocator_handle->DBG_print_defrag_time();
 #endif  // OPTION_DEFRAG
+
+  if (kOptionPrintStats) {
+    allocator_handle->DBG_print_collected_stats();
+  }
 
   return 0;
 }

@@ -14,7 +14,7 @@ static const bool kOptionSharkDie = true;
 static const bool kOptionFishSpawn = true;
 static const bool kOptionSharkSpawn = true;
 static const bool kOptionDefrag = true;
-static const bool kOptionPrintStats = false;
+static const bool kOptionPrintStats = true;
 static const int kNumIterations = 100;
 
 #endif  // EXAMPLE_WA_TOR_SOA_CONFIGURATION_H
