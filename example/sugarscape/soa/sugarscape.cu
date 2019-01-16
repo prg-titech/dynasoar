@@ -513,6 +513,16 @@ void step() {
 }
 
 
+#ifdef OPTION_DEFRAG
+void defrag() {
+  allocator_handle->parallel_defrag<Male>(/*max_records=*/ 128,
+                                          /*min_records=*/ 1);
+  allocator_handle->parallel_defrag<Female>(/*max_records=*/ 128,
+                                            /*min_records=*/ 1);
+}
+#endif  // OPTION_DEFRAG
+
+
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kSize*kSize; i += blockDim.x * gridDim.x) {
@@ -581,6 +591,12 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kNumIterations; ++i) {
     step();
+
+#ifdef OPTION_DEFRAG
+    if (i % 50 == 0) {
+      defrag();
+    }
+#endif  // OPTION_DEFRAG
   }
 
   auto time_end = std::chrono::system_clock::now();

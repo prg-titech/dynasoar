@@ -372,10 +372,8 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
     step();
 
 #ifdef OPTION_DEFRAG
-    if (kOptionDefrag) {
-      for (int j = 0; j < 1; ++j) {
-        defrag();
-      }
+    if (kOptionDefrag && i % 10 == 0) {
+      defrag();
     }
 #endif  // OPTION_DEFRAG
 
