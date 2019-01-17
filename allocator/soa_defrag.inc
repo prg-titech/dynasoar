@@ -4,6 +4,8 @@ static const unsigned int kDefragIndexEmpty =
     std::numeric_limits<unsigned int>::max();
 static const unsigned int kDefragIndexBlocked =
     std::numeric_limits<unsigned int>::max() - 1;
+static const uint32_t kInvalidBlockIndex =
+    std::numeric_limits<uint32_t>::max();
 
 // Number of defragmented blocks.
 __DEV__ int num_defrag_blocks;
@@ -116,39 +118,56 @@ struct AllocatorWrapperDefrag {
             // Look for defrag record for this block.
             int record_id = block_idx_hash(scan_block_idx, num_records);
             assert(record_id < num_records);
-            if (records[record_id].source_block_idx == scan_block_idx) {
+            const auto& record = records[record_id];
+
+            if (record.source_block_idx == scan_block_idx) {
               // This pointer must be rewritten.
               int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
 
               // ... but this pointer could contain garbage data.
               // In that case, we do not want need to rewrite.
-              bool valid_pointer = records[record_id].source_bitmap & (1ULL << src_obj_id);
+              bool valid_pointer = record.source_bitmap & (1ULL << src_obj_id);
               if (!valid_pointer) return;
 
               // First src_obj_id bits are set to 1.
               BlockBitmapT cnt_mask = src_obj_id ==
                  63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
               assert(__popcll(cnt_mask) == src_obj_id + 1);
-              int src_bit_cnt =
-                  __popcll(cnt_mask & records[record_id].source_bitmap) - 1;
+              int src_bit_idx = __popcll(cnt_mask & record.source_bitmap) - 1;
 
-              // Find src_bit_cnt-th bit in target bitmap.
-              BlockBitmapT target_bitmap = records[record_id].target_bitmap;
-              for (int j = 0; j < src_bit_cnt; ++j) {
+              // Find correct target block and bit in target bitmap.
+              BlockBitmapT target_bitmap;
+              uint32_t target_block_idx = kInvalidBlockIndex;
+              for (int i = 0; i < kDefragFactor; ++i) {
+                target_bitmap = record.target_bitmap[i];
+
+                if (__popcll(target_bitmap) > src_bit_idx) {
+                  // Target block found.
+                  target_block_idx = record.target_block_idx[i];
+                  break;
+                } else {
+                  src_bit_idx -= __popcll(target_bitmap);
+                }
+              }
+
+              // Assert that target block was found.
+              assert(target_block_idx < AllocatorT::N);
+
+              // Find src_bit_idx-th bit in target bitmap.
+              for (int j = 0; j < src_bit_idx; ++j) {
                 target_bitmap &= target_bitmap - 1;
               }
               int target_obj_id = __ffsll(target_bitmap) - 1;
               assert(target_obj_id < BlockHelper<DefragT>::kSize);
               assert(target_obj_id >= 0);
               assert((allocator->template get_block<DefragT>(
-                      records[record_id].target_block_idx)->free_bitmap
-                  & (1ULL << target_obj_id)) == 0);
+                          target_block_idx)->free_bitmap
+                      & (1ULL << target_obj_id)) == 0);
 
               // Rewrite pointer.
-              assert(records[record_id].target_block_idx < AllocatorT::N);
               auto* target_block = allocator->template get_block<
                   typename std::remove_pointer<FieldType>::type>(
-                      records[record_id].target_block_idx);
+                      target_block_idx);
               *scan_location = PointerHelper::rewrite_pointer(
                       scan_value, target_block, target_obj_id);
 
@@ -305,9 +324,9 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move(int num_records) {
       target_bitmap = atomicOr(&get_block<T>(target_block_idx)->free_bitmap, 0ULL);
 
       // Copy to global memory for scan step.
-      defrag_records_.target_block_idx[record_id] = target_block_idx;
+      defrag_records_.target_block_idx[0][record_id] = target_block_idx;
       defrag_records_.source_bitmap[record_id] = source_bitmap;
-      defrag_records_.target_bitmap[record_id] = target_bitmap;
+      defrag_records_.target_bitmap[0][record_id] = target_bitmap;
 
       assert(__popcll(target_bitmap) >= __popcll(source_bitmap));
     }

@@ -8,7 +8,9 @@
 
 enum DeallocationState : int8_t {
   kBlockNowEmpty,      // Deallocate block.
+#ifdef OPTION_DEFRAG
   kBlockNowLeq50Full,  // Less/equal to 50% full.
+#endif  // OPTION_DEFRAG
   kBlockNowActive,     // Activate block.
   kRegularDealloc      // Nothing to do.
 };
@@ -23,8 +25,10 @@ class SoaBlock {
  public:
   using BitmapT = unsigned long long int;
 
-  // TODO: Should measure free level instead of fill level.
-  static const int kLeq50Threshold = N / 2;
+#ifdef OPTION_DEFRAG
+  static const int kLeq50Threshold =
+      1.0f*kDefragFactor / (kDefragFactor + 1) * N;
+#endif  // OPTION_DEFRAG
 
   // Bitmap initializer: N_T bits set to 1.
   static const BitmapT kBitmapInitState =
@@ -77,8 +81,10 @@ class SoaBlock {
       return kBlockNowActive;
     } else if (slots_free_before == N - 1) {
       return kBlockNowEmpty;
+#ifdef OPTION_DEFRAG
     } else if (slots_free_before == N - kLeq50Threshold - 1) {
       return kBlockNowLeq50Full;
+#endif  // OPTION_DEFRAG
     } else {
       return kRegularDealloc;
     }

@@ -8,40 +8,28 @@ struct DefragRecord {
   // Previous allocation bitmap. (Not free bitmap!)
   BitmapT source_bitmap;
   // New location in target bitmap. (For rewriting.)
-  BitmapT target_bitmap;
+  BitmapT target_bitmap[kDefragFactor];
   uint32_t source_block_idx;
-  uint32_t target_block_idx;
-
-  __DEV__ bool operator==(const DefragRecord<BitmapT>& other) const {
-    return source_bitmap == other.source_bitmap
-        && target_bitmap == other.target_bitmap
-        && source_block_idx == other.source_block_idx
-        && target_block_idx == other.target_block_idx;
-  }
+  uint32_t target_block_idx[kDefragFactor];
 
   template<typename RecordsT>
   __DEV__ void copy_from(const RecordsT& records, int idx) {
     source_bitmap = records.source_bitmap[idx];
-    target_bitmap = records.target_bitmap[idx];
     source_block_idx = records.source_block_idx[idx];
-    target_block_idx = records.target_block_idx[idx];
+
+    for (int i = 0; i < kDefragFactor; ++i) {
+      target_bitmap[i] = records.target_bitmap[i][idx];
+      target_block_idx[i] = records.target_block_idx[i][idx];
+    }
   }
 };
 
 template<typename BitmapT, int N>
 struct SoaDefragRecords {
   BitmapT source_bitmap[N];
-  BitmapT target_bitmap[N];
+  BitmapT target_bitmap[kDefragFactor][N];
   uint32_t source_block_idx[N];
-  uint32_t target_block_idx[N];
-
-  template<typename RecordsT>
-  __DEV__ void copy_from(int dest, const RecordsT& records, int idx) {
-    source_bitmap[dest] = records.source_bitmap[idx];
-    target_bitmap[dest] = records.target_bitmap[idx];
-    source_block_idx[dest] = records.source_block_idx[idx];
-    target_block_idx[dest] = records.target_block_idx[idx];
-  }
+  uint32_t target_block_idx[kDefragFactor][N];
 };
 
 #endif  // ALLOCATOR_SOA_DEFRAG_RECORD_H

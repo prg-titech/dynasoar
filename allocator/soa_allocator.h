@@ -25,7 +25,6 @@ class SoaAllocator {
  public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
 
-  static const uint8_t kObjectAddrBits = 6;
   static const uint32_t kNumBlockElements = 64;
   static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
   static const uint64_t kBlockAddrBitmask = 0xFFFFFFFFFFC0;
@@ -94,7 +93,9 @@ class SoaAllocator {
 
     using BlockType = SoaBlock<T, kIndex, kSize>;
 
+#ifdef OPTION_DEFRAG
     static const int kLeq50Threshold = BlockType::kLeq50Threshold;
+#endif  // OPTION_DEFRAG
   };
 
   using BlockBitmapT = typename BlockHelper<
