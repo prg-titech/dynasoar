@@ -225,6 +225,10 @@ class Bitmap {
     return data_.containers[index/kBitsize] & (kOne << (index % kBitsize));
   }
 
+  __DEV__ ContainerT get_container(SizeT index) const {
+    return data_.containers[index];
+  }
+
   // Initiate scan operation (from the host side). This request is forwarded
   // to the next-level bitmap. Afterwards, scan continues here.
   void scan() { data_.scan(); }

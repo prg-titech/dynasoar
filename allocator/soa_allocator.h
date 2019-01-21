@@ -602,12 +602,12 @@ class SoaAllocator {
   // Bit set if block is <= 50% full and active.
   Bitmap<uint32_t, N> leq_50_[kNumTypes];
   unsigned int num_leq_50_[kNumTypes];
-#endif  // OPTION_DEFRAG
 
   // Temporary storage for defragmentation records.
   int num_defrag_records_;
   //DefragRecord<BlockBitmapT> defrag_records_[kMaxDefragRecords];
   SoaDefragRecords<BlockBitmapT, kMaxDefragRecords> defrag_records_;
+#endif  // OPTION_DEFRAG
 
   char* data_;
 
