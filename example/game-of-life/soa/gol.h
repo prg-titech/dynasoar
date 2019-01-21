@@ -9,7 +9,7 @@ class Agent;
 class Alive;
 class Candidate;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Cell, Agent, Alive, Candidate>;
+using AllocatorT = SoaAllocator<8*64*64*64*64, Cell, Agent, Alive, Candidate>;
 
 
 static const int kActionNone = 0;

@@ -7,10 +7,11 @@ static const int kMaxDegree = 4;
 static const int kNumIntersections = 17500;
 static const float kCellLength = 0.005f;
 static const float kProducerRatio = 0.02f;
-static const float kTargetRatio = 0.003f;
-static const int kNumIterations = 12000;
+static const float kTargetRatio = 0.002f;
+static const int kNumIterations = 1000;
 static const float kCarAllocationRatio = 0.02f;
 static const bool kOptionRender = false;
+static const bool kOptionPrintStats = true;
 
 // Only for baseline version.
 static const int kMaxNumCells = 5000000;

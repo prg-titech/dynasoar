@@ -534,6 +534,12 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
+    if (kOptionPrintStats) {
+      printf("%i\n", i);
+      //allocator_handle->DBG_print_state_stats();
+      allocator_handle->DBG_collect_stats();
+    }
+
     if (kOptionRender) {
       transfer_data();
       draw(host_data_Cell_pos_x, host_data_Cell_pos_y, host_data_Cell_occupied,
@@ -553,6 +559,10 @@ int main(int /*argc*/, char** /*argv*/) {
 #endif  // NDEBUG
 
   printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+
+  if (kOptionPrintStats) {
+    allocator_handle->DBG_print_collected_stats();
+  }
 
   if (kOptionRender) {
     close_renderer();

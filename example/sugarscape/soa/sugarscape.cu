@@ -591,14 +591,15 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kNumIterations; ++i) {
     if (kOptionPrintStats) {
-      // print_stats();
-      allocator_handle->DBG_print_state_stats();
+      printf("%i\n", i);
+      //allocator_handle->DBG_print_state_stats();
+      allocator_handle->DBG_collect_stats();
     }
 
     step();
 
 #ifdef OPTION_DEFRAG
-    if (i % 50 == 0) {
+    if (i % 1 == 0) {
       defrag();
     }
 #endif  // OPTION_DEFRAG
@@ -618,6 +619,10 @@ int main(int /*argc*/, char** /*argv*/) {
 #ifdef OPTION_DEFRAG
   allocator_handle->DBG_print_defrag_time();
 #endif  // OPTION_DEFRAG
+
+  if (kOptionPrintStats) {
+    allocator_handle->DBG_print_collected_stats();
+  }
 
   if (kOptionRender) {
     close_renderer();

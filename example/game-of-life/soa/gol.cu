@@ -318,6 +318,12 @@ int main(int argc, char** argv) {
 
   // Run simulation.
   for (int i = 0; i < kNumIterations; ++i) {
+    if (kOptionPrintStats) {
+      printf("%i\n", i);
+      //allocator_handle->DBG_print_state_stats();
+      allocator_handle->DBG_collect_stats();
+    }
+
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
     allocator_handle->parallel_do<Candidate, &Candidate::update>();
@@ -342,6 +348,10 @@ int main(int argc, char** argv) {
 #endif  // NDEBUG
 
   printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+
+  if (kOptionPrintStats) {
+    allocator_handle->DBG_print_collected_stats();
+  }
 
   delete[] host_render_cells;
   cudaFree(host_cells);
