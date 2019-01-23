@@ -56,4 +56,14 @@ __global__ void member_func_kernel(C* ptr) {
   (ptr->*func)();
 }
 
+template<typename C, typename T1, void (C::*func)(T1)>
+__global__ void member_func_kernel_1(C* ptr, T1 t1) {
+  (ptr->*func)(t1);
+}
+
+template<typename C, typename T1, typename T2, void (C::*func)(T1, T2)>
+__global__ void member_func_kernel_1(C* ptr, T1 t1, T2 t2) {
+  (ptr->*func)(t1, t2);
+}
+
 #endif  // UTIL_UTIL_H

@@ -99,9 +99,10 @@ class AllocatorHandle {
 #ifdef OPTION_DEFRAG
   // Defrag/compact all objects of type T. Also updates all affected pointers
   // in the data buffer.
-  template<class T>
-  void parallel_defrag(int max_records, int min_records = 1) {
-    allocator_->parallel_defrag<T>(max_records, min_records);
+  // Should be invoked from host side.
+  template<typename T, int NumRecords>
+  void parallel_defrag(int min_leq_blocks = 0) {
+    allocator_->parallel_defrag<T, NumRecords>(min_leq_blocks);
   }
 #endif  // OPTION_DEFRAG
 

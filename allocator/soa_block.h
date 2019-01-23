@@ -26,6 +26,7 @@ class SoaBlock {
   using BitmapT = unsigned long long int;
 
 #ifdef OPTION_DEFRAG
+  // This is the number of allocated objects.
   static const int kLeq50Threshold =
       1.0f*kDefragFactor / (kDefragFactor + 1) * N;
 #endif  // OPTION_DEFRAG

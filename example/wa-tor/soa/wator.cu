@@ -285,10 +285,8 @@ __global__ void print_checksum() {
 
 #ifdef OPTION_DEFRAG
 void defrag() {
-  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 128,
-                                          /*min_records=*/ 1);
-  allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 128,
-                                           /*min_records=*/ 1);
+  allocator_handle->parallel_defrag<Fish, 128>();
+  allocator_handle->parallel_defrag<Shark, 128>();
 }
 #endif  // OPTION_DEFRAG
 

@@ -7,37 +7,10 @@ static const unsigned int kDefragIndexBlocked =
 static const uint32_t kInvalidBlockIndex =
     std::numeric_limits<uint32_t>::max();
 
-// Number of defragmented blocks.
-__DEV__ int num_defrag_blocks;
 
-__DEV__ int block_idx_hash(uint32_t block_idx, int num_buckets) {
-  return block_idx % num_buckets;
-}
-
-template<class T, typename AllocatorT>
-__global__ void kernel_initialize_leq(AllocatorT* allocator,
-                                      int num_records) {
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  assert(blockDim.x * gridDim.x >= num_records);
-
-  if (tid == 0) { num_defrag_blocks = 0; }
-
-  if (tid < num_records) {
-    allocator->initialize_leq_collisions();
-  }
-}
-
-template<class T, typename AllocatorT>
-__global__ void kernel_defrag_move(AllocatorT* allocator, int num_records) {
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  // TODO: Move to intialization kernel.
-  if (tid == 0) {
-    allocator->num_defrag_records_ = num_records;
-  }
-
-  if (tid < num_records*32) {
-    allocator->template defrag_move<T>(num_records);
-  }
+template<int NumBuckets>
+__DEV__ int block_idx_hash(uint32_t block_idx) {
+  return block_idx % NumBuckets;
 }
 
 template<typename AllocatorT>
@@ -52,7 +25,7 @@ struct AllocatorWrapperDefrag {
   // DefragT: Type that was defragmented.
   // ScanClassT: Class which is being scanned for affected fields.
   // SoaFieldHelperT: SoaFieldHelper of potentially affected field.
-  template<typename DefragT>
+  template<typename DefragT, int NumRecords>
   struct SoaPointerUpdater {
     template<typename ScanClassT>
     struct ClassIterator {
@@ -84,8 +57,7 @@ struct AllocatorWrapperDefrag {
         struct FieldSelector {
           template<typename... Args>
           __DEV__ static void call(AllocatorT* allocator,
-                                   ScanClassT* object, int num_records) {
-            assert(num_records == allocator->num_defrag_records_);
+                                   ScanClassT* object) {
             extern __shared__ DefragRecord<BlockBitmapT> records[];
 
             // Location of field value to be scanned/rewritten.
@@ -116,8 +88,8 @@ struct AllocatorWrapperDefrag {
             assert(scan_block_idx < AllocatorT::N);
 
             // Look for defrag record for this block.
-            int record_id = block_idx_hash(scan_block_idx, num_records);
-            assert(record_id < num_records);
+            int record_id = block_idx_hash<NumRecords>(scan_block_idx);
+            assert(record_id < NumRecords);
             const auto& record = records[record_id];
 
             if (record.source_block_idx == scan_block_idx) {
@@ -135,7 +107,7 @@ struct AllocatorWrapperDefrag {
               assert(__popcll(cnt_mask) == src_obj_id + 1);
               int src_bit_idx = __popcll(cnt_mask & record.source_bitmap) - 1;
 
-              // Find correct target block and bit in target bitmap.
+              // Find correct target block and bit in target bitmaps.
               BlockBitmapT target_bitmap;
               uint32_t target_block_idx = kInvalidBlockIndex;
               for (int i = 0; i < kDefragFactor; ++i) {
@@ -190,34 +162,35 @@ struct AllocatorWrapperDefrag {
         template<int Dummy>
         struct FieldSelector<false, Dummy> {
           __DEV__ static void call(AllocatorT* allocator,
-                                   ScanClassT* object,
-                                   int num_records) {}
+                                   ScanClassT* object) {}
         };
 
-        __DEV__ bool operator()(AllocatorT* allocator, ScanClassT* object,
-                                int num_records) {
+        __DEV__ bool operator()(AllocatorT* allocator, ScanClassT* object) {
           // Rewrite field if field type is a super class (or exact class)
           // of DefragT.
           FieldSelector<std::is_pointer<FieldType>::value
               && std::is_base_of<typename std::remove_pointer<FieldType>::type,
                                  DefragT>::value, 0>::call(
-              allocator, object, num_records);
+              allocator, object);
           return true;  // Continue processing.
         }
       };
 
-      bool operator()(AllocatorT* allocator, int num_records) {
+      bool operator()(AllocatorT* allocator) {
+        static_assert(NumRecords <= kMaxDefragRecords,
+                      "Too many defragmentation records requested.");
+
         bool process_class = SoaClassHelper<ScanClassT>::template for_all<
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
           ParallelExecutor<AllocatorT, ScanClassT, ScanClassT, void,
-                           SoaBase<AllocatorT>, /*Args...=*/ AllocatorT*, int>
+                           SoaBase<AllocatorT>, /*Args...=*/ AllocatorT*>
               ::template FunctionWrapper<&SoaBase<AllocatorT>
                   ::template rewrite_object<ThisClass, ScanClassT>>
-              ::template WithPre<&AllocatorT::load_records_to_shared_mem>
+              ::template WithPre<&AllocatorT::template load_records_to_shared_mem<NumRecords>>
               ::parallel_do(allocator,
-                            num_records*sizeof(DefragRecord<BlockBitmapT>),
-                            allocator, num_records);
+                            NumRecords*sizeof(DefragRecord<BlockBitmapT>),
+                            allocator);
         }
 
         return true;  // Continue processing.
@@ -262,6 +235,7 @@ struct AllocatorWrapperDefrag {
 };
 
 
+/*
 template<uint32_t N_Objects, class... Types>
 template<typename T, int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block() {
@@ -310,6 +284,54 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block() {
     ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(bid));
   }
 }
+*/
+
+
+// Select a source block for fragmentation. Will not bring the number of
+// defragmentation candidates under min_remaining_records.
+template<uint32_t N_Objects, class... Types>
+template<typename T, int NumRecords>
+__DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
+    int min_remaining_records) {
+
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+  for (; tid < NumRecords; tid += blockDim.x * gridDim.x) {
+    uint32_t bid = kInvalidBlockIndex;
+
+    for (uint32_t i = tid; i < kN; i += NumRecords) {
+      if (leq_50_[BlockHelper<T>::kIndex][i]) {
+        bid = i;
+        assert(block_idx_hash<NumRecords>(i) == tid);
+        break;
+      }
+    }
+
+    defrag_records_.source_block_idx[tid] = bid;
+
+    if (bid != kInvalidBlockIndex) {
+      // This block would be suitable. Check if we still need more blocks
+      if (atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1)
+          > min_remaining_records) {
+        defrag_records_.source_bitmap[tid] =
+            ~get_block<T>(bid)->free_bitmap
+            & BlockHelper<T>::BlockType::kBitmapInitState;
+
+        // Remove from leq_50 to avoid block from being selected as target.
+        ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(bid));
+        atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+      } else {
+        atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+        break;
+      }
+    }
+  }
+
+  // We got enough blocks. Fill up the rest with invalid markers.
+  for (; tid < NumRecords; tid += blockDim.x * gridDim.x) {
+    defrag_records_.source_block_idx[tid] = kInvalidBlockIndex;
+  }
+}
 
 
 template<uint32_t N_Objects, class... Types>
@@ -344,55 +366,57 @@ template<uint32_t N_Objects, class... Types>
 template<typename T, int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move() {
   // Use 64 threads per SOA block.
-  // TODO: Use grid-stride loop.
-  assert(blockDim.x * gridDim.x == NumRecords * 64);
-  int source_pos = (threadIdx.x + blockIdx.x * blockDim.x) % 64;
-  int record_id = (threadIdx.x + blockIdx.x * blockDim.x) / 64;
+  assert(blockDim.x % 64 == 0);
 
-  const auto source_block_idx = defrag_records_.source_block_idx[record_id];
+  for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
+       tid < 64 * NumRecords; tid += blockDim.x * gridDim.x) {
+    const int source_pos = tid % 64;
+    const int record_id = tid / 64;
+    const auto source_block_idx = defrag_records_.source_block_idx[record_id];
 
-  if (source_block_idx != kInvalidBlockIndex) {
-    BitmapT source_bitmap = defrag_records_.source_bitmap[record_id];
+    if (source_block_idx != kInvalidBlockIndex) {
+      BlockBitmapT source_bitmap = defrag_records_.source_bitmap[record_id];
 
-    // This thread should move the source_pos-th object (if it exists).
-    if (source_pos < __popcll(source_bitmap)) {
-      // Determine positition in source bitmap: Find index of source_pos-th set bit.
-      for (int i = 0; i < source_object_id; ++i) {
-        source_bitmap &= source_bitmap - 1;
-      }
-      int source_object_id = __ffsll(source_bitmap) - 1;
-      assert(source_object_id >= 0);
-
-      // Determine target block and target position.
-      int target_pos = source_pos;
-      uint32_t target_block_idx = kInvalidBlockIndex;
-      BitmapT target_bitmap;
-
-      for (int i = 0; i < kDefragFactor; ++i) {
-        target_bitmap = defrag_records_.target_bitmap[i][record_id];
-        const auto num_slots = __popcll(target_bitmap);
-        if (target_pos < num_slots) {
-          // This object goes in here.
-          target_block_idx = defrag_records_.target_block_idx[i][record_id];
-          break;
-        } else {
-          target_pos -= num_slots;
+      // This thread should move the source_pos-th object (if it exists).
+      if (source_pos < __popcll(source_bitmap)) {
+        // Determine positition in source bitmap: Find index of source_pos-th set bit.
+        for (int i = 0; i < source_pos; ++i) {
+          source_bitmap &= source_bitmap - 1;
         }
-      }
-      assert(target_block_idx != kInvalidBlockIndex);
+        int source_object_id = __ffsll(source_bitmap) - 1;
+        assert(source_object_id >= 0);
 
-      // Determine target object ID: Find index of target_pos-th set bit.
-      for (int i = 0; i < target_pos; ++i) {
-        target_bitmap &= target_bitmap - 1;
-      }
-      int target_object_id = __ffsll(target_bitmap) - 1;
-      assert(target_object_id >= 0);
+        // Determine target block and target position.
+        int target_pos = source_pos;
+        uint32_t target_block_idx = kInvalidBlockIndex;
+        BlockBitmapT target_bitmap;
 
-      SoaClassHelper<T>::template dev_for_all<AllocatorWrapperDefrag<ThisAllocator>
-          ::template SoaObjectCopier<T>::ObjectCopyHelper, true>(
-              reinterpret_cast<char*>(get_block<T>(source_block_idx)),
-              reinterpret_cast<char*>(get_block<T>(target_block_idx)),
-              source_object_id, target_object_id);
+        for (int i = 0; i < kDefragFactor; ++i) {
+          target_bitmap = defrag_records_.target_bitmap[i][record_id];
+          const auto num_slots = __popcll(target_bitmap);
+          if (target_pos < num_slots) {
+            // This object goes in here.
+            target_block_idx = defrag_records_.target_block_idx[i][record_id];
+            break;
+          } else {
+            target_pos -= num_slots;
+          }
+        }
+        assert(target_block_idx != kInvalidBlockIndex);
+
+        // Determine target object ID: Find index of target_pos-th set bit.
+        for (int i = 0; i < target_pos; ++i) {
+          target_bitmap &= target_bitmap - 1;
+        }
+        int target_object_id = __ffsll(target_bitmap) - 1;
+        assert(target_object_id >= 0);
+
+        SoaClassHelper<T>::template dev_for_all<AllocatorWrapperDefrag<ThisAllocator>
+            ::template SoaObjectCopier<T>::ObjectCopyHelper, true>(
+                reinterpret_cast<char*>(get_block<T>(source_block_idx)),
+                reinterpret_cast<char*>(get_block<T>(target_block_idx)),
+                source_object_id, target_object_id);
+      }
     }
   }
 }
@@ -411,168 +435,50 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
                           /*dealloc_leq_50=*/ false);
 
       // Update state of target blocks.
-      int remaining_slots = __popcll(defrag_records_.source_bitmap[tid]);
+      int remaining_objs = __popcll(defrag_records_.source_bitmap[tid]);
 
       for (int i = 0; i < kDefragFactor; ++i) {
-        target_bitmap = defrag_records_.target_bitmap[i][record_id];
-        const auto num_slots = __popcll(target_bitmap);
-        if (remaining_slots <= 0) {
+        const auto target_bitmap = defrag_records_.target_bitmap[i][tid];
+        const auto target_block_idx = defrag_records_.target_block_idx[i][tid];
+        const auto num_target_slots = __popcll(target_bitmap);
+
+        if (num_target_slots <= remaining_objs) {
+          // This target block is now full.
+          ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(target_block_idx));
+          atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+          // leq_50 is already cleared.
+        } else {
+          // Check leq_50 status of target block.
+          int num_target_after = BlockHelper<T>::kSize - num_target_slots + remaining_objs;
+          if (num_target_after <= BlockHelper<T>::kLeq50Threshold) {
+            // This block is still leq_50.
+            ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(target_block_idx));
+          } else {
+            atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+          }
+        }
+
+        remaining_objs -= num_target_slots;
+        if (remaining_objs <= 0) {
           // This is the last target block.
           break;
-        } else {
-          // This target block is now full.
-          ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(source_block_idx));
-          remaining_slots -= num_slots;
         }
       }
-    }
-  }
-}
 
-
-  // Determine target block ID and object ID within target block.
-  int remaining_slots = 
-  //int num_buckets = blockDim.x * gridDim.x / 32;
-  const unsigned active = __activemask();
-
-  // Problem: Cannot keep collision array in shared memory.
-
-  // Defrag record.
-  uint32_t source_block_idx, target_block_idx;
-  BlockBitmapT source_bitmap, target_bitmap;
-
-  if (slot_id == 0) {
-    for (int i = 0; i < 3; ++i) {  // 3 tries
-      source_block_idx = leq_50_[BlockHelper<T>::kIndex].deallocate_seed(record_id + i);
-      assert(source_block_idx != (Bitmap<uint32_t, N>::kIndexError));
-
-      record_id = block_idx_hash(source_block_idx, num_records);
-      assert(record_id < num_records);
-      unsigned int before = atomicCAS(&defrag_records_.source_block_idx[record_id],
-                                      kDefragIndexEmpty,
-                                      source_block_idx);
-
-      if (before == kDefragIndexEmpty) {
-        assert(defrag_records_.source_block_idx[record_id] == source_block_idx);
-        atomicAdd(&num_defrag_blocks, 1);
-        break;
-      } else {
-        // Collision detected.
-        assert(defrag_records_.source_block_idx[record_id] != source_block_idx
-            && defrag_records_.source_block_idx[record_id] != kDefragIndexEmpty);
-        ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(source_block_idx));
-        source_block_idx = kDefragIndexEmpty;
-      }
-    }
-
-    if (source_block_idx != kDefragIndexEmpty) {
-      target_block_idx = leq_50_[BlockHelper<T>::kIndex].deallocate_seed(record_id + 509);
-      assert(target_block_idx != (Bitmap<uint32_t, N>::kIndexError));
-
-      // Block target block's slot.
-      // TODO: Not ideal. It reduces the number of defrag records.
-      int target_hash = block_idx_hash(target_block_idx, num_records);
-      atomicCAS(&defrag_records_.source_block_idx[target_hash],
-                kDefragIndexEmpty,
-                kDefragIndexBlocked);
-
-      // Invert free_bitmap to get a bitmap of allocations.
-      source_bitmap = ~get_block<T>(source_block_idx)->free_bitmap
-                      & BlockHelper<T>::BlockType::kBitmapInitState;
-      assert(__popcll(source_bitmap) == BlockHelper<T>::kSize   // == N - #free
-          - __popcll(get_block<T>(source_block_idx)->free_bitmap));
-      // Target bitmap contains all free slots in target block.
-      // TODO: Is is necessary to use atomicOr here?
-      target_bitmap = atomicOr(&get_block<T>(target_block_idx)->free_bitmap, 0ULL);
-
-      // Copy to global memory for scan step.
-      defrag_records_.target_block_idx[0][record_id] = target_block_idx;
-      defrag_records_.source_bitmap[record_id] = source_bitmap;
-      defrag_records_.target_bitmap[0][record_id] = target_bitmap;
-
-      assert(__popcll(target_bitmap) >= __popcll(source_bitmap));
-    }
-  }
-
-  // Shuffle defrag records from thread 0.
-  source_block_idx = __shfl_sync(active, source_block_idx, 0);
-  if (source_block_idx != kDefragIndexEmpty) {
-    target_block_idx = __shfl_sync(active, target_block_idx, 0);
-    source_bitmap = __shfl_sync(active, source_bitmap, 0);
-    target_bitmap = __shfl_sync(active, target_bitmap, 0);
-
-    // Find index of bit in bitmaps.
-    int num_moves = __popcll(source_bitmap);
-    assert(num_moves <= BlockHelper<T>::kSize/2);
-    for (int i = 0; i < slot_id; ++i) {
-      // Clear least significant bit.
-      source_bitmap &= source_bitmap - 1;
-      target_bitmap &= target_bitmap - 1;
-    }
-    int source_object_id = __ffsll(source_bitmap) - 1;
-    int target_object_id = __ffsll(target_bitmap) - 1;
-
-    // Move objects.
-    if (source_object_id > -1) {
-      assert(target_object_id > -1);
-
-      SoaClassHelper<T>::template dev_for_all<AllocatorWrapperDefrag<ThisAllocator>
-          ::template SoaObjectCopier<T>::ObjectCopyHelper, true>(
-              reinterpret_cast<char*>(get_block<T>(source_block_idx)),
-              reinterpret_cast<char*>(get_block<T>(target_block_idx)),
-              source_object_id, target_object_id);
-    }
-    
-    // Last thread performs all update, because it has access to the new
-    // target_bitmap (with all slots occupied).
-    if (slot_id == num_moves - 1) {
-      // Invalidate source block.
-      get_block<T>(source_block_idx)->free_bitmap = 0ULL;
-      // Delete source block.
-      // Precond.: Block is active and allocated. Block was already
-      // removed from leq_50_ above.
-      deallocate_block<T>(source_block_idx, /*dealloc_leq_50=*/ false);
-
-      // Update free_bitmap in target block.
-      target_bitmap &= target_bitmap - 1;   // Clear one more bit.
-      //get_block<T>(target_block_idx)->free_bitmap = target_bitmap;
-      atomicExch(&get_block<T>(target_block_idx)->free_bitmap, target_bitmap);
-      // Make sure updated bitmap is visible to all threads before
-      // (potentially) putting the block back into the leq_50_ bitmap.
-      // Problem: Thread fence is not enough. There is no guarantee that
-      // previous update is visible.
-      __threadfence();
-
-      // Update state of target block.
-      int num_target_after = __popcll(
-          ~target_bitmap & BlockHelper<T>::BlockType::kBitmapInitState);
-
-      if (num_target_after == BlockHelper<T>::kSize) {
-        // Block is now full.
-         ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(
-            target_block_idx));
-      }
-
-      if (num_target_after <= BlockHelper<T>::kLeq50Threshold) {
-        // Block is still less than 50% full.
-        ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(
-            target_block_idx));
-        atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
-      } else {
-        // Deferred update from above. (2 block removed from bitmap.)
-        atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 2);
-      }
+      assert(remaining_objs <= 0);
     }
   }
 }
 
 
 template<uint32_t N_Objects, class... Types>
+template<int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>
-    ::load_records_to_shared_mem(SoaAllocator<N_Objects, Types...>* allocator,
-                                 int num_records) {
+    ::load_records_to_shared_mem(SoaAllocator<N_Objects, Types...>* allocator) {
   extern __shared__ DefragRecord<BlockBitmapT> records[];
-  for (int i = threadIdx.x; i < num_defrag_records_; i += blockDim.x) {
+
+  // Every block loads records into shared memory.
+  for (int i = threadIdx.x; i < NumRecords; i += blockDim.x) {
     records[i].copy_from(defrag_records_, i);
   }
 
@@ -588,32 +494,64 @@ long unsigned int bench_rewrite_time = 0;
 
 // Should be invoked from host side.
 template<uint32_t N_Objects, class... Types>
-template<typename T>
-void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
-                                                        int min_records) {
-  assert(max_records < 8*256);
+template<typename T, int NumRecords>
+void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
+  assert(NumRecords <= kMaxDefragRecords);
+
+  // Retain at least min_leq_blocks many blocks.
+  assert(min_leq_blocks >= 0);
 
   // Determine number of records.
-  auto num_leq_blocks =
+  int num_leq_blocks =
       copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
-  int num_records = min(max_records, num_leq_blocks/2);
-  assert(num_records >= 0);
+  int num_records = num_leq_blocks - min_leq_blocks;
 
-  while (num_records >= min_records) {
+  while (num_records > min_leq_blocks) {
+    // E.g.: n = 3: Retain 3/4 = 75% of blocks. Round up.
+    const int min_remaining_records =
+        ((num_records + 1) * kDefragFactor) / (kDefragFactor + 1);
+    assert(min_remaining_records
+           >= num_records * kDefragFactor / (kDefragFactor + 1));
+
+    if (min_remaining_records >= num_leq_blocks) {
+      // Nothing to do.
+      break;
+    }
+
     auto time_1 = std::chrono::system_clock::now();
 
-    // TODO: This can be done at the end of every iteration.
-    kernel_initialize_leq<T><<<8, 256>>>(this, num_records);
+    // TODO: Assign one warp per defrag record.
+    // Step 1: Choose source blocks.
+    member_func_kernel_1<
+        ThisAllocator, int,
+        &ThisAllocator::template defrag_choose_source_block<T, NumRecords>>
+        <<<512, (NumRecords + 512 - 1) / 512>>>(this, min_remaining_records);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    // Step 2: Choose target blocks.
+    member_func_kernel<
+        ThisAllocator,
+        &ThisAllocator::defrag_choose_target_blocks<T, NumRecords>>
+        <<<512, (NumRecords + 512 - 1) / 512>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
 
     auto time_2 = std::chrono::system_clock::now();
     bench_init_leq_time += std::chrono::duration_cast<std::chrono::microseconds>(
         time_2 - time_1).count();
 
-    // Move objects. 4 SOA block per CUDA block. 32 threads per block.
-    // (Because blocks are at most 50% full.)
-    kernel_defrag_move<T><<<
-        (num_records + 4 - 1) / 4, 128>>>(this, num_records);
+    // Move objects. 64 threads per block.
+    const int num_move_threads = 64*NumRecords;
+    member_func_kernel<
+        ThisAllocator,
+        &ThisAllocator::defrag_move<T, NumRecords>>
+        <<<(num_move_threads + 256 - 1) / 256, 256>>>(this);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    // Update block states.
+    member_func_kernel<
+        ThisAllocator,
+        &ThisAllocator::defrag_update_block_state<T, NumRecords>>
+        <<<512, (NumRecords + 512 - 1) / 512>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
 
     auto time_3 = std::chrono::system_clock::now();
@@ -623,23 +561,22 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int max_records,
     // Scan and rewrite pointers.
     TupleHelper<Types...>
         ::template for_all<AllocatorWrapperDefrag<ThisAllocator>
-        ::template SoaPointerUpdater<T>::template ClassIterator>(
-            this, num_records);
+        ::template SoaPointerUpdater<T, NumRecords>
+        ::template ClassIterator>(this);
 
     auto time_4 = std::chrono::system_clock::now();
     bench_rewrite_time += std::chrono::duration_cast<std::chrono::microseconds>(
         time_4 - time_3).count();
 
-    int num_blocks_defragmented;
-    cudaMemcpyFromSymbol(&num_blocks_defragmented, num_defrag_blocks,
-                         sizeof(int), 0, cudaMemcpyDeviceToHost);
+    // Determine new number of defragmentation candidates.
+    auto num_leq_blocks_before = num_leq_blocks;
+    num_leq_blocks = copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
+    num_records = num_leq_blocks - min_leq_blocks;
 
 #ifndef NDEBUG
     printf("Block defragmented [%s]:  %i\n", typeid(T).name(),
-           num_blocks_defragmented);
+           num_leq_blocks_before - num_leq_blocks);
 #endif  // NDEBUG
-
-    num_records -= num_blocks_defragmented;
   }
 }
 
@@ -649,10 +586,4 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_defrag_time() {
          bench_init_leq_time,
          bench_defrag_move_time,
          bench_rewrite_time);
-}
-
-template<uint32_t N_Objects, class... Types>
-__DEV__ void SoaAllocator<N_Objects, Types...>::initialize_leq_collisions() {
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  defrag_records_.source_block_idx[tid] = kDefragIndexEmpty;
 }

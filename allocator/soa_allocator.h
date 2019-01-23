@@ -38,15 +38,22 @@ class SoaAllocator {
 
 #ifdef OPTION_DEFRAG
   // ---- Defragmentation (soa_defrag.inc) ----
-  __DEV__ void initialize_leq_collisions();
+  template<typename T, int NumRecords>
+  __DEV__ void defrag_choose_source_block(int min_remaining_records);
 
-  template<typename T>
-  __DEV__ void defrag_move(int num_records);
+  template<typename T, int NumRecords>
+  __DEV__ void defrag_choose_target_blocks();
+
+  template<typename T, int NumRecords>
+  __DEV__ void defrag_move();
+
+  template<typename T, int NumRecords>
+  __DEV__ void defrag_update_block_state();
+
+  template<int NumRecords>
+  __DEV__ void load_records_to_shared_mem(ThisAllocator* allocator);
 
   void DBG_print_defrag_time();
-
-  __DEV__ void load_records_to_shared_mem(ThisAllocator* allocator,
-                                          int num_records);
   // ---- END ----
 #endif  // OPTION_DEFRAG
 
@@ -273,8 +280,8 @@ class SoaAllocator {
 
 #ifdef OPTION_DEFRAG
   // Should be invoked from host side.
-  template<typename T>
-  void parallel_defrag(int max_records, int min_records = 1);
+  template<typename T, int NumRecords>
+  void parallel_defrag(int min_leq_blocks = 0);
 #endif  // OPTION_DEFRAG
 
   template<typename T>
@@ -604,7 +611,6 @@ class SoaAllocator {
   unsigned int num_leq_50_[kNumTypes];
 
   // Temporary storage for defragmentation records.
-  int num_defrag_records_;
   //DefragRecord<BlockBitmapT> defrag_records_[kMaxDefragRecords];
   SoaDefragRecords<BlockBitmapT, kMaxDefragRecords> defrag_records_;
 #endif  // OPTION_DEFRAG

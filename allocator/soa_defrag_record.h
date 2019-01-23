@@ -1,8 +1,6 @@
 #ifndef ALLOCATOR_SOA_DEFRAG_RECORD_H
 #define ALLOCATOR_SOA_DEFRAG_RECORD_H
 
-static const int kMaxDefragRecords = 8192;
-
 template<typename BitmapT>
 struct DefragRecord {
   // Previous allocation bitmap. (Not free bitmap!)
@@ -31,5 +29,11 @@ struct SoaDefragRecords {
   uint32_t source_block_idx[N];
   uint32_t target_block_idx[kDefragFactor][N];
 };
+
+static const int kSharedMemorySize = 48*1024;
+
+// Maximum number of defragmentation records.
+static const int kMaxDefragRecords = kSharedMemorySize
+    / sizeof(DefragRecord<unsigned long long int>);
 
 #endif  // ALLOCATOR_SOA_DEFRAG_RECORD_H
