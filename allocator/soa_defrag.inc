@@ -429,6 +429,8 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
        tid < NumRecords; tid += blockDim.x * gridDim.x) {
     if (defrag_records_.source_block_idx[tid] != kInvalidBlockIndex) {
       // Delete source block.
+      // Invalidate block.
+      get_block<T>(defrag_records_.source_block_idx[tid])->free_bitmap = 0ULL;
       // Precond.: Block is active and allocated. Block was already
       // removed from leq_50_ above.
       deallocate_block<T>(defrag_records_.source_block_idx[tid],
