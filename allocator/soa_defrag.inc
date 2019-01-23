@@ -334,6 +334,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
 }
 
 
+// TODO: Allow a block to be a target multiple times.
 template<uint32_t N_Objects, class... Types>
 template<typename T, int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
@@ -440,7 +441,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
       int remaining_objs = __popcll(defrag_records_.source_bitmap[tid]);
 
       for (int i = 0; i < kDefragFactor; ++i) {
-        const auto target_bitmap = defrag_records_.target_bitmap[i][tid];
+        auto target_bitmap = defrag_records_.target_bitmap[i][tid];
         const auto target_block_idx = defrag_records_.target_block_idx[i][tid];
         const auto num_target_slots = __popcll(target_bitmap);
 
@@ -448,6 +449,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
           // This target block is now full.
           ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(target_block_idx));
           atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+          get_block<T>(target_block_idx)->free_bitmap = 0ULL;
           // leq_50 is already cleared.
         } else {
           // Check leq_50 status of target block.
@@ -458,6 +460,13 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
           } else {
             atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
           }
+
+          // Clear now allocated bits.
+          for (int j = 0; j < remaining_objs; ++j) {
+            target_bitmap &= target_bitmap - 1;
+          }
+
+          get_block<T>(target_block_idx)->free_bitmap = target_bitmap;
         }
 
         remaining_objs -= num_target_slots;
