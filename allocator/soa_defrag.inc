@@ -587,7 +587,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
     num_records = num_leq_blocks - min_leq_blocks;
 
 #ifndef NDEBUG
-    printf("Block defragmented [%s]:  %i --> %i   (%i)\n", typeid(T).name(),
+    printf("Completed defragmention pass [%s]:  %i --> %i   (%i)\n", typeid(T).name(),
            num_leq_blocks_before, num_leq_blocks, num_leq_blocks_before - num_leq_blocks);
 #endif  // NDEBUG
   }

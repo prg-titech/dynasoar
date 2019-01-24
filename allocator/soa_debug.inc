@@ -87,6 +87,8 @@ struct AllocatorWrapperDebug {
       *total_num_obj_used += num_obj_used;
       float obj_frag = 1 - static_cast<float>(num_obj_used) / num_obj_alloc;
 
+      if (isnan(obj_frag)) obj_frag = 0.0f;
+
       printf("│ %2i │ %8i │ %8i │ %8i ││ %8i │ %8i │ %.6f │\n",
              BlockHelper<T>::kIndex, num_blk_alloc, num_blk_leq50, num_blk_active,
              num_obj_alloc, num_obj_used, obj_frag);
@@ -155,10 +157,10 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
   printf("│ #Blocks:              %11i                                     │\n", N);
   printf("│ #Bitmap levels:       %11i                                     │\n",
           decltype(global_free_)::kLevels);
-  printf("│ Data buffer size:      %6.6f MB                                  │\n", kDataBufferSize/1024.0/1024.0);
-  printf("│ Allocator overead:    %6.6f MB + block overhead                  │\n",
+  printf("│ Data buffer size:     %013.6f MB                                │\n", kDataBufferSize/1024.0/1024.0);
+  printf("│ Allocator overead:    %013.6f MB + block overhead               │\n",
          sizeof(ThisAllocator)/1024.0f/1024.0f);
-  printf("│ Total memory usage:   %6.6f MB                                   │\n",
+  printf("│ Total memory usage:   %013.6f MB                                │\n",
          (sizeof(ThisAllocator) + ThisAllocator::kDataBufferSize)/1024.0f/1024.0f);
   printf("└───────────────────────────────────────────────────────────────────────┘\n");
 
