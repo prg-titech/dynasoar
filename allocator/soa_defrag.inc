@@ -319,7 +319,6 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
 
         // Remove from leq_50 to avoid block from being selected as target.
         ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(bid));
-        atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
       } else {
         atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
         break;
@@ -585,8 +584,8 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
     num_records = num_leq_blocks - min_leq_blocks;
 
 #ifndef NDEBUG
-    printf("Block defragmented [%s]:  %i\n", typeid(T).name(),
-           num_leq_blocks_before - num_leq_blocks);
+    printf("Block defragmented [%s]:  %i --> %i   (%i)\n", typeid(T).name(),
+           num_leq_blocks_before, num_leq_blocks, num_leq_blocks_before - num_leq_blocks);
 #endif  // NDEBUG
   }
 }
