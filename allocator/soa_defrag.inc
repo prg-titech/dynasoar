@@ -579,7 +579,10 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
         time_4 - time_3).count();
 
     // Determine new number of defragmentation candidates.
+#ifndef NDEBUG
     auto num_leq_blocks_before = num_leq_blocks;
+#endif  // NDEBUG
+
     num_leq_blocks = copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
     num_records = num_leq_blocks - min_leq_blocks;
 
