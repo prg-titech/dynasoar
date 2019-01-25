@@ -267,11 +267,13 @@ int main(int /*argc*/, char** /*argv*/) {
   kernel_initialize_bodies<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+  allocator_handle->parallel_defrag<Body>();
+
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
 #ifdef OPTION_DEFRAG
-    if (i % 20 == 0) {
+    if (i % 10 == 0) {
       allocator_handle->parallel_defrag<Body>();
     }
 #endif  // OPTION_DEFRAG
