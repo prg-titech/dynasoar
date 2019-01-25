@@ -14,6 +14,6 @@ static const float kDampeningFactor = 0.05f;
 // Physical constants.
 static const float kGravityConstant = 6.673e-11;   // gravitational constant
 
-static const bool kOptionPrintStats = true;
+static const bool kOptionPrintStats = false;
 
 #endif  // EXAMPLE_COLLISION_SOA_CONFIGURATION_H

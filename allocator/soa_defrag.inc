@@ -477,7 +477,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
 
     // TODO: Assign one warp per defrag record.
     // Step 1: Choose source blocks.
-    member_func_kernel_1<
+    member_func_kernel<
         ThisAllocator, int,
         &ThisAllocator::template defrag_choose_source_block<T, NumRecords>>
         <<<512, (NumRecords + 512 - 1) / 512>>>(this, min_remaining_records);

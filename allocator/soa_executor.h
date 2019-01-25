@@ -5,11 +5,6 @@
 // Measure time in microseconds because numbers are small.
 long unsigned int bench_prefix_sum_time = 0;
 
-template<typename AllocatorT, typename T>
-__global__ void kernel_init_iteration(AllocatorT* allocator) {
-  allocator->template initialize_iteration<T>();
-}
-
 template<typename WrapperT, typename AllocatorT, typename... Args>
 __global__ void kernel_parallel_do(AllocatorT* allocator, Args... args) {
   // TODO: Check overhead of allocator pointer dereference.
@@ -84,9 +79,10 @@ struct ParallelExecutor {
       auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
       if (num_soa_blocks > 0) {
-        kernel_init_iteration<AllocatorT, IterT><<<
-            (num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
-            kCudaBlockSize>>>(allocator);
+        member_func_kernel<AllocatorT,
+                           &AllocatorT::template initialize_iteration<IterT>>
+            <<<(num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
+               kCudaBlockSize>>>(allocator);
         gpuErrchk(cudaDeviceSynchronize());
 
         time_end = std::chrono::system_clock::now();
@@ -125,9 +121,10 @@ struct ParallelExecutor {
         auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
         if (num_soa_blocks > 0) {
-          kernel_init_iteration<AllocatorT, IterT><<<
-              (num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
-              kCudaBlockSize>>>(allocator);
+          member_func_kernel<AllocatorT,
+                             &AllocatorT::template initialize_iteration<IterT>>
+              <<<(num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
+                 kCudaBlockSize>>>(allocator);
           gpuErrchk(cudaDeviceSynchronize());
 
           time_end = std::chrono::system_clock::now();
@@ -159,7 +156,7 @@ struct ParallelExecutor {
       const auto N_alloc =
           allocator->allocated_[kTypeIndex].scan_num_bits();
 
-      // Round to multiple of 64.
+      // Round to multiple of kSize.
       int num_threads = ((blockDim.x * gridDim.x)/kSize)*kSize;
       int tid = blockIdx.x * blockDim.x + threadIdx.x;
       if (tid < num_threads) {
@@ -169,18 +166,12 @@ struct ParallelExecutor {
 
           // TODO: Consider doing a scan over "allocated" bitmap.
           auto* block = allocator->template get_block<IterT>(block_idx);
-          auto iteration_bitmap = block->iteration_bitmap;
-
+          const auto& iteration_bitmap = block->iteration_bitmap;
           int thread_offset = tid % kSize;
-          // Advance bitmap to return thread_offset-th bit index.
-          for (int i = 0; i < thread_offset; ++i) {
-            // Clear last bit.
-            iteration_bitmap &= iteration_bitmap - 1;
-          }
-          auto obj_bit = __ffsll(iteration_bitmap);
-          if (obj_bit > 0) {
+
+          if ((iteration_bitmap & (1ULL << thread_offset)) != 0ULL) {
             IterT* obj = allocator->template get_object<IterT>(
-                block, obj_bit - 1);
+                block, thread_offset);
             // call the function.
             (obj->*func)(args...);
           }
