@@ -1,16 +1,11 @@
 // Textual header.
 
-static const unsigned int kDefragIndexEmpty =
-    std::numeric_limits<unsigned int>::max();
-static const unsigned int kDefragIndexBlocked =
-    std::numeric_limits<unsigned int>::max() - 1;
-static const uint32_t kInvalidBlockIndex =
-    std::numeric_limits<uint32_t>::max();
+static const BlockIndexT kInvalidBlockIndex =
+    std::numeric_limits<BlockIndexT>::max();
 
-
-template<int NumBuckets>
-__DEV__ int block_idx_hash(uint32_t block_idx) {
-  return block_idx % NumBuckets;
+template<int NumBuckets, typename IndexT>
+__DEV__ IndexT block_idx_hash(IndexT block_idx) {
+  return (block_idx / 64) % NumBuckets;
 }
 
 template<typename AllocatorT>
@@ -83,12 +78,12 @@ struct AllocatorWrapperDefrag {
             assert(block_base >= allocator->data_
                    && block_base < allocator->data_ + AllocatorT::kDataBufferSize);
             assert((block_base - allocator->data_) % AllocatorT::kBlockSizeBytes == 0);
-            uint32_t scan_block_idx = (block_base - allocator->data_)
+            auto scan_block_idx = (block_base - allocator->data_)
                 / AllocatorT::kBlockSizeBytes;
             assert(scan_block_idx < AllocatorT::N);
 
             // Look for defrag record for this block.
-            int record_id = block_idx_hash<NumRecords>(scan_block_idx);
+            const auto record_id = block_idx_hash<NumRecords>(scan_block_idx);
             assert(record_id < NumRecords);
             const auto& record = records[record_id];
 
@@ -109,7 +104,7 @@ struct AllocatorWrapperDefrag {
 
               // Find correct target block and bit in target bitmaps.
               BlockBitmapT target_bitmap;
-              uint32_t target_block_idx = kInvalidBlockIndex;
+              auto target_block_idx = kInvalidBlockIndex;
               for (int i = 0; i < kDefragFactor; ++i) {
                 target_bitmap = record.target_bitmap[i];
 
@@ -235,58 +230,6 @@ struct AllocatorWrapperDefrag {
 };
 
 
-/*
-template<uint32_t N_Objects, class... Types>
-template<typename T, int NumRecords>
-__DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block() {
-  for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
-       tid < NumRecords; tid += blockDim.x * gridDim.x) {
-    uint32_t bit_start = kN / NumRecords * tid;
-    // Some blocks may not be processed if 
-    uint32_t bit_end = kN / NumRecords * (tid + 1);
-
-    // TODO: This is probably wrong!
-    if (tid == NumRecords - 1) {
-      bit_end = kN;
-    }
-
-    uint32_t bid = kInvalidBlockIndex;
-
-    // Check all containers to find a suitable block idx.
-    for (uint32_t i = bit_start; i < bit_end; i += 64) {
-      BitmapT cid = i / 64;
-      auto container = leq_50_.get_container(cid);
-
-      if (i + 64 >= bit_end) {
-        // Zero out all bits starting from bit_end % 64.
-        // Mask: bit_end % 64 - 1 bits set to 1.
-        BitmapT bitmap_mask = (1ULL << (bit_end % 64 - 1)) - 1;
-        assert(__popcll(bitmap_mask) == bit_end % 64);
-        container &= bitmap_mask;
-      }
-
-      // Find bit in container.
-      uint32_t bit_idx = __ffsll(container);
-
-      if (bid_p1 > 0) {
-        bid = i + bit_idx - 1;
-        break;
-      }
-    }
-
-    defrag_records_.source_block_idx[tid] = bid;
-    defrag_records_.source_bitmap[tid] =
-        ~get_block<T>(bid)->free_bitmap
-        & BlockHelper<T>::BlockType::kBitmapInitState;
-
-    // Remove from leq_50 to avoid block from being selected as target.
-    // TODO: Update leq_50 counters.
-    ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(bid));
-  }
-}
-*/
-
-
 // Select a source block for fragmentation. Will not bring the number of
 // defragmentation candidates under min_remaining_records.
 template<uint32_t N_Objects, class... Types>
@@ -297,12 +240,14 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
   int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
   for (; tid < NumRecords; tid += blockDim.x * gridDim.x) {
-    uint32_t bid = kInvalidBlockIndex;
+    auto bid = kInvalidBlockIndex;
 
-    for (uint32_t i = tid; i < kN; i += NumRecords) {
-      if (leq_50_[BlockHelper<T>::kIndex][i]) {
-        bid = i;
-        assert(block_idx_hash<NumRecords>(i) == tid);
+    // Assuming 64-bit bitmaps.
+    for (auto cid = tid; cid < kN/64; cid += NumRecords) {
+      auto container = leq_50_[BlockHelper<T>::kIndex].get_container(cid);
+      if (container != 0ULL) {
+        bid = 64*cid + __ffsll(container) - 1;
+        assert(block_idx_hash<NumRecords>(bid) == tid);
         break;
       }
     }
@@ -388,7 +333,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move() {
 
         // Determine target block and target position.
         int target_pos = source_pos;
-        uint32_t target_block_idx = kInvalidBlockIndex;
+        auto target_block_idx = kInvalidBlockIndex;
         BlockBitmapT target_bitmap;
 
         for (int i = 0; i < kDefragFactor; ++i) {
@@ -596,7 +541,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
 template<uint32_t N_Objects, class... Types>
 void SoaAllocator<N_Objects, Types...>::DBG_print_defrag_time() {
   printf("%lu, %lu, %lu\n",
-         bench_init_leq_time,
-         bench_defrag_move_time,
-         bench_rewrite_time);
+         bench_init_leq_time / 1000,
+         bench_defrag_move_time / 1000,
+         bench_rewrite_time / 1000);
 }

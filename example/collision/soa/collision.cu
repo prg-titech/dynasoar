@@ -271,15 +271,14 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kIterations; ++i) {
 #ifdef OPTION_DEFRAG
-    if (i % 1 == 0) {
-      allocator_handle->parallel_defrag<Body>(/*max_records=*/ 128,
-                                              /*min_records=*/ 1);
+    if (i % 40 == 0) {
+      allocator_handle->parallel_defrag<Body, 128>();
     }
 #endif  // OPTION_DEFRAG
 
     if (kOptionPrintStats) {
       printf("%i\n", i);
-      //allocator_handle->DBG_print_state_stats();
+      allocator_handle->DBG_print_state_stats();
       allocator_handle->DBG_collect_stats();
     }
 

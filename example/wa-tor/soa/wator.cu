@@ -362,7 +362,7 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #endif  // NDEBUG
 
     if (kOptionPrintStats) {
-      allocator_handle->DBG_print_state_stats();
+      //allocator_handle->DBG_print_state_stats();
       allocator_handle->DBG_collect_stats();
     }
 

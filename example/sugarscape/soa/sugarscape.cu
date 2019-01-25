@@ -515,10 +515,8 @@ void step() {
 
 #ifdef OPTION_DEFRAG
 void defrag() {
-  allocator_handle->parallel_defrag<Male>(/*max_records=*/ 128,
-                                          /*min_records=*/ 16);
-  allocator_handle->parallel_defrag<Female>(/*max_records=*/ 128,
-                                            /*min_records=*/ 16);
+  allocator_handle->parallel_defrag<Male, 128>();
+  allocator_handle->parallel_defrag<Female, 128>();
 }
 #endif  // OPTION_DEFRAG
 
