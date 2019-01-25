@@ -4,36 +4,41 @@
 #include "allocator/configuration.h"
 
 struct PointerHelper {
-  __DEV__ static uint8_t obj_id_from_obj_ptr(const void* obj) {
-    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
-    return static_cast<uint8_t>(ptr_base)
-        & static_cast<uint8_t>(0x3F);  // Truncated.
+  static const uint8_t kObjectIdBitmask = 0x3F;
+  static const uintptr_t kBlockPtrBitmask = 0xFFFFFFFFFFC0;
+
+  __DEV__ static ObjectIndexT obj_id_from_obj_ptr(const void* obj) {
+    uint8_t result =
+        static_cast<uint8_t>(reinterpret_cast<uintptr_t&>(obj))
+        & kObjectIdBitmask;
+    // Truncate and reinterpret as ObjectIndexT.
+    return reinterpret_cast<ObjectIndexT&>(result);
   }
 
   __DEV__ static char* block_base_from_obj_ptr(const void* obj) {
-    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
-    return reinterpret_cast<char*>(
-        ptr_base & static_cast<uintptr_t>(0xFFFFFFFFFFC0));
+    auto& ptr_base = reinterpret_cast<uintptr_t&>(obj);
+    return reinterpret_cast<char*>(ptr_base & kBlockPtrBitmask);
   }
 
   // Replace block base and object ID in ptr.
   template<typename T>
   __DEV__ static T* rewrite_pointer(T* ptr, void* block_base,
-                                    uint8_t obj_id) {
-    uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
+                                    ObjectIndexT obj_id) {
+    auto& ptr_as_int = reinterpret_cast<uintptr_t&>(ptr);
     // Clear object ID and block base (48 bits).
     ptr_as_int &= ~((1ULL << 48) - 1);
     // Set object ID and block base.
-    ptr_as_int |= obj_id;
-    ptr_as_int |= reinterpret_cast<uintptr_t>(block_base);
+    auto& u_obj_id = reinterpret_cast<uint8_t&>(obj_id);
+    ptr_as_int |= u_obj_id;
+    ptr_as_int |= reinterpret_cast<uintptr_t&>(block_base);
 
     return reinterpret_cast<T*>(ptr_as_int);
   }
 
-  __DEV__ static uint8_t get_type(const void* ptr) {
-    auto ptr_base = reinterpret_cast<uintptr_t>(ptr);
+  __DEV__ static TypeIndexT get_type(const void* ptr) {
+    auto& ptr_base = reinterpret_cast<uintptr_t&>(ptr);
     uint8_t type_id = ptr_base >> 56;  // Truncated.
-    return type_id;
+    return reinterpret_cast<TypeIndexT&>(type_id);
   }
 };
 
@@ -49,7 +54,7 @@ class SoaField {
   __DEV__ T* data_ptr() const {
     // Base address of the pointer, i.e., without the offset of the SoaField
     // type.
-    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(this)
+    auto ptr_base = reinterpret_cast<uintptr_t>(this)
         - sizeof(SoaField<C, Field>)
             * (Field + SoaClassUtil<typename C::BaseClass>::kNumFields);
     return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
@@ -57,7 +62,7 @@ class SoaField {
 
  public:
   __DEV__ static T* data_ptr_from_obj_ptr(C* obj) {
-    uintptr_t ptr_base = reinterpret_cast<uintptr_t>(obj);
+    auto& ptr_base = reinterpret_cast<uintptr_t&>(obj);
 
 #ifndef NDEBUG
     // Check for nullptr.
@@ -69,17 +74,19 @@ class SoaField {
 #endif  // NDEBUG
 
     // Block size (N_T), i.e., number of object slots in this block.
-    uint8_t block_size = ptr_base >> 48;  // Truncated.
+    uint8_t u_block_size = ptr_base >> 48;  // Truncated.
+    auto& block_size = reinterpret_cast<ObjectIndexT&>(u_block_size);
+
     // Object slot ID.
-    uint8_t obj_id = PointerHelper::obj_id_from_obj_ptr(obj);
+    ObjectIndexT obj_id = PointerHelper::obj_id_from_obj_ptr(obj);
     // Base address of the block.
     char* block_base = PointerHelper::block_base_from_obj_ptr(obj);
     return data_ptr_from_location(block_base, block_size, obj_id);
   }
 
   __DEV__ static T* data_ptr_from_location(char* block_base,
-                                           uint8_t block_size,
-                                           uint8_t obj_id) {
+                                           ObjectIndexT block_size,
+                                           ObjectIndexT obj_id) {
     assert(obj_id < block_size);
     // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(

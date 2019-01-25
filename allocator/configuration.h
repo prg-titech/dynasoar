@@ -20,4 +20,7 @@ using BlockIndexT = int;
 using TypeIndexT = int8_t;
 static_assert(sizeof(TypeIndexT) == 1, "Invalid TypeIndexT.");
 
+using ObjectIndexT = int8_t;
+static_assert(sizeof(ObjectIndexT) == 1, "Invalid ObjectIndexT.");
+
 #endif  // ALLOCATOR_AOS_CONFIGURATION_H

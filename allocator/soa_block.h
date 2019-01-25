@@ -20,14 +20,14 @@ enum DeallocationState : int8_t {
 // A SOA block containing objects.
 // T: Base type of the block.
 // N: Maximum number of objects in a block of type T.
-template<class T, TypeIndexT TypeId, int N>
+template<class T, TypeIndexT TypeId, ObjectIndexT N>
 class SoaBlock {
  public:
   using BitmapT = unsigned long long int;
 
 #ifdef OPTION_DEFRAG
   // This is the number of allocated objects.
-  static const int kLeq50Threshold =
+  static const ObjectIndexT kLeq50Threshold =
       1.0f*kDefragFactor / (kDefragFactor + 1) * N;
 #endif  // OPTION_DEFRAG
 
@@ -45,13 +45,18 @@ class SoaBlock {
   }
 
   // Constructs an object identifier.
-  // TODO: Signed to unsigned cast here.
-  __DEV__ T* make_pointer(int index) {
-    uintptr_t ptr_as_int = index;
-    uintptr_t block_size = N;
-    ptr_as_int |= block_size << 48;
-    uintptr_t type_id = TypeId;
+  __DEV__ T* make_pointer(ObjectIndexT index) {
+    uint8_t obj_idx = reinterpret_cast<uint8_t&>(index);
+    uintptr_t ptr_as_int = obj_idx;
+
+    ObjectIndexT block_size = N;
+    uintptr_t u_block_size = reinterpret_cast<uint8_t&>(block_size);
+    ptr_as_int |= u_block_size << 48;
+
+    TypeIndexT s_type_index = TypeId;
+    uintptr_t type_id = reinterpret_cast<uint8_t&>(s_type_index);
     ptr_as_int |= type_id << 56;
+
     uintptr_t block_ptr = reinterpret_cast<uintptr_t>(this);
     assert(block_ptr < (1ULL << 49));   // Only 48 bits used in address space.
     assert((block_ptr & 0x3F) == 0);    // Block is aligned.
@@ -68,7 +73,7 @@ class SoaBlock {
     iteration_bitmap = allocation_bitmap();
   }
 
-  __DEV__ DeallocationState deallocate(int position) {
+  __DEV__ DeallocationState deallocate(ObjectIndexT position) {
     BitmapT before;
     BitmapT mask = 1ULL << position;
 
@@ -92,15 +97,15 @@ class SoaBlock {
     }
   }
 
-  __DEV__ int DBG_num_bits() {
+  __DEV__ ObjectIndexT DBG_num_bits() {
     return N;
   }
 
-  __DEV__ int DBG_allocated_bits() {
+  __DEV__ ObjectIndexT DBG_allocated_bits() {
     return N - __popcll(free_bitmap);
   }
 
-  __DEV__ bool is_slot_allocated(int index) {
+  __DEV__ bool is_slot_allocated(ObjectIndexT index) {
     return (free_bitmap & (1ULL << index)) == 0;
   }
 

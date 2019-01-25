@@ -202,7 +202,7 @@ struct AllocatorWrapperDefrag {
                                     SoaFieldHelperT::kIndex>;
 
       __DEV__ bool operator()(char* source_block_base, char* target_block_base,
-                              uint8_t source_slot, uint8_t target_slot) {
+                              ObjectIndexT source_slot, ObjectIndexT target_slot) {
         assert(source_slot < BlockHelper<T>::kSize);
         assert(target_slot < BlockHelper<T>::kSize);
 

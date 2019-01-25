@@ -25,13 +25,11 @@ class SoaAllocator {
  public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
 
-  static const int kNumBlockElements = 64;
-  static const uint64_t kObjectAddrBitmask =
-      static_cast<uint32_t>(kNumBlockElements) - 1;
+  static const ObjectIndexT kNumBlockElements = 64;
   static const uint64_t kBlockAddrBitmask = 0xFFFFFFFFFFC0;
   static_assert(kNumBlockElements == 64,
                 "Not implemented: Block size != 64.");
-  static const int N = N_Objects / kNumBlockElements;
+  static const BlockIndexT N = N_Objects / kNumBlockElements;
 
   static_assert(N_Objects % kNumBlockElements == 0,
                 "N_Objects Must be divisible by BlockSize.");
@@ -465,13 +463,12 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ int get_object_id(T* ptr) {
-    uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
-    return ptr_as_int & kObjectAddrBitmask; 
+  __DEV__ ObjectIndexT get_object_id(T* ptr) {
+    return PointerHelper::obj_id_from_obj_ptr(ptr);
   }
 
   template<class T>
-  __DEV__ T* get_object(typename BlockHelper<T>::BlockType* block, int obj_id) {
+  __DEV__ T* get_object(typename BlockHelper<T>::BlockType* block, ObjectIndexT obj_id) {
     assert(obj_id < 64);
     return block->make_pointer(obj_id);
   }
