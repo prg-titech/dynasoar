@@ -53,6 +53,13 @@ class SoaAllocator {
   __DEV__ void load_records_to_shared_mem(ThisAllocator* allocator);
 
   void DBG_print_defrag_time();
+
+  // Should be invoked from host side.
+  template<typename T, int NumRecords>
+  void parallel_defrag(int min_num_compactions);
+
+  template<typename T>
+  void parallel_defrag(int min_num_compactions);
   // ---- END ----
 #endif  // OPTION_DEFRAG
 
@@ -277,12 +284,6 @@ class SoaAllocator {
       func, this, args...);
   }
 
-#ifdef OPTION_DEFRAG
-  // Should be invoked from host side.
-  template<typename T, int NumRecords>
-  void parallel_defrag(int min_leq_blocks = 0);
-#endif  // OPTION_DEFRAG
-
   template<typename T>
   __DEV__ void initialize_iteration() {
     const auto num_blocks = allocated_[BlockHelper<T>::kIndex].scan_num_bits();
@@ -487,7 +488,7 @@ class SoaAllocator {
     do {
       // Retry a couple of times. May reduce fragmentation.
       // TODO: Tune number of retries.
-      int retries = 5;   // retries=2 before
+      int retries = 3;   // retries=2 before
       do {
         block_idx = active_[BlockHelper<T>::kIndex]
             .template find_allocated<false>(retries);
@@ -496,7 +497,7 @@ class SoaAllocator {
 
       if (block_idx == Bitmap<BlockIndexT, N>::kIndexError) {
         // TODO: May be out of memory here.
-        block_idx = global_free_.deallocate();
+        block_idx = global_free_.deallocate_seed(blockIdx.x);
         assert(block_idx != (Bitmap<BlockIndexT, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
         ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].allocate<true>(block_idx));

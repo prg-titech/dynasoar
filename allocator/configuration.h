@@ -2,7 +2,7 @@
 #define ALLOCATOR_AOS_CONFIGURATION_H
 
 // Active defragmentation support.
-//#define OPTION_DEFRAG
+#define OPTION_DEFRAG
 
 // Defragmentation factor.
 // 1 -- 50% -- Merge 1 block into 1 block

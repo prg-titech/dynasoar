@@ -271,8 +271,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kIterations; ++i) {
 #ifdef OPTION_DEFRAG
-    if (i % 40 == 0) {
-      allocator_handle->parallel_defrag<Body, 128>();
+    if (i % 20 == 0) {
+      allocator_handle->parallel_defrag<Body>();
     }
 #endif  // OPTION_DEFRAG
 

@@ -101,8 +101,13 @@ class AllocatorHandle {
   // in the data buffer.
   // Should be invoked from host side.
   template<typename T, int NumRecords>
-  void parallel_defrag(int min_leq_blocks = 0) {
-    allocator_->parallel_defrag<T, NumRecords>(min_leq_blocks);
+  void parallel_defrag(int min_num_compactions = 16) {
+    allocator_->parallel_defrag<T, NumRecords>(min_num_compactions);
+  }
+
+  template<typename T>
+  void parallel_defrag(int min_num_compactions = 16) {
+    allocator_->parallel_defrag<T>(min_num_compactions);
   }
 #endif  // OPTION_DEFRAG
 

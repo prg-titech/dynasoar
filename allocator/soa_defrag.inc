@@ -5,7 +5,7 @@ static const BlockIndexT kInvalidBlockIndex =
 
 template<int NumBuckets, typename IndexT>
 __DEV__ IndexT block_idx_hash(IndexT block_idx) {
-  return (block_idx / 64) % NumBuckets;
+  return block_idx % NumBuckets;
 }
 
 template<typename AllocatorT>
@@ -89,7 +89,7 @@ struct AllocatorWrapperDefrag {
 
             if (record.source_block_idx == scan_block_idx) {
               // This pointer must be rewritten.
-              int src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
+              auto src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
 
               // ... but this pointer could contain garbage data.
               // In that case, we do not want need to rewrite.
@@ -208,13 +208,12 @@ struct AllocatorWrapperDefrag {
 
         // TODO: Optimize copy routine for single value. Should not use the
         // assignment operator here.
-        // TODO: Make block size a template parameter.
         typename SoaFieldHelperT::type* source_ptr =
-            SoaFieldType::data_ptr_from_location(
-                source_block_base, BlockHelper<T>::kSize, source_slot);
+            SoaFieldType::template data_ptr_from_location<BlockHelper<T>::kSize>(
+                source_block_base, source_slot);
         typename SoaFieldHelperT::type* target_ptr =
-            SoaFieldType::data_ptr_from_location(
-                target_block_base, BlockHelper<T>::kSize, target_slot);
+            SoaFieldType::template data_ptr_from_location<BlockHelper<T>::kSize>(
+                target_block_base, target_slot);
 
         *target_ptr = *source_ptr;
 
@@ -243,10 +242,11 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
     auto bid = kInvalidBlockIndex;
 
     // Assuming 64-bit bitmaps.
-    for (auto cid = tid; cid < kN/64; cid += NumRecords) {
-      auto container = leq_50_[BlockHelper<T>::kIndex].get_container(cid);
-      if (container != 0ULL) {
-        bid = 64*cid + __ffsll(container) - 1;
+    for (auto bit = tid; bit < kN; bit += NumRecords) {
+      auto container = leq_50_[BlockHelper<T>::kIndex].get_container(bit/64);
+      if (container & (1ULL << (bit % 64))) {
+        assert(leq_50_[BlockHelper<T>::kIndex][bit]);
+        bid = bit;
         assert(block_idx_hash<NumRecords>(bid) == tid);
         break;
       }
@@ -447,31 +447,27 @@ long unsigned int bench_init_leq_time = 0;
 long unsigned int bench_defrag_move_time = 0;
 long unsigned int bench_rewrite_time = 0;
 
-// Should be invoked from host side.
+// Should be invoked from host side. Perform defragmentation only if there are
+// enough blocks so that at least min_num_compactions many defragmentation
+// candidates can be elimated. (Not taking into account collisions.)
 template<BlockIndexT N_Objects, class... Types>
 template<typename T, int NumRecords>
-void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
-  assert(NumRecords <= kMaxDefragRecords);
-
-  // Retain at least min_leq_blocks many blocks.
-  assert(min_leq_blocks >= 0);
+void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions) {
+  static_assert(NumRecords <= kMaxDefragRecords, "Too many records requested.");
+  assert(min_num_compactions >= 1);
 
   // Determine number of records.
   auto num_leq_blocks =
       copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
-  auto num_records = num_leq_blocks - min_leq_blocks;
 
-  while (num_records > min_leq_blocks) {
+  while (true) {
     // E.g.: n = 3: Retain 3/4 = 75% of blocks. Round up.
-    const int min_remaining_records =
-        ((num_records + 1) * kDefragFactor) / (kDefragFactor + 1);
-    assert(min_remaining_records
-           >= num_records * kDefragFactor / (kDefragFactor + 1));
+    const int max_num_source_blocks = num_leq_blocks / (kDefragFactor + 1);
+    if (max_num_source_blocks <= min_num_compactions) break;
 
-    if (min_remaining_records >= num_leq_blocks) {
-      // Nothing to do.
-      break;
-    }
+    const int min_remaining_records = num_leq_blocks - max_num_source_blocks;
+    assert(min_remaining_records >= (num_leq_blocks - min_remaining_records)
+           * kDefragFactor);
 
     auto time_1 = std::chrono::system_clock::now();
 
@@ -529,13 +525,18 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
 #endif  // NDEBUG
 
     num_leq_blocks = copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
-    num_records = num_leq_blocks - min_leq_blocks;
 
 #ifndef NDEBUG
     printf("Completed defragmention pass [%s]:  %i --> %i   (%i)\n", typeid(T).name(),
            num_leq_blocks_before, num_leq_blocks, num_leq_blocks_before - num_leq_blocks);
 #endif  // NDEBUG
   }
+}
+
+template<BlockIndexT N_Objects, class... Types>
+template<typename T>
+void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions) {
+  this->template parallel_defrag<T, kMaxDefragRecords>(min_num_compactions);
 }
 
 template<BlockIndexT N_Objects, class... Types>

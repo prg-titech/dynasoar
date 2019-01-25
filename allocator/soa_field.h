@@ -84,6 +84,17 @@ class SoaField {
     return data_ptr_from_location(block_base, block_size, obj_id);
   }
 
+  template<int BlockSize>
+  __DEV__ static T* data_ptr_from_location(char* block_base,
+                                           ObjectIndexT obj_id) {
+    assert(obj_id < BlockSize);
+    // Address of SOA array.
+    T* soa_array = reinterpret_cast<T*>(
+        block_base + kBlockDataSectionOffset
+        + BlockSize*SoaFieldHelper<C, Field>::kOffset);
+    return soa_array + obj_id;
+  }
+
   __DEV__ static T* data_ptr_from_location(char* block_base,
                                            ObjectIndexT block_size,
                                            ObjectIndexT obj_id) {
