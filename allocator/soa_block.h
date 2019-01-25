@@ -20,7 +20,7 @@ enum DeallocationState : int8_t {
 // A SOA block containing objects.
 // T: Base type of the block.
 // N: Maximum number of objects in a block of type T.
-template<class T, int TypeId, int N>
+template<class T, TypeIndexT TypeId, int N>
 class SoaBlock {
  public:
   using BitmapT = unsigned long long int;
@@ -45,7 +45,8 @@ class SoaBlock {
   }
 
   // Constructs an object identifier.
-  __DEV__ T* make_pointer(uint8_t index) {
+  // TODO: Signed to unsigned cast here.
+  __DEV__ T* make_pointer(int index) {
     uintptr_t ptr_as_int = index;
     uintptr_t block_size = N;
     ptr_as_int |= block_size << 48;
@@ -77,7 +78,7 @@ class SoaBlock {
       before = atomicOr(&free_bitmap, mask);
     } while ((before & mask) != 0);
 
-    int slots_free_before = __popcll(before);
+    auto slots_free_before = __popcll(before);
     if (slots_free_before == 0) {
       return kBlockNowActive;
     } else if (slots_free_before == N - 1) {
@@ -103,7 +104,7 @@ class SoaBlock {
     return (free_bitmap & (1ULL << index)) == 0;
   }
 
-  template<uint32_t, class...> friend class SoaAllocator;
+  template<BlockIndexT, class...> friend class SoaAllocator;
 
   // Dummy area that may be overridden by zero initialization.
   // Data section begins after kBlockDataSectionOffset bytes.
@@ -119,7 +120,7 @@ class SoaBlock {
   BitmapT iteration_bitmap;
 
   // Padding to 8 bytes.
-  volatile uint8_t type_id;
+  volatile TypeIndexT type_id;
 
   // Size of data segment.
   static const int kStorageBytes =

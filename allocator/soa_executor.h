@@ -78,10 +78,10 @@ struct ParallelExecutor {
       allocator->allocated_[kTypeIndex].scan();
 
       // Determine number of CUDA threads.
-      uint32_t* d_num_soa_blocks_ptr =
+      auto* d_num_soa_blocks_ptr =
           &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
               .data_.enumeration_result_size;
-      uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
+      auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
       if (num_soa_blocks > 0) {
         kernel_init_iteration<AllocatorT, IterT><<<
@@ -91,7 +91,7 @@ struct ParallelExecutor {
 
         time_end = std::chrono::system_clock::now();
 
-        uint32_t total_threads = num_soa_blocks * kSize;
+        auto total_threads = num_soa_blocks * kSize;
         kernel_parallel_do<ThisClass>
             <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
               kCudaBlockSize,
@@ -119,10 +119,10 @@ struct ParallelExecutor {
         allocator->allocated_[kTypeIndex].scan();
 
         // Determine number of CUDA threads.
-        uint32_t* d_num_soa_blocks_ptr =
+        auto* d_num_soa_blocks_ptr =
             &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
                 .data_.enumeration_result_size;
-        uint32_t num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
+        auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
         if (num_soa_blocks > 0) {
           kernel_init_iteration<AllocatorT, IterT><<<
@@ -132,7 +132,7 @@ struct ParallelExecutor {
 
           time_end = std::chrono::system_clock::now();
 
-          uint32_t total_threads = num_soa_blocks * kSize;
+          auto total_threads = num_soa_blocks * kSize;
           kernel_parallel_do_with_pre<ThisClass, PreClass>
               <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
                 kCudaBlockSize,
@@ -156,7 +156,7 @@ struct ParallelExecutor {
 
     static __DEV__ void parallel_do_cuda(AllocatorT* allocator,
                                          Args... args) {
-      const uint32_t N_alloc =
+      const auto N_alloc =
           allocator->allocated_[kTypeIndex].scan_num_bits();
 
       // Round to multiple of 64.
@@ -165,7 +165,7 @@ struct ParallelExecutor {
       if (tid < num_threads) {
         for (int j = tid/kSize; j < N_alloc; j += num_threads/kSize) {
           // i is the index of in the scan array.
-          int block_idx = allocator->allocated_[kTypeIndex].scan_get_index(j);
+          auto block_idx = allocator->allocated_[kTypeIndex].scan_get_index(j);
 
           // TODO: Consider doing a scan over "allocated" bitmap.
           auto* block = allocator->template get_block<IterT>(block_idx);
@@ -177,7 +177,7 @@ struct ParallelExecutor {
             // Clear last bit.
             iteration_bitmap &= iteration_bitmap - 1;
           }
-          int obj_bit = __ffsll(iteration_bitmap);
+          auto obj_bit = __ffsll(iteration_bitmap);
           if (obj_bit > 0) {
             IterT* obj = allocator->template get_object<IterT>(
                 block, obj_bit - 1);
@@ -193,7 +193,7 @@ struct ParallelExecutor {
 template<typename T, typename F, typename AllocatorT, typename... Args>
 struct SequentialExecutor {
   // Defined in soa_allocator.h.
-  __DEV__ static void device_do(uint32_t block_idx, F func,
+  __DEV__ static void device_do(BlockIndexT block_idx, F func,
                                 AllocatorT* allocator, Args... args);
 };
 

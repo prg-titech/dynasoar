@@ -232,7 +232,7 @@ struct AllocatorWrapperDefrag {
 
 // Select a source block for fragmentation. Will not bring the number of
 // defragmentation candidates under min_remaining_records.
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<typename T, int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
     int min_remaining_records) {
@@ -279,7 +279,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
 
 
 // TODO: Allow a block to be a target multiple times.
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<typename T, int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
   for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -307,7 +307,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
 }
 
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<typename T, int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move() {
   // Use 64 threads per SOA block.
@@ -367,7 +367,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move() {
 }
 
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<typename T, int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
   for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -426,7 +426,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
 }
 
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>
     ::load_records_to_shared_mem(SoaAllocator<N_Objects, Types...>* allocator) {
@@ -448,7 +448,7 @@ long unsigned int bench_defrag_move_time = 0;
 long unsigned int bench_rewrite_time = 0;
 
 // Should be invoked from host side.
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<typename T, int NumRecords>
 void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
   assert(NumRecords <= kMaxDefragRecords);
@@ -457,9 +457,9 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
   assert(min_leq_blocks >= 0);
 
   // Determine number of records.
-  int num_leq_blocks =
+  auto num_leq_blocks =
       copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
-  int num_records = num_leq_blocks - min_leq_blocks;
+  auto num_records = num_leq_blocks - min_leq_blocks;
 
   while (num_records > min_leq_blocks) {
     // E.g.: n = 3: Retain 3/4 = 75% of blocks. Round up.
@@ -538,7 +538,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_leq_blocks) {
   }
 }
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 void SoaAllocator<N_Objects, Types...>::DBG_print_defrag_time() {
   printf("%lu, %lu, %lu\n",
          bench_init_leq_time / 1000,

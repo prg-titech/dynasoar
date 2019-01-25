@@ -20,13 +20,14 @@
 
 
 // TODO: Fix visibility.
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 class SoaAllocator {
  public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
 
-  static const uint32_t kNumBlockElements = 64;
-  static const uint64_t kObjectAddrBitmask = kNumBlockElements - 1;
+  static const int kNumBlockElements = 64;
+  static const uint64_t kObjectAddrBitmask =
+      static_cast<uint32_t>(kNumBlockElements) - 1;
   static const uint64_t kBlockAddrBitmask = 0xFFFFFFFFFFC0;
   static_assert(kNumBlockElements == 64,
                 "Not implemented: Block size != 64.");
@@ -59,10 +60,10 @@ class SoaAllocator {
 
   // ---- Debugging (soa_debug.inc) ----
   template<class T>
-  __DEV__ uint32_t DBG_allocated_slots();
+  __DEV__ BlockIndexT DBG_allocated_slots();
 
   template<class T>
-  __DEV__ uint32_t DBG_used_slots();
+  __DEV__ BlockIndexT DBG_used_slots();
 
   static void DBG_print_stats();
 
@@ -110,11 +111,11 @@ class SoaAllocator {
 
   template<typename T>
   struct TypeId {
-    static const uint8_t value = BlockHelper<T>::kIndex;
+    static const TypeIndexT value = BlockHelper<T>::kIndex;
   };
 
-  __DEV__ static uint8_t get_type(const void* ptr) {
-    uint8_t type_id = PointerHelper::get_type(ptr);
+  __DEV__ static TypeIndexT get_type(const void* ptr) {
+    auto type_id = PointerHelper::get_type(ptr);
     assert(type_id < kNumTypes);
     return type_id;
   }
@@ -154,17 +155,17 @@ class SoaAllocator {
     T* result = nullptr;
 
     do {
-      const unsigned active = __activemask();
+      const auto active = __activemask();
       // Leader thread is the first thread whose mask bit is set to 1.
-      const int leader = __ffs(active) - 1;
+      const auto leader = __ffs(active) - 1;
       assert(leader >= 0 && leader < 32);
       // Use lane mask to empty all bits higher than the current thread.
       // The rank of this thread is the number of bits set to 1 in the result.
-      const unsigned int rank = __lane_id();
+      const auto rank = __lane_id();
       assert(rank < 32);
 
       // Values to be calculated by the leader.
-      uint32_t block_idx;
+      BlockIndexT block_idx;
       BlockBitmapT allocation_bitmap;
       if (rank == leader) {
         assert(__popc(__activemask()) == 1);    // Only one thread executing.
@@ -174,9 +175,9 @@ class SoaAllocator {
         BlockBitmapT* free_bitmap = &block->free_bitmap;
         allocation_bitmap = allocate_in_block<T>(
             free_bitmap, __popc(active), block_idx);
-        int num_allocated = __popcll(allocation_bitmap);
+        auto num_allocated = __popcll(allocation_bitmap);
 
-        uint8_t actual_type_id = block->type_id;
+        auto actual_type_id = block->type_id;
         if (actual_type_id != BlockHelper<T>::kIndex) {
           // TODO: Check correctness. This code is rarely executed.
 
@@ -188,7 +189,7 @@ class SoaAllocator {
           // Note: Cannot be in invalidation here, because we are certain that
           // we allocated the bits that we are about to deallocate here.
           auto before_undo = atomicOr(free_bitmap, allocation_bitmap);
-          int slots_before_undo = __popcll(before_undo);
+          auto slots_before_undo = __popcll(before_undo);
 
 #ifdef OPTION_DEFRAG
           if (BlockHelper<T>::kSize - slots_before_undo
@@ -234,7 +235,7 @@ class SoaAllocator {
 
   template<class T>
   __DEV__ void free(T* obj) {
-    uint8_t type_id = obj->get_type();
+    auto type_id = obj->get_type();
     if (type_id == BlockHelper<T>::kIndex) {
       free_typed(obj);
     } else {
@@ -302,7 +303,7 @@ class SoaAllocator {
   // reaching this function.
   template<typename T>
   __DEV__ BlockBitmapT allocate_in_block(BlockBitmapT* free_bitmap_ptr,
-                                         int alloc_size, uint32_t block_idx) {
+                                         int alloc_size, BlockIndexT block_idx) {
     // Allocation bits.
     BlockBitmapT selected_bits = 0;
     // Set to true if block is full.
@@ -312,24 +313,25 @@ class SoaAllocator {
 
     do {
       // Bit set to 1 if slot is free.
-      unsigned int rotation_len = warp_id() % 64;
+      // TODO: Try different ones.
+      const auto rotation_len = warp_id() % 64;
       // TODO: Can we use return value from atomic update in second iteration?
       BlockBitmapT updated_mask = rotl(free_bitmap, rotation_len);
 
       // If there are not enough free slots, allocate as many as possible.
-      int free_slots = __popcll(updated_mask);
-      int allocation_size = min(free_slots, alloc_size);
+      auto free_slots = __popcll(updated_mask);
+      auto allocation_size = min(free_slots, alloc_size);
       BlockBitmapT newly_selected_bits = 0;
 
       // Generate bitmask for allocation
       for (int i = 0; i < allocation_size; ++i) {
-        int next_bit_pos = __ffsll(updated_mask) - 1;
+        auto next_bit_pos = __ffsll(updated_mask) - 1;
         assert(next_bit_pos >= 0);
         assert(((1ULL << next_bit_pos) & updated_mask) > 0);
         // Clear bit at position `next_bit_pos` in updated mask.
         updated_mask &= updated_mask - 1;
         // Save location of selected bit.
-        int next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
+        auto next_bit_pos_unrot = (next_bit_pos - rotation_len) % 64;
         newly_selected_bits |= 1ULL << next_bit_pos_unrot;
       }
 
@@ -343,7 +345,7 @@ class SoaAllocator {
 
       if (successful_alloc > 0ULL) {
         // At least one slot allocated.
-        int num_successful_alloc = __popcll(successful_alloc);
+        auto num_successful_alloc = __popcll(successful_alloc);
         alloc_size -= num_successful_alloc;
         selected_bits |= successful_alloc;
 
@@ -353,7 +355,7 @@ class SoaAllocator {
 
 #ifdef OPTION_DEFRAG
         // Check if more than 50% full now.
-        int prev_full = BlockHelper<T>::kSize - __popcll(before_update);
+        auto prev_full = BlockHelper<T>::kSize - __popcll(before_update);
         if (prev_full <= BlockHelper<T>::kLeq50Threshold
             && prev_full + num_successful_alloc > BlockHelper<T>::kLeq50Threshold) {
           ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
@@ -372,7 +374,7 @@ class SoaAllocator {
 
   // Note: Assuming that the block is leq_50_!
   template<class T>
-  __DEV__ void deallocate_block(uint32_t block_idx, bool dealloc_leq_50 = true) {
+  __DEV__ void deallocate_block(BlockIndexT block_idx, bool dealloc_leq_50 = true) {
     // Precondition: Block is invalidated.
     assert(get_block<T>(block_idx)->free_bitmap == 0);
     ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(block_idx));
@@ -391,8 +393,8 @@ class SoaAllocator {
   template<class T>
   __DEV__ void free_typed(T* obj) {
     obj->~T();
-    const uint32_t block_idx = get_block_idx<T>(obj);
-    const uint32_t obj_id = get_object_id<T>(obj);
+    const auto block_idx = get_block_idx<T>(obj);
+    const auto obj_id = get_object_id<T>(obj);
     const auto dealloc_state = get_block<T>(block_idx)->deallocate(obj_id);
 
     // Note: Different ordering of branches can lead to deadlock!
@@ -449,12 +451,12 @@ class SoaAllocator {
   };
 
   template<typename T>
-  __DEV__ bool is_block_allocated(uint32_t index) {
+  __DEV__ bool is_block_allocated(BlockIndexT index) {
     return allocated_[BlockHelper<T>::kIndex][index];
   }
 
   template<class T>
-  __DEV__ uint32_t get_block_idx(T* ptr) {
+  __DEV__ BlockIndexT get_block_idx(T* ptr) {
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
 
@@ -463,27 +465,27 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ uint32_t get_object_id(T* ptr) {
+  __DEV__ int get_object_id(T* ptr) {
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     return ptr_as_int & kObjectAddrBitmask; 
   }
 
   template<class T>
-  __DEV__ T* get_object(typename BlockHelper<T>::BlockType* block, uint32_t obj_id) {
+  __DEV__ T* get_object(typename BlockHelper<T>::BlockType* block, int obj_id) {
     assert(obj_id < 64);
     return block->make_pointer(obj_id);
   }
 
   template<class T>
-  __DEV__ typename BlockHelper<T>::BlockType* get_block(uint32_t block_idx) {
+  __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx) {
     assert(block_idx < N);
     return reinterpret_cast<typename BlockHelper<T>::BlockType*>(
         data_ + block_idx*kBlockSizeBytes);
   }
 
   template<class T>
-  __DEV__ uint32_t find_active_block() {
-    uint32_t block_idx;
+  __DEV__ BlockIndexT find_active_block() {
+    BlockIndexT block_idx;
 
     do {
       // Retry a couple of times. May reduce fragmentation.
@@ -492,13 +494,13 @@ class SoaAllocator {
       do {
         block_idx = active_[BlockHelper<T>::kIndex]
             .template find_allocated<false>(retries);
-      } while (block_idx == Bitmap<uint32_t, N>::kIndexError
+      } while (block_idx == Bitmap<BlockIndexT, N>::kIndexError
                && --retries > 0);
 
-      if (block_idx == Bitmap<uint32_t, N>::kIndexError) {
+      if (block_idx == Bitmap<BlockIndexT, N>::kIndexError) {
         // TODO: May be out of memory here.
         block_idx = global_free_.deallocate();
-        assert(block_idx != (Bitmap<uint32_t, N>::kIndexError));  // OOM
+        assert(block_idx != (Bitmap<BlockIndexT, N>::kIndexError));  // OOM
         initialize_block<T>(block_idx);
         ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
 #ifdef OPTION_DEFRAG
@@ -507,14 +509,14 @@ class SoaAllocator {
 #endif  // OPTION_DEFRAG
         ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
       }
-    } while (block_idx == Bitmap<uint32_t, N>::kIndexError);
+    } while (block_idx == Bitmap<BlockIndexT, N>::kIndexError);
 
     assert(block_idx < N);
     return block_idx;
   }
 
   template<class T>
-  __DEV__ void initialize_block(uint32_t block_idx) {
+  __DEV__ void initialize_block(BlockIndexT block_idx) {
     static_assert(sizeof(typename BlockHelper<T>::BlockType)
           % kNumBlockElements == 0,
         "Internal error: SOA block not aligned to 64 bytes.");
@@ -522,7 +524,7 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ T* get_ptr_from_allocation(uint32_t block_idx, int rank,
+  __DEV__ T* get_ptr_from_allocation(BlockIndexT block_idx, int rank,
                                      BlockBitmapT allocation) {
     assert(block_idx < N);
     assert(rank < 32);
@@ -533,7 +535,7 @@ class SoaAllocator {
       allocation &= allocation - 1;
     }
 
-    int position = __ffsll(allocation);
+    auto position = __ffsll(allocation);
 
     if (position > 0) {
       // Allocation successful.
@@ -546,7 +548,7 @@ class SoaAllocator {
   // Precondition: Block is active.
   // Postcondition: Do not change active status.
   template<class T>
-  __DEV__ bool invalidate_block(uint32_t block_idx) {
+  __DEV__ bool invalidate_block(BlockIndexT block_idx) {
     auto* block = get_block<T>(block_idx);
 
     while (true) {
@@ -599,16 +601,16 @@ class SoaAllocator {
       sizeof(typename BlockHelper<typename TupleHelper<Types...>
              ::Type64BlockSizeMin>::BlockType);
 
-  Bitmap<uint32_t, N> global_free_;
+  Bitmap<BlockIndexT, N> global_free_;
 
-  Bitmap<uint32_t, N> allocated_[kNumTypes];
+  Bitmap<BlockIndexT, N> allocated_[kNumTypes];
 
-  Bitmap<uint32_t, N> active_[kNumTypes];
+  Bitmap<BlockIndexT, N> active_[kNumTypes];
 
 #ifdef OPTION_DEFRAG
   // Bit set if block is <= 50% full and active.
-  Bitmap<uint32_t, N> leq_50_[kNumTypes];
-  unsigned int num_leq_50_[kNumTypes];
+  Bitmap<BlockIndexT, N> leq_50_[kNumTypes];
+  BlockIndexT num_leq_50_[kNumTypes];
 
   // Temporary storage for defragmentation records.
   //DefragRecord<BlockBitmapT> defrag_records_[kMaxDefragRecords];
@@ -617,7 +619,7 @@ class SoaAllocator {
 
   char* data_;
 
-  static const uint32_t kN = N;
+  static const BlockIndexT kN = N;
 
   static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
 };
@@ -625,12 +627,12 @@ class SoaAllocator {
 
 template<typename T, typename F, typename AllocatorT, typename... Args>
 __DEV__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
-    uint32_t block_idx, F func, AllocatorT* allocator, Args... args) {
+    BlockIndexT block_idx, F func, AllocatorT* allocator, Args... args) {
   auto* block = allocator->template get_block<T>(block_idx);
   auto bitmap = block->allocation_bitmap();
 
   while (bitmap != 0ULL) {
-    int pos = __ffsll(bitmap) - 1;
+    auto pos = __ffsll(bitmap) - 1;
     bitmap &= bitmap - 1;
 
     auto* obj = allocator->template get_object<T>(block, pos);

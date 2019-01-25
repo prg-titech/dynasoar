@@ -17,4 +17,7 @@ static const int kBlockDataSectionOffset = 64;
 
 using BlockIndexT = int;
 
+using TypeIndexT = int8_t;
+static_assert(sizeof(TypeIndexT) == 1, "Invalid TypeIndexT.");
+
 #endif  // ALLOCATOR_AOS_CONFIGURATION_H

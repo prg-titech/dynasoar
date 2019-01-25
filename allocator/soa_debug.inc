@@ -121,10 +121,10 @@ struct AllocatorWrapperDebug {
 };
 
 // The number of allocated slots of a type. (#blocks * blocksize)
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<class T>
-__DEV__ uint32_t SoaAllocator<N_Objects, Types...>::DBG_allocated_slots() {
-  uint32_t counter = 0;
+__DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::DBG_allocated_slots() {
+  BlockIndexT counter = 0;
   for (int i = 0; i < N; ++i) {
     if (allocated_[BlockHelper<T>::kIndex][i]) {
       counter += get_block<T>(i)->DBG_num_bits();
@@ -134,10 +134,10 @@ __DEV__ uint32_t SoaAllocator<N_Objects, Types...>::DBG_allocated_slots() {
 }
 
 // The number of actually used slots of a type. (#blocks * blocksize)
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<class T>
-__DEV__ uint32_t SoaAllocator<N_Objects, Types...>::DBG_used_slots() {
-  uint32_t counter = 0;
+__DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::DBG_used_slots() {
+  BlockIndexT counter = 0;
   for (int i = 0; i < N; ++i) {
     if (allocated_[BlockHelper<T>::kIndex][i]) {
       counter += get_block<T>(i)->DBG_allocated_bits();
@@ -146,7 +146,7 @@ __DEV__ uint32_t SoaAllocator<N_Objects, Types...>::DBG_used_slots() {
   return counter;
 }
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
   printf("┌───────────────────────────────────────────────────────────────────────┐\n");
   printf("│ Smallest block type:  %47s │\n",
@@ -168,7 +168,7 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
       AllocatorWrapperDebug<ThisAllocator>::template SoaTypeDbgPrinter>();
 }
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_print_state_stats() {
   int num_blk_free = global_free_.DBG_count_num_ones();
 
@@ -199,7 +199,7 @@ __DEV__ int DBG_stat_max_total_alloc = 0;
 __DEV__ int DBG_stat_max_total_used = 0;
 __DEV__ float DBG_stat_max_total_frag = 0.0f;
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 __DEV__ float SoaAllocator<N_Objects, Types...>::DBG_calculate_fragmentation() {
   // Accumulators for statistics.
   int total_num_obj_alloc = 0;
@@ -213,7 +213,7 @@ __DEV__ float SoaAllocator<N_Objects, Types...>::DBG_calculate_fragmentation() {
   return total_obj_frag;
 }
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_collect_stats() {
   // Accumulators for statistics.
   int total_num_obj_alloc = 0;
@@ -230,7 +230,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_collect_stats() {
   DBG_stat_max_total_frag = max(DBG_stat_max_total_frag, total_obj_frag);
 }
 
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_print_collected_stats() {
   printf("%i, %i, %f\n", DBG_stat_max_total_alloc, DBG_stat_max_total_used,
          DBG_stat_max_total_frag);
@@ -270,7 +270,7 @@ struct PointerTypeChecker {
 };
 
 // Check type of pointer.
-template<uint32_t N_Objects, class... Types>
+template<BlockIndexT N_Objects, class... Types>
 template<class T>
 __DEV__ bool SoaAllocator<N_Objects, Types...>::is_type(const T* ptr) {
   return TupleHelper<Types...>::template dev_for_all<PointerTypeChecker<
