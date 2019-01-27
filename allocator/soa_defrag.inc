@@ -266,13 +266,15 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
         ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(bid));
       } else {
         atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
+        defrag_records_.source_block_idx[tid] = kInvalidBlockIndex;
         break;
       }
     }
   }
 
   // We got enough blocks. Fill up the rest with invalid markers.
-  for (; tid < NumRecords; tid += blockDim.x * gridDim.x) {
+  for (tid += blockDim.x * gridDim.x; tid < NumRecords;
+       tid += blockDim.x * gridDim.x) {
     defrag_records_.source_block_idx[tid] = kInvalidBlockIndex;
   }
 }
