@@ -4,9 +4,9 @@
 #include <chrono>
 #include <stdio.h>
 
-#include "example/game-of-life/soa/configuration.h"
-#include "dataset_loader.h"
-#include "rendering.h"
+#include "../configuration.h"
+#include "../dataset_loader.h"
+#include "../rendering.h"
 
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }

@@ -3,8 +3,8 @@
 #include <cub/cub.cuh>
 #include <stdio.h>
 
-#include "configuration.h"
-#include "dataset_loader.h"
+#include "../configuration.h"
+#include "../dataset_loader.h"
 
 using IndexT = int;
 
@@ -28,14 +28,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-struct Cell {
-  char agent_type;
-  char agent_action;
-  bool alive_is_new;
-  int redirection_index;
-};
+__device__ char* d_Cell_agent_type;
+__device__ char* d_Cell_agent_action;
+__device__ bool* d_Cell_alive_is_new;
+__device__ int* d_Cell_redirection_index;
 
-__device__ Cell* cells;
+// Only for debugging.
+__device__ int* d_Cell_found;
 
 // Object/array size counters.
 __device__ int d_num_candidates;
@@ -76,47 +75,47 @@ dataset_t dataset;
 
 
 __device__ void new_Candidate(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeNone);
+  assert(d_Cell_agent_type[self] == kAgentTypeNone);
 
   int idx = atomicAdd(&d_num_candidates, 1);
   d_candidates[idx] = self;
   d_Candidate_active[idx] = 1;
 
-  cells[self].redirection_index = idx;
-  cells[self].agent_type = kAgentTypeCandidate;
-  cells[self].agent_action = kActionNone;
+  d_Cell_redirection_index[self] = idx;
+  d_Cell_agent_type[self] = kAgentTypeCandidate;
+  d_Cell_agent_action[self] = kActionNone;
 }
 
 
 __device__ void delete_Candidate(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeCandidate);
-  cells[self].agent_type = kAgentTypeNone;
+  assert(d_Cell_agent_type[self] == kAgentTypeCandidate);
+  d_Cell_agent_type[self] = kAgentTypeNone;
 
-  int idx = cells[self].redirection_index;
+  int idx = d_Cell_redirection_index[self];
   assert(d_Candidate_active[idx] == 1);
   d_Candidate_active[idx] = 0;
 }
 
 
 __device__ void new_Alive(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeNone);
+  assert(d_Cell_agent_type[self] == kAgentTypeNone);
 
   int idx = atomicAdd(&d_num_alive, 1);
   d_alive[idx] = self;
   d_Alive_active[idx] = 1;
 
-  cells[self].redirection_index = idx;
-  cells[self].agent_type = kAgentTypeAlive;
-  cells[self].agent_action = kActionNone;
-  cells[self].alive_is_new = true;
+  d_Cell_redirection_index[self] = idx;
+  d_Cell_agent_type[self] = kAgentTypeAlive;
+  d_Cell_agent_action[self] = kActionNone;
+  d_Cell_alive_is_new[self] = true;
 }
 
 
 __device__ void delete_Alive(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeAlive);
-  cells[self].agent_type = kAgentTypeNone;
+  assert(d_Cell_agent_type[self] == kAgentTypeAlive);
+  d_Cell_agent_type[self] = kAgentTypeNone;
 
-  int idx = cells[self].redirection_index;
+  int idx = d_Cell_redirection_index[self];
   assert(d_Alive_active[idx] == 1);
   d_Alive_active[idx] = 0;
 }
@@ -124,8 +123,8 @@ __device__ void delete_Alive(IndexT self) {
 
 __device__ void change_Alive_to_Candidate(IndexT self) {
   // Delete alive. Without reseting type.
-  assert(cells[self].agent_type == kAgentTypeAlive);
-  int idx = cells[self].redirection_index;
+  assert(d_Cell_agent_type[self] == kAgentTypeAlive);
+  int idx = d_Cell_redirection_index[self];
   assert(d_Alive_active[idx] == 1);
   d_Alive_active[idx] = 0;
 
@@ -133,9 +132,9 @@ __device__ void change_Alive_to_Candidate(IndexT self) {
   idx = atomicAdd(&d_num_candidates, 1);
   d_candidates[idx] = self;
   d_Candidate_active[idx] = 1;
-  cells[self].redirection_index = idx;
-  cells[self].agent_type = kAgentTypeCandidate;
-  cells[self].agent_action = kActionNone;
+  d_Cell_redirection_index[self] = idx;
+  d_Cell_agent_type[self] = kAgentTypeCandidate;
+  d_Cell_agent_action[self] = kActionNone;
 }
 
 
@@ -143,12 +142,12 @@ __device__ int device_checksum;
 __device__ int device_chk_num_candidates;
 
 __device__ void Alive_update_checksum(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeAlive);
+  assert(d_Cell_agent_type[self] == kAgentTypeAlive);
   atomicAdd(&device_checksum, 1);
 }
 
 __device__ void Candidate_update_checksum(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeCandidate);
+  assert(d_Cell_agent_type[self] == kAgentTypeCandidate);
   atomicAdd(&device_chk_num_candidates, 1);
 }
 
@@ -164,10 +163,10 @@ __device__ int Cell_num_alive_neighbors(IndexT self) {
       int ny = cell_y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        assert(cells[ny*SIZE_X + nx].agent_type >= 0
-            && cells[ny*SIZE_X + nx].agent_type <= 2);
+        assert(d_Cell_agent_type[ny*SIZE_X + nx] >= 0
+            && d_Cell_agent_type[ny*SIZE_X + nx] <= 2);
 
-        if (cells[ny*SIZE_X + nx].agent_type == kAgentTypeAlive) {
+        if (d_Cell_agent_type[ny*SIZE_X + nx] == kAgentTypeAlive) {
           result++;
         }
       }
@@ -179,15 +178,15 @@ __device__ int Cell_num_alive_neighbors(IndexT self) {
 
 
 __device__ void Alive_prepare(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeAlive);
+  assert(d_Cell_agent_type[self] == kAgentTypeAlive);
 
-  cells[self].alive_is_new = false;
+  d_Cell_alive_is_new[self] = false;
 
   // Also counts this object itself.
   int alive_neighbors = Cell_num_alive_neighbors(self) - 1;
 
   if (alive_neighbors < 2 || alive_neighbors > 3) {
-    cells[self].agent_action = kActionDie;
+    d_Cell_agent_action[self] = kActionDie;
   }
 }
 
@@ -201,8 +200,8 @@ __device__ void Alive_maybe_create_candidate(IndexT self, int x, int y) {
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
         IndexT n_cell = ny*SIZE_X + nx;
-        if (cells[n_cell].agent_type == kAgentTypeAlive) {
-          if (cells[n_cell].alive_is_new) {
+        if (d_Cell_agent_type[n_cell] == kAgentTypeAlive) {
+          if (d_Cell_alive_is_new[n_cell]) {
             if (n_cell == self) {
               // Create candidate now.
               new_Candidate(y*SIZE_X + x);
@@ -220,7 +219,7 @@ __device__ void Alive_maybe_create_candidate(IndexT self, int x, int y) {
 
 
 __device__ void Alive_create_candidates(IndexT self) {
-  assert(cells[self].alive_is_new);
+  assert(d_Cell_alive_is_new[self]);
 
   // TODO: Consolidate with Agent::num_alive_neighbors().
   int cell_x = self % SIZE_X;
@@ -232,7 +231,7 @@ __device__ void Alive_create_candidates(IndexT self) {
       int ny = cell_y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        if (cells[ny*SIZE_X + nx].agent_type == kAgentTypeNone) {
+        if (d_Cell_agent_type[ny*SIZE_X + nx] == kAgentTypeNone) {
           // Candidate should be created here.
           Alive_maybe_create_candidate(self, nx, ny);
         }
@@ -243,14 +242,14 @@ __device__ void Alive_create_candidates(IndexT self) {
 
 
 __device__ void Alive_update(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeAlive);
+  assert(d_Cell_agent_type[self] == kAgentTypeAlive);
 
   // TODO: Consider splitting in two classes for less divergence.
-  if (cells[self].alive_is_new) {
+  if (d_Cell_alive_is_new[self]) {
     // Create candidates in neighborhood.
     Alive_create_candidates(self);
   } else {
-    if (cells[self].agent_action == kActionDie) {
+    if (d_Cell_agent_action[self] == kActionDie) {
       // Replace with Candidate. Or should we?
       change_Alive_to_Candidate(self);
     }
@@ -260,25 +259,25 @@ __device__ void Alive_update(IndexT self) {
 
 
 __device__ void Candidate_prepare(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeCandidate);
+  assert(d_Cell_agent_type[self] == kAgentTypeCandidate);
 
   int alive_neighbors = Cell_num_alive_neighbors(self);
 
   if (alive_neighbors == 3) {
-    cells[self].agent_action = kActionSpawnAlive;
+    d_Cell_agent_action[self] = kActionSpawnAlive;
   } else if (alive_neighbors == 0) {
-    cells[self].agent_action = kActionDie;
+    d_Cell_agent_action[self] = kActionDie;
   }
 }
 
 
 __device__ void Candidate_update(IndexT self) {
-  assert(cells[self].agent_type == kAgentTypeCandidate);
+  assert(d_Cell_agent_type[self] == kAgentTypeCandidate);
 
-  if (cells[self].agent_action == kActionSpawnAlive) {
+  if (d_Cell_agent_action[self] == kActionSpawnAlive) {
     delete_Candidate(self);
     new_Alive(self);
-  } else if (cells[self].agent_action == kActionDie) {
+  } else if (d_Cell_agent_action[self] == kActionDie) {
     delete_Candidate(self);
   }
 }
@@ -291,7 +290,7 @@ __global__ void create_cells() {
 
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < SIZE_X*SIZE_Y; i += blockDim.x * gridDim.x) {
-    cells[i].agent_type = kAgentTypeNone;
+    d_Cell_agent_type[i] = kAgentTypeNone;
     d_Alive_active[i] = 0;
     d_Candidate_active[i] = 0;
   }
@@ -372,17 +371,28 @@ __global__ void kernel_check_consistency() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < d_num_candidates; i += blockDim.x * gridDim.x) {
     if (d_Candidate_active[i]) {
-      assert(cells[d_candidates[i]].agent_type == kAgentTypeCandidate);
+      assert(d_Cell_agent_type[d_candidates[i]] == kAgentTypeCandidate);
+      assert(atomicCAS(&d_Cell_found[d_candidates[i]], 0, 1) == 0);
     }
   }
 
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < d_num_alive; i += blockDim.x * gridDim.x) {
     if (d_Alive_active[i]) {
-      assert(cells[d_alive[i]].agent_type == kAgentTypeAlive);
+      assert(d_Cell_agent_type[d_alive[i]] == kAgentTypeAlive);
+      assert(atomicCAS(&d_Cell_found[d_alive[i]], 0, 1) == 0);
     }
   }
 }
+
+
+__global__ void kernel_initialize_check_consistency() {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < SIZE_X*SIZE_Y; i += blockDim.x * gridDim.x) {
+    d_Cell_found[i] = 0;
+  }
+}
+
 
 
 void update_object_counters() {
@@ -398,6 +408,9 @@ void update_object_counters() {
 
 void dbg_check_consistency() {
   update_object_counters();
+
+  kernel_initialize_check_consistency<<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 
   kernel_check_consistency<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -467,7 +480,7 @@ __global__ void kernel_compact_alive() {
     if (d_Alive_active[i]) {
       int target = d_prefix_sum_output[i];
 
-      cells[d_alive[i]].redirection_index = target;
+      d_Cell_redirection_index[d_alive[i]] = target;
       d_Alive_active_2[target] = 1;
       d_alive_2[target] = d_alive[i];
     }
@@ -499,7 +512,7 @@ __global__ void kernel_compact_candidates() {
     if (d_Candidate_active[i]) {
       int target = d_prefix_sum_output[i];
 
-      cells[d_candidates[i]].redirection_index = target;
+      d_Cell_redirection_index[d_candidates[i]] = target;
       d_Candidate_active_2[target] = 1;
       d_candidates_2[target] = d_candidates[i];
     }
@@ -600,9 +613,29 @@ int main(int argc, char** argv) {
   cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
 
   // Allocate memory.
-  Cell* h_cells;
-  cudaMalloc(&h_cells, sizeof(Cell)*dataset.x*dataset.y);
-  cudaMemcpyToSymbol(cells, &h_cells, sizeof(Cell*),
+  char* h_Cell_agent_type;
+  cudaMalloc(&h_Cell_agent_type, sizeof(char)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(d_Cell_agent_type, &h_Cell_agent_type, sizeof(char*),
+                     0, cudaMemcpyHostToDevice);
+
+  char* h_Cell_agent_action;
+  cudaMalloc(&h_Cell_agent_action, sizeof(char)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(d_Cell_agent_action, &h_Cell_agent_action, sizeof(char*),
+                     0, cudaMemcpyHostToDevice);
+
+  bool* h_Cell_alive_is_new;
+  cudaMalloc(&h_Cell_alive_is_new, sizeof(bool)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(d_Cell_alive_is_new, &h_Cell_alive_is_new, sizeof(bool*),
+                     0, cudaMemcpyHostToDevice);
+
+  int* h_Cell_found;
+  cudaMalloc(&h_Cell_found, sizeof(int)*dataset.x*dataset.x);
+  cudaMemcpyToSymbol(d_Cell_found, &h_Cell_found, sizeof(int*),
+                     0, cudaMemcpyHostToDevice);
+
+  int* h_Cell_redirection_index;
+  cudaMalloc(&h_Cell_redirection_index, sizeof(int)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(d_Cell_redirection_index, &h_Cell_redirection_index, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
   cudaMalloc(&h_candidates, sizeof(IndexT)*dataset.x*dataset.y);

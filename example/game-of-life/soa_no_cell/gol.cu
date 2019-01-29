@@ -1,9 +1,9 @@
 #include <chrono>
 
-#include "gol_no_cell.h"
-#include "configuration.h"
-#include "dataset_loader.h"
-#include "rendering.h"
+#include "gol.h"
+#include "../configuration.h"
+#include "../dataset_loader.h"
+#include "../rendering.h"
 
 
 // Allocator handles.
