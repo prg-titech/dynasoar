@@ -119,7 +119,7 @@ __device__ void Cell_enter(IndexT cell_id, Agent* agent) {
 
 __device__ void Cell_kill(IndexT cell_id) {
   assert(dev_Cell_agent[cell_id] != nullptr);
-  device_allocator->free<Agent>(dev_Cell_agent[cell_id]);
+  destroy(device_allocator, dev_Cell_agent[cell_id]);
   dev_Cell_agent[cell_id] = nullptr;
 }
 
@@ -193,7 +193,7 @@ __device__ void Fish::update() {
     Cell_enter(new_position_, this);
 
     if (kOptionFishSpawn && egg_timer_ > kSpawnThreshold) {
-      auto* new_fish = device_allocator->make_new<Fish>(curand(&random_state_));
+      auto* new_fish = new(device_allocator) Fish(curand(&random_state_));
       assert(new_fish != nullptr);
       Cell_enter(old_position, new_fish);
       egg_timer_ = (uint32_t) 0;
@@ -236,7 +236,7 @@ __device__ void Shark::update() {
 
       if (kOptionSharkSpawn && egg_timer_ > kSpawnThreshold) {
         auto* new_shark =
-            device_allocator->make_new<Shark>(curand(&random_state_));
+            new(device_allocator) Shark(curand(&random_state_));
         assert(new_shark != nullptr);
         Cell_enter(old_position, new_shark);
         egg_timer_ = 0;
@@ -276,11 +276,11 @@ __global__ void setup_cells() {
     auto& rand_state = dev_Cell_random_state[i];
     uint32_t agent_type = curand(&rand_state) % 4;
     if (agent_type == 0) {
-      auto* agent = device_allocator->make_new<Fish>(curand(&rand_state));
+      auto* agent = new(device_allocator) Fish(curand(&rand_state));
       assert(agent != nullptr);
       Cell_enter(i, agent);
     } else if (agent_type == 1) {
-      auto* agent = device_allocator->make_new<Shark>(curand(&rand_state));
+      auto* agent = new(device_allocator) Shark(curand(&rand_state));
       assert(agent != nullptr);
       Cell_enter(i, agent);
     } else {

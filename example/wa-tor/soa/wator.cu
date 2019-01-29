@@ -153,7 +153,7 @@ __device__ void Fish::update() {
     new_position_->enter(this);
 
     if (kOptionFishSpawn && egg_timer_ > kSpawnThreshold) {
-      auto* new_fish = device_allocator->make_new<Fish>(curand(&random_state_));
+      auto* new_fish = new(device_allocator) Fish(curand(&random_state_));
       assert(new_fish != nullptr);
       old_position->enter(new_fish);
       egg_timer_ = (uint32_t) 0;
@@ -196,7 +196,7 @@ __device__ void Shark::update() {
 
       if (kOptionSharkSpawn && egg_timer_ > kSpawnThreshold) {
         auto* new_shark =
-            device_allocator->make_new<Shark>(curand(&random_state_));
+            new(device_allocator) Shark(curand(&random_state_));
         assert(new_shark != nullptr);
         old_position->enter(new_shark);
         egg_timer_ = 0;
@@ -207,7 +207,8 @@ __device__ void Shark::update() {
 
 __device__ void Cell::kill() {
   assert(agent_ != nullptr);
-  device_allocator->free<Agent>(agent_);
+  //device_allocator->free<Agent>(agent_);
+  destroy(device_allocator, agent_);
   agent_ = nullptr;
 }
 
@@ -232,7 +233,7 @@ __global__ void reset_checksum() {
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
-    Cell* new_cell = device_allocator->make_new<Cell>(i);
+    Cell* new_cell = new(device_allocator) Cell(i);
     assert(new_cell != nullptr);
     cells[i] = new_cell;
   }
@@ -260,11 +261,11 @@ __global__ void setup_cells() {
     auto& rand_state = cells[i]->random_state();
     uint32_t agent_type = curand(&rand_state) % 4;
     if (agent_type == 0) {
-      auto* agent = device_allocator->make_new<Fish>(curand(&rand_state));
+      auto* agent = new(device_allocator) Fish(curand(&rand_state));
       assert(agent != nullptr);
       cells[i]->enter(agent);
     } else if (agent_type == 1) {
-      auto* agent = device_allocator->make_new<Shark>(curand(&rand_state));
+      auto* agent = new(device_allocator) Shark(curand(&rand_state));
       assert(agent != nullptr);
       cells[i]->enter(agent);
     } else {

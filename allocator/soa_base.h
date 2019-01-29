@@ -5,6 +5,34 @@
 #include "allocator/soa_helper.h"
 #include "allocator/soa_field.h"
 
+#define define_field_types(classname, ...) \
+  __DEV__ void* operator new(size_t sz, AllocatorT* allocator) { \
+    return allocator->allocate_new<classname>(); \
+  } \
+  __DEV__ void* operator new(size_t sz, classname* ptr) { \
+    return ptr; \
+  } \
+  __DEV__ void operator delete(void* ptr, AllocatorT* allocator) { \
+    allocator->free<classname>(reinterpret_cast<classname*>(ptr)); \
+  } \
+  __DEV__ void operator delete(void*, classname*) { \
+    assert(false);  /* Construct must not throw exceptions. */ \
+  } \
+  using FieldTypes = std::tuple<__VA_ARGS__>;
+
+template<typename AllocatorT, typename T>
+__DEV__ __forceinline__ void destroy(AllocatorT* allocator, T* ptr) {
+  allocator->template free<T>(ptr);
+}
+
+
+template<typename AllocatorT, typename C, int Field>
+__DEV__ __forceinline__ void destroy(AllocatorT* allocator,
+                                     const SoaField<C, Field>& value) {
+  allocator->template free(value.get());
+}
+
+
 // User-defined classes should inherit from this class.
 template<class AllocatorT>
 class SoaBase {

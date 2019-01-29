@@ -17,10 +17,11 @@ using IndexT = int;
 
 class Agent : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
+  define_field_types(
+      Agent,
       curandState_t,    // random_state_
       IndexT,           // position_
-      IndexT>;          // new_position_
+      IndexT)           // new_position_
 
   static const bool kIsAbstract = true;
 
@@ -44,8 +45,9 @@ class Agent : public SoaBase<AllocatorT> {
 
 class Fish : public Agent {
  public:
-  using FieldTypes = std::tuple<
-      uint32_t>;       // egg_timer_
+  define_field_types(
+      Fish,
+      uint32_t)        // egg_timer_
 
   using BaseClass = Agent;
   static const bool kIsAbstract = false;
@@ -64,9 +66,10 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  public:
-  using FieldTypes = std::tuple<
+  define_field_types(
+      Shark,
       uint32_t,        // energy_
-      uint32_t>;       // egg_timer_
+      uint32_t)        // egg_timer_
 
   using BaseClass = Agent;
   static const bool kIsAbstract = false;

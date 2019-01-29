@@ -111,8 +111,7 @@ class SoaAllocator {
 #endif  // OPTION_DEFRAG
   };
 
-  using BlockBitmapT = typename BlockHelper<
-      typename TupleHelper<Types...>::NonAbstractType>::BlockType::BitmapT;
+  using BlockBitmapT = unsigned long long int;
 
   template<typename T>
   struct TypeId {
@@ -154,9 +153,9 @@ class SoaAllocator {
   // Use initialize() instead of constructor to avoid zero-initialization.
   __DEV__ SoaAllocator() = delete;
 
-  // Try to allocate everything in the same block.
-  template<class T, typename... Args>
-  __DEV__ T* make_new(Args... args) {
+  // Allocate location and return pointer.
+  template<class T>
+  __DEV__ T* allocate_new() {
     T* result = nullptr;
 
     do {
@@ -235,7 +234,13 @@ class SoaAllocator {
           block_idx, __popc(__lanemask_lt() & active), allocation_bitmap);
     } while (result == nullptr);
 
-    return new(result) T(args...);
+    return result;
+  }
+
+  // Allocate location, construct object and return pointer.
+  template<typename T, typename... Args>
+  __DEV__ T* make_new(Args&&... args) {
+    return new(allocate_new<T>()) T(std::forward<Args>(args)...);
   }
 
   template<class T>

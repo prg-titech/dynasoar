@@ -114,6 +114,10 @@ class SoaField {
   __DEV__ operator T&() { return *data_ptr(); }
   __DEV__ operator const T&() const { return *data_ptr(); }
 
+  // Explicitly get value. Just for better code readability.
+  __DEV__ T& get() { return *data_ptr(); }
+  __DEV__ const T& get() const { return *data_ptr(); }
+
   // Custom address-of operator.
   __DEV__ T* operator&() { return data_ptr(); }
   __DEV__ const T* operator&() const { return data_ptr(); }
