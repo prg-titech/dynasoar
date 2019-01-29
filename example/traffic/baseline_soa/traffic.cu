@@ -4,7 +4,7 @@
 #include <limits>
 #include <cub/cub.cuh>
 
-#include "configuration.h"
+#include "../configuration.h"
 #include "util/util.h"
 
 static const int kNullptr = std::numeric_limits<int>::max();
@@ -17,7 +17,6 @@ using IndexT = int;
 
 __device__ DeviceArray<IndexT, kMaxDegree>* d_Cell_incoming;
 __device__ DeviceArray<IndexT, kMaxDegree>* d_Cell_outgoing;
-__device__ IndexT* d_Cell_car;
 __device__ int* d_Cell_max_velocity;
 __device__ int* d_Cell_current_max_velocity;
 __device__ int* d_Cell_num_incoming;
@@ -27,37 +26,16 @@ __device__ float* d_Cell_y;
 __device__ bool* d_Cell_is_target;
 __device__ curandState_t* d_Cell_random_state;
 __device__ char* d_Cell_type;
-
-// Need 2 arrays of both, so we can swap.
 __device__ curandState_t* d_Car_random_state;
 __device__ DeviceArray<IndexT, kMaxVelocity>* d_Car_path;
-__device__ IndexT* d_Car_position;
 __device__ int* d_Car_path_length;
 __device__ int* d_Car_velocity;
 __device__ int* d_Car_max_velocity;
-__device__ int* d_Car_active;
-
-__device__ curandState_t* d_Car_random_state_2;
-__device__ DeviceArray<IndexT, kMaxVelocity>* d_Car_path_2;
-__device__ IndexT* d_Car_position_2;
-__device__ int* d_Car_path_length_2;
-__device__ int* d_Car_velocity_2;
-__device__ int* d_Car_max_velocity_2;
-__device__ int* d_Car_active_2;
-
-// For prefix sum array compaction.
-__device__ int* d_prefix_sum_temp;
-__device__ int* d_prefix_sum_output;
-int* h_prefix_sum_temp;
-int* h_prefix_sum_output;
-int* h_Car_active;
-int* h_Car_active_2;
+__device__ bool* d_Cell_has_car;
+__device__ bool* d_Cell_should_occupy;
 
 __device__ int d_num_cells;
-__device__ int d_num_cars;
-__device__ int d_num_cars_2;
 int host_num_cells;
-int host_num_cars;
 
 
 class TrafficLight {
@@ -170,7 +148,7 @@ __device__ float Cell_x(IndexT self) { return d_Cell_x[self]; }
 
 __device__ float Cell_y(IndexT self) { return d_Cell_y[self]; }
 
-__device__ bool Cell_is_free(IndexT self) { return d_Cell_car[self] == kNullptr; }
+__device__ bool Cell_is_free(IndexT self) { return !d_Cell_has_car[self]; }
 
 __device__ bool Cell_is_sink(IndexT self) { return d_Cell_num_outgoing[self] == 0; }
 
@@ -186,18 +164,24 @@ __device__ int Car_velocity(IndexT self) { return d_Car_velocity[self]; }
 
 __device__ int Car_max_velocity(IndexT self) { return d_Car_max_velocity[self]; }
 
-__device__ IndexT Car_position(IndexT self) { return d_Car_position[self]; }
-
-
 __device__ void Cell_occupy(IndexT self, IndexT car) {
+  assert(d_Cell_has_car[car]);
   assert(Cell_is_free(self));
-  d_Cell_car[self] = car;
+  d_Cell_should_occupy[self] = true;
+  d_Car_velocity[self] = d_Car_velocity[car];
+  d_Car_max_velocity[self] = d_Car_max_velocity[car];
+  d_Car_random_state[self] = d_Car_random_state[car];
+
+  for (int i = 0; i < kMaxVelocity; ++i) {
+    d_Car_path[self][i] = d_Car_path[car][i];
+  }
+  d_Car_path_length[self] = d_Car_path_length[car];
 }
 
 
 __device__ void Cell_release(IndexT self) {
   assert(!Cell_is_free(self));
-  d_Cell_car[self] = kNullptr;
+  d_Cell_has_car[self] = false;
 }
 
 
@@ -229,7 +213,7 @@ __device__ void Car_step_accelerate(IndexT self) {
 
 
 __device__ void Car_step_extend_path(IndexT self) {
-  IndexT cell = d_Car_position[self];
+  IndexT cell = self;
   IndexT next_cell;
 
   for (int i = 0; i < d_Car_velocity[self]; ++i) {
@@ -254,8 +238,8 @@ __device__ void Car_step_extend_path(IndexT self) {
 __device__ void Car_step_constraint_velocity(IndexT self) {
   // This is actually only needed for the very first iteration, because a car
   // may be positioned on a traffic light cell.
-  if (d_Car_velocity[self] > Cell_current_max_velocity(d_Car_position[self])) {
-    d_Car_velocity[self] = Cell_current_max_velocity(d_Car_position[self]);
+  if (d_Car_velocity[self] > Cell_current_max_velocity(self)) {
+    d_Car_velocity[self] = Cell_current_max_velocity(self);
   }
 
   int path_index = 0;
@@ -308,24 +292,19 @@ __device__ void Car_step_constraint_velocity(IndexT self) {
 
 
 __device__ void Car_step_move(IndexT self) {
-  IndexT cell = d_Car_position[self];
+  IndexT cell = self;
+
   for (int i = 0; i < d_Car_velocity[self]; ++i) {
     assert(d_Car_path[self][i] != cell);
 
     cell = d_Car_path[self][i];
+    assert(cell != self);
     assert(Cell_is_free(cell));
-
-    Cell_release(d_Car_position[self]);
-    Cell_occupy(cell, self);
-    d_Car_position[self] = cell;
   }
 
-  if (Cell_is_sink(d_Car_position[self]) || Cell_is_target(d_Car_position[self])) {
-    // Remove car from the simulation. Will be added again in the next
-    // iteration.
-    Cell_release(d_Car_position[self]);
-    d_Car_position[self] = kNullptr;
-    d_Car_active[self] = 0;
+  if (d_Car_velocity[self] > 0) {
+    Cell_occupy(cell, self);
+    Cell_release(self);
   }
 }
 
@@ -352,22 +331,31 @@ __device__ void TrafficLight::step() {
 }
 
 
+__device__ void Car_commit_occupy(IndexT self) {
+  if (d_Cell_should_occupy[self]) {
+    d_Cell_should_occupy[self] = false;
+    d_Cell_has_car[self] = true;
+  }
+
+  if (Cell_is_sink(self) || Cell_is_target(self)) {
+    // Remove car from the simulation. Will be added again in the next
+    // iteration.
+    Cell_release(self);
+  }
+}
+
+
 __device__ IndexT new_Car(int seed, IndexT cell, int max_velocity) {
-  IndexT idx = atomicAdd(&d_num_cars, 1);
-  assert(idx >= 0 && idx < kMaxNumCars);
-
-  assert(!d_Car_active[idx]);
-  d_Car_position[idx] = cell;
-  d_Car_path_length[idx] = 0;
-  d_Car_velocity[idx] = 0;
-  d_Car_max_velocity[idx] = max_velocity;
-  d_Car_active[idx] = 1;
-
   assert(Cell_is_free(cell));
-  Cell_occupy(cell, idx);
-  curand_init(seed, 0, 0, &d_Car_random_state[idx]);
+  d_Cell_has_car[cell] = true;
 
-  return idx;
+  d_Car_path_length[cell] = 0;
+  d_Car_velocity[cell] = 0;
+  d_Car_max_velocity[cell] = max_velocity;
+
+  curand_init(seed, 0, 0, &d_Car_random_state[cell]);
+
+  return cell;
 }
 
 
@@ -388,7 +376,6 @@ __device__ void ProducerCell_create_car(IndexT self) {
 __device__ IndexT new_Cell(int max_velocity, float x, float y) {
   IndexT idx = atomicAdd(&d_num_cells, 1);
   
-  d_Cell_car[idx] = kNullptr;
   d_Cell_max_velocity[idx] = max_velocity;
   d_Cell_current_max_velocity[idx] = max_velocity;
   d_Cell_num_incoming[idx] = 0;
@@ -397,6 +384,8 @@ __device__ IndexT new_Cell(int max_velocity, float x, float y) {
   d_Cell_y[idx] = y;
   d_Cell_is_target[idx] = false;
   d_Cell_type[idx] = kCellTypeNormal;
+  d_Cell_should_occupy[idx] = false;
+  d_Cell_has_car[idx] = false;
 
   return idx;
 }
@@ -692,27 +681,28 @@ __device__ void Car_step_prepare_path(IndexT self) {
 
 __global__ void kernel_Car_step_prepare_path() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cars; i += blockDim.x * gridDim.x) {
-    if (d_Car_active[i]) {
+       i < d_num_cells; i += blockDim.x * gridDim.x) {
+    if (d_Cell_has_car[i]) {
       Car_step_prepare_path(i);
     }
   }
 }
 
 
-__global__ void kernel_fill_car_indices() {
+__global__ void kernel_Car_commit_occupy() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cars; i += blockDim.x * gridDim.x) {
-    d_Car_active[i] = 0;
-    d_Car_active_2[i] = 0;
+       i < d_num_cells; i += blockDim.x * gridDim.x) {
+    if (d_Cell_has_car[i] || d_Cell_should_occupy[i]) {
+      Car_commit_occupy(i);
+    }
   }
 }
 
 
 __global__ void kernel_Car_step_move() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cars; i += blockDim.x * gridDim.x) {
-    if (d_Car_active[i]) {
+       i < d_num_cells; i += blockDim.x * gridDim.x) {
+    if (d_Cell_has_car[i]) {
       Car_step_move(i);
     }
   }
@@ -722,8 +712,8 @@ __global__ void kernel_Car_step_move() {
 __device__ int d_checksum;
 __global__ void kernel_compute_checksum() {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cars; i += blockDim.x * gridDim.x) {
-    if (d_Car_active[i]) {
+       i < d_num_cells; i += blockDim.x * gridDim.x) {
+    if (d_Cell_has_car[i]) {
       atomicAdd(&d_checksum, 1);
     }
   }
@@ -747,16 +737,20 @@ void step() {
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
   
-  cudaMemcpyFromSymbol(&host_num_cars, d_num_cars, sizeof(int), 0, cudaMemcpyDeviceToHost);
   step_traffic_lights();
 
   kernel_Car_step_prepare_path<<<
-      (host_num_cars + kNumBlockSize - 1) / kNumBlockSize,
+      (host_num_cells + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   kernel_Car_step_move<<<
-      (host_num_cars + kNumBlockSize - 1) / kNumBlockSize,
+      (host_num_cells + kNumBlockSize - 1) / kNumBlockSize,
+      kNumBlockSize>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_Car_commit_occupy<<<
+      (host_num_cells + kNumBlockSize - 1) / kNumBlockSize,
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
@@ -772,11 +766,6 @@ void allocate_memory() {
   cudaMalloc(&h_Cell_outgoing, sizeof(DeviceArray<IndexT, kMaxDegree>)*kMaxNumCells);
   cudaMemcpyToSymbol(d_Cell_outgoing, &h_Cell_outgoing,
       sizeof(DeviceArray<IndexT, kMaxDegree>*), 0, cudaMemcpyHostToDevice);
-
-  IndexT* h_Cell_car;
-  cudaMalloc(&h_Cell_car, sizeof(IndexT)*kMaxNumCells);
-  cudaMemcpyToSymbol(d_Cell_car, &h_Cell_car, sizeof(IndexT*),
-                     0, cudaMemcpyHostToDevice);
 
   int* h_Cell_max_velocity;
   cudaMalloc(&h_Cell_max_velocity, sizeof(int)*kMaxNumCells);
@@ -824,204 +813,43 @@ void allocate_memory() {
                      0, cudaMemcpyHostToDevice);
 
   curandState_t* h_Car_random_state;
-  cudaMalloc(&h_Car_random_state, sizeof(curandState_t)*kMaxNumCars);
+  cudaMalloc(&h_Car_random_state, sizeof(curandState_t)*kMaxNumCells);
   cudaMemcpyToSymbol(d_Car_random_state, &h_Car_random_state, sizeof(curandState_t*),
                      0, cudaMemcpyHostToDevice);
 
   DeviceArray<IndexT, kMaxVelocity>* h_Car_path;
-  cudaMalloc(&h_Car_path, sizeof(DeviceArray<IndexT, kMaxVelocity>)*kMaxNumCars);
+  cudaMalloc(&h_Car_path, sizeof(DeviceArray<IndexT, kMaxVelocity>)*kMaxNumCells);
   cudaMemcpyToSymbol(d_Car_path, &h_Car_path,
                      sizeof(DeviceArray<IndexT, kMaxVelocity>*),
                      0, cudaMemcpyHostToDevice);
 
-  IndexT* h_Car_position;
-  cudaMalloc(&h_Car_position, sizeof(IndexT)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_position, &h_Car_position, sizeof(IndexT*),
-                     0, cudaMemcpyHostToDevice);
-
   int* h_Car_path_length;
-  cudaMalloc(&h_Car_path_length, sizeof(int)*kMaxNumCars);
+  cudaMalloc(&h_Car_path_length, sizeof(int)*kMaxNumCells);
   cudaMemcpyToSymbol(d_Car_path_length, &h_Car_path_length, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
   int* h_Car_velocity;
-  cudaMalloc(&h_Car_velocity, sizeof(int)*kMaxNumCars);
+  cudaMalloc(&h_Car_velocity, sizeof(int)*kMaxNumCells);
   cudaMemcpyToSymbol(d_Car_velocity, &h_Car_velocity, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
   int* h_Car_max_velocity;
-  cudaMalloc(&h_Car_max_velocity, sizeof(int)*kMaxNumCars);
+  cudaMalloc(&h_Car_max_velocity, sizeof(int)*kMaxNumCells);
   cudaMemcpyToSymbol(d_Car_max_velocity, &h_Car_max_velocity, sizeof(int*),
                      0, cudaMemcpyHostToDevice);
 
-  cudaMalloc(&h_Car_active, sizeof(int)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_active, &h_Car_active, sizeof(int*),
+  bool* h_Cell_has_car;
+  cudaMalloc(&h_Cell_has_car, sizeof(bool)*kMaxNumCells);
+  cudaMemcpyToSymbol(d_Cell_has_car, &h_Cell_has_car, sizeof(bool*),
                      0, cudaMemcpyHostToDevice);
 
-  curandState_t* h_Car_random_state_2;
-  cudaMalloc(&h_Car_random_state_2, sizeof(curandState_t)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_random_state_2, &h_Car_random_state_2, sizeof(curandState_t*),
+  bool* h_Cell_should_occupy;
+  cudaMalloc(&h_Cell_should_occupy, sizeof(bool)*kMaxNumCells);
+  cudaMemcpyToSymbol(d_Cell_should_occupy, &h_Cell_should_occupy, sizeof(bool*),
                      0, cudaMemcpyHostToDevice);
-
-  DeviceArray<IndexT, kMaxVelocity>* h_Car_path_2;
-  cudaMalloc(&h_Car_path_2, sizeof(DeviceArray<IndexT, kMaxVelocity>)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_path_2, &h_Car_path_2,
-                     sizeof(DeviceArray<IndexT, kMaxVelocity>*),
-                     0, cudaMemcpyHostToDevice);
-
-  IndexT* h_Car_position_2;
-  cudaMalloc(&h_Car_position_2, sizeof(IndexT)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_position_2, &h_Car_position_2, sizeof(IndexT*),
-                     0, cudaMemcpyHostToDevice);
-
-  int* h_Car_path_length_2;
-  cudaMalloc(&h_Car_path_length_2, sizeof(int)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_path_length_2, &h_Car_path_length_2, sizeof(int*),
-                     0, cudaMemcpyHostToDevice);
-
-  int* h_Car_velocity_2;
-  cudaMalloc(&h_Car_velocity_2, sizeof(int)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_velocity_2, &h_Car_velocity_2, sizeof(int*),
-                     0, cudaMemcpyHostToDevice);
-
-  int* h_Car_max_velocity_2;
-  cudaMalloc(&h_Car_max_velocity_2, sizeof(int)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_max_velocity_2, &h_Car_max_velocity_2, sizeof(int*),
-                     0, cudaMemcpyHostToDevice);
-
-  cudaMalloc(&h_Car_active_2, sizeof(int)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_Car_active_2, &h_Car_active_2, sizeof(int*),
-                     0, cudaMemcpyHostToDevice);
-
-
-  cudaMalloc(&h_prefix_sum_temp, 3*sizeof(int)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_prefix_sum_temp, &h_prefix_sum_temp, sizeof(int*),
-                     0, cudaMemcpyHostToDevice);
-
-  cudaMalloc(&h_prefix_sum_output, sizeof(int)*kMaxNumCars);
-  cudaMemcpyToSymbol(d_prefix_sum_output, &h_prefix_sum_output, sizeof(int*),
-                     0, cudaMemcpyHostToDevice);
-
-  kernel_fill_car_indices<<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
 
   int zero = 0;
   cudaMemcpyToSymbol(d_num_cells, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
-  cudaMemcpyToSymbol(d_num_cars, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
-}
-
-
-__global__ void kernel_compact_initialize() {
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < kMaxNumCars; i += blockDim.x * gridDim.x) {
-    d_Car_active_2[i] = 0;
-  }
-}
-
-
-__global__ void kernel_compact_cars() {
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-       i < d_num_cars; i += blockDim.x * gridDim.x) {
-    if (d_Car_active[i]) {
-      int target = d_prefix_sum_output[i];
-
-      // Copy i --> target.
-      d_Car_random_state_2[target] = d_Car_random_state[i];
-      // TODO: Check if properly copied.
-      d_Car_path_2[target] = d_Car_path[i];
-      d_Car_position_2[target] = d_Car_position[i];
-      d_Car_path_length_2[target] = d_Car_path_length[i];
-      d_Car_velocity_2[target] = d_Car_velocity[i];
-      d_Car_max_velocity_2[target] = d_Car_max_velocity[i];
-      d_Car_active_2[target] = 1;
-
-      // Update pointer in Cell.
-      d_Cell_car[d_Car_position[i]] = target;
-
-      atomicAdd(&d_num_cars_2, 1);
-    }
-  }
-}
-
-
-__global__ void kernel_compact_swap_pointers() {
-  {
-    auto* tmp = d_Car_random_state;
-    d_Car_random_state = d_Car_random_state_2;
-    d_Car_random_state_2 = tmp;
-  }
-
-  {
-    auto* tmp = d_Car_path;
-    d_Car_path = d_Car_path_2;
-    d_Car_path_2 = tmp;
-  }
-
-  {
-    auto* tmp = d_Car_position;
-    d_Car_position = d_Car_position_2;
-    d_Car_position_2 = tmp;
-  }
-
-  {
-    auto* tmp = d_Car_path_length;
-    d_Car_path_length = d_Car_path_length_2;
-    d_Car_path_length_2 = tmp;
-  }
-
-  {
-    auto* tmp = d_Car_velocity;
-    d_Car_velocity = d_Car_velocity_2;
-    d_Car_velocity_2 = tmp;
-  }
-
-  {
-    auto* tmp = d_Car_max_velocity;
-    d_Car_max_velocity = d_Car_max_velocity_2;
-    d_Car_max_velocity_2 = tmp;
-  }
-
-  {
-    auto* tmp = d_Car_active;
-    d_Car_active = d_Car_active_2;
-    d_Car_active_2 = tmp;
-  }
-
-  d_num_cars = d_num_cars_2;
-}
-
-
-void compact_car_array() {
-  int zero = 0;
-  cudaMemcpyToSymbol(d_num_cars_2, &zero, sizeof(int), 0, cudaMemcpyHostToDevice);
-  cudaMemcpyFromSymbol(&host_num_cars, d_num_cars, sizeof(int), 0, cudaMemcpyDeviceToHost);
-
-  // TODO: Prefix sum broken for num_objects < 256.
-  auto prefix_sum_size = host_num_cars < 256 ? 256 : host_num_cars;
-  size_t temp_size = 3*kMaxNumCars;
-  cub::DeviceScan::ExclusiveSum(h_prefix_sum_temp,
-                                temp_size,
-                                h_Car_active,
-                                h_prefix_sum_output,
-                                prefix_sum_size);
-  gpuErrchk(cudaDeviceSynchronize());
-
-  kernel_compact_initialize<<<
-      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
-      kNumBlockSize>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  kernel_compact_cars<<<
-      (kMaxNumCars + kNumBlockSize - 1) / kNumBlockSize,
-      kNumBlockSize>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  kernel_compact_swap_pointers<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  auto* tmp = h_Car_active;
-  h_Car_active = h_Car_active_2;
-  h_Car_active_2 = tmp;
 }
 
 
@@ -1033,8 +861,6 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kNumIterations; ++i) {
     step();
-
-    compact_car_array();
   }
 
   auto time_end = std::chrono::system_clock::now();

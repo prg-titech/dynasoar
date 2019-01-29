@@ -1,8 +1,8 @@
 #include <chrono>
 
-#include "configuration.h"
-#include "rendering.h"
 #include "traffic.h"
+#include "../configuration.h"
+#include "../rendering.h"
 
 
 static const int kNumBlockSize = 256;

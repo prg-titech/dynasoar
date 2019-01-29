@@ -1,0 +1,1 @@
+cuda_add_executable(traffic_baseline_aos_prefixsum traffic.cu)
