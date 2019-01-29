@@ -1,8 +1,8 @@
 #include <chrono>
 
-#include "configuration.h"
-#include "rendering.h"
-#include "sugarscape_no_cell.h"
+#include "../configuration.h"
+#include "../rendering.h"
+#include "sugarscape.h"
 
 static const int kThreads = 256;
 static const int kBlocks = (kSize*kSize + kThreads - 1)/kThreads;

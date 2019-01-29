@@ -4,7 +4,7 @@
 #include <curand_kernel.h>
 
 #include "allocator_config.h"
-#include "configuration.h"
+#include "../configuration.h"
 
 // Pre-declare all classes.
 class Agent;

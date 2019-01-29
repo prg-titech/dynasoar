@@ -1,7 +1,7 @@
 #include <chrono>
 
-#include "configuration.h"
-#include "rendering.h"
+#include "../configuration.h"
+#include "../rendering.h"
 #include "sugarscape.h"
 
 // Allocator handles.
