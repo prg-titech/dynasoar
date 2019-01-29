@@ -4,8 +4,8 @@
 #include <inttypes.h>
 #include <limits>
 
-#include "configuration.h"
-#include "wator_no_cell.h"
+#include "../configuration.h"
+#include "wator.h"
 
 
 static const int kNumBlockSize = 256;
@@ -335,10 +335,7 @@ void print_stats() {
 
 #ifdef OPTION_DEFRAG
 void defrag() {
-  allocator_handle->parallel_defrag<Fish>(/*max_records=*/ 128,
-                                          /*min_records=*/ 32);
-  allocator_handle->parallel_defrag<Shark>(/*max_records=*/ 128,
-                                           /*min_records=*/ 32);
+  // TODO: Implement defrag.
 }
 #endif  // OPTION_DEFRAG
 

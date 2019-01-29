@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
-#include "configuration.h"
+#include "../configuration.h"
 #include "wator.h"
 
 

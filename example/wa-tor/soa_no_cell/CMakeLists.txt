@@ -1,0 +1,2 @@
+cuda_add_executable(wator_soa_no_cell wator.cu)
+target_link_libraries(wator_soa_no_cell cuda)

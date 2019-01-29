@@ -1,0 +1,1 @@
+cuda_add_executable(wator_baseline_aos wator.cu)

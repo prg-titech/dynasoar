@@ -4,8 +4,8 @@
 #include <inttypes.h>
 #include <limits>
 
-#include "configuration.h"
-#include "wator_no_cell.h"
+#include "../configuration.h"
+#include "../soa_no_cell/wator.h"
 
 
 static const int kNumBlockSize = 256;
