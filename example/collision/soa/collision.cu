@@ -3,8 +3,8 @@
 
 #include "allocator_config.h"
 
-#include "configuration.h"
-#include "rendering.h"
+#include "../configuration.h"
+#include "../rendering.h"
 
 // Pre-declare all classes.
 class Body;
