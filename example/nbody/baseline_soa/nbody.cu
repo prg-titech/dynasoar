@@ -2,8 +2,8 @@
 #include <curand_kernel.h>
 #include <stdio.h>
 
-#include "configuration.h"
-#include "rendering.h"
+#include "../configuration.h"
+#include "../rendering.h"
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -135,7 +135,7 @@ __global__ void kernel_compute_checksum() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     init_renderer();
   }
 
@@ -181,7 +181,7 @@ int main(int /*argc*/, char** /*argv*/) {
         kCudaBlockSize>>>();
     gpuErrchk(cudaDeviceSynchronize());
 
-    if (OPTION_DRAW) {
+    if (kOptionRender) {
       cudaMemcpy(Body_pos_x, host_Body_pos_x, sizeof(float)*kNumBodies,
                  cudaMemcpyDeviceToHost);
       cudaMemcpy(Body_pos_y, host_Body_pos_y, sizeof(float)*kNumBodies,
@@ -217,7 +217,7 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaFree(host_Body_force_x);
   cudaFree(host_Body_force_y);
 
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     close_renderer();
   }
 

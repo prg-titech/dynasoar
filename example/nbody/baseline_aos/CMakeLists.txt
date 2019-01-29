@@ -1,0 +1,1 @@
+cuda_add_executable(nbody_baseline_aos nbody.cu)

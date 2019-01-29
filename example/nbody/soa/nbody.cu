@@ -1,8 +1,9 @@
 #include <chrono>
 
-#include "configuration.h"
 #include "nbody.h"
-#include "rendering.h"
+
+#include "../configuration.h"
+#include "../rendering.h"
 
 namespace nbody {
 
@@ -103,7 +104,7 @@ __global__ void kernel_reset_draw_counters() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     init_renderer();
   }
 
@@ -127,7 +128,7 @@ int main(int /*argc*/, char** /*argv*/) {
     allocator_handle->parallel_do<Body, &Body::compute_force>();
     allocator_handle->parallel_do<Body, &Body::update>();
 
-    if (OPTION_DRAW) {
+    if (kOptionRender) {
       kernel_reset_draw_counters<<<1, 1>>>();
       gpuErrchk(cudaDeviceSynchronize());
       allocator_handle->parallel_do<Body, &Body::add_to_draw_array>();
@@ -160,7 +161,7 @@ int main(int /*argc*/, char** /*argv*/) {
   printf("Checksum: %f\n", checksum);
 #endif  // NDEBUG
 
-  if (OPTION_DRAW) {
+  if (kOptionRender) {
     close_renderer();
   }
 
