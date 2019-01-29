@@ -1,8 +1,8 @@
 #include <chrono>
 #include <curand_kernel.h>
 
-#include "dataset.h"
-#include "rendering.h"
+#include "../dataset.h"
+#include "../rendering.h"
 #include "structure.h"
 
 // Allocator handles.

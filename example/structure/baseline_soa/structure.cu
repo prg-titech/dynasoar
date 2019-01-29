@@ -4,10 +4,10 @@
 #include <limits>
 #include <stdio.h>
 
-#include "configuration.h"
-#include "dataset.h"
+#include "../configuration.h"
+#include "../dataset.h"
 #include "util/util.h"
-#include "rendering.h"
+#include "../rendering.h"
 
 
 static const int kThreads = 256;
