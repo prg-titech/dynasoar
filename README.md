@@ -80,8 +80,8 @@ class Foo : public SoaBase<AllocatorT> {
 class Bar : public SoaBase<AllocatorT> { /* ... */ };
 
 __global__ void create_objects() {
-  device_allocator->make_new<Foo>(1.23f, 4, 0);
-  // Delete objects with: device_allocator->free<Foo>(ptr)
+  Foo* object = new(device_allocator) Foo(1.23f, 4, 0);
+  // Delete object: destroy(device_allocator, object);
 }
 
 int main(int argc, char** argv) {
