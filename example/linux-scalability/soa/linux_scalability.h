@@ -12,7 +12,7 @@ using AllocatorT = SoaAllocator<kTotalNumObjects, DummyClass>;
 
 class DummyClass : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<int, int, int, int>;
+  declare_field_types(DummyClass, int, int, int, int)
 
   SoaField<DummyClass, 0> field1_;
   SoaField<DummyClass, 1> field2_;

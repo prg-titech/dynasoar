@@ -18,7 +18,8 @@ class Agent : public SoaBase<AllocatorT> {
  public:
   static const bool kIsAbstract = true;
 
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Agent,
       curandState_t,    // random_state_
       int,              // cell_
       int,              // cell_request_
@@ -28,7 +29,7 @@ class Agent : public SoaBase<AllocatorT> {
       int,              // sugar_
       int,              // metabolism_
       int,              // endowment_
-      bool>;            // permission_
+      bool)             // permission_
 
  protected:
   SoaField<Agent, 0> random_state_;
@@ -80,9 +81,11 @@ class Male : public Agent {
  public:
   static const bool kIsAbstract = false;
   using BaseClass = Agent;
-  using FieldTypes = std::tuple<
+
+  declare_field_types(
+      Male,
       Female*,    // female_request_
-      bool>;      // proposal_accepted_
+      bool)       // proposal_accepted_
 
  private:
   SoaField<Male, 0> female_request_;
@@ -108,9 +111,11 @@ class Female : public Agent {
  public:
   static const bool kIsAbstract = false;
   using BaseClass = Agent;
-  using FieldTypes = std::tuple<
+
+  declare_field_types(
+      Female,
       int,            // max_children_
-      int>;           // num_children_
+      int)            // num_children_
 
  private:
   SoaField<Female, 0> max_children_;

@@ -182,8 +182,8 @@ __device__ void Car::step_move() {
       // iteration.
       position()->release();
       position_ = nullptr;
-      //printf("KILLED!\n");
-      device_allocator->free<Car>(this);
+
+      destroy(device_allocator, this);
     }
   }
 }
@@ -215,7 +215,7 @@ __device__ void ProducerCell::create_car() {
   if (is_free()) {
     float r = curand_uniform(&random_state_);
     if (r < kCarAllocationRatio) {
-      Car* new_car = device_allocator->make_new<Car>(
+      Car* new_car = new(device_allocator) Car(
           /*seed=*/ curand(&random_state_), /*cell=*/ this,
           /*max_velocity=*/ curand(&random_state_) % (kMaxVelocity/2)
                             + kMaxVelocity/2);
@@ -274,7 +274,7 @@ __global__ void kernel_create_nodes() {
     assert(d_nodes[i].y >= 0 && d_nodes[i].y <= 1);
 
     for (int j = 0; j < d_nodes[i].num_outgoing; ++j) {
-      d_nodes[i].cell_out[j] = device_allocator->make_new<Cell>(
+      d_nodes[i].cell_out[j] = new(device_allocator) Cell(
           /*max_velocity=*/ curand(&state) % (kMaxVelocity/2)
                             + kMaxVelocity/2,
           d_nodes[i].x, d_nodes[i].y);
@@ -302,12 +302,10 @@ __device__ Cell* connect_intersections(Cell* from, Node* target,
     Cell* next;
 
     if (curand_uniform(&state) < kProducerRatio) {
-      next = device_allocator->make_new<ProducerCell>(
-          prev->max_velocity(), new_x, new_y,
-          curand(&state));
+      next = new(device_allocator) ProducerCell(
+          prev->max_velocity(), new_x, new_y, curand(&state));
     } else {
-      next = device_allocator->make_new<Cell>(
-          prev->max_velocity(), new_x, new_y);
+      next = new(device_allocator) Cell(prev->max_velocity(), new_x, new_y);
     }
 
     if (curand_uniform(&state) < kTargetRatio) {

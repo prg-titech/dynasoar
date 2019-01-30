@@ -19,12 +19,14 @@ using AllocatorT = SoaAllocator<2*64*64*64*64, NodeBase, AnchorNode,
 
 class NodeBase : public SoaBase<AllocatorT> {
  public:
-  static const bool kIsAbstract = true;
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      NodeBase,
       DeviceArray<Spring*, kMaxDegree>,   // springs_
       float,                              // pos_x_
       float,                              // pos_y_
-      int>;                               // num_springs_
+      int)                                // num_springs_
+
+  static const bool kIsAbstract = true;
 
  protected:
   SoaField<NodeBase, 0> springs_;
@@ -51,10 +53,10 @@ class NodeBase : public SoaBase<AllocatorT> {
 
 class AnchorNode : public NodeBase {
  public:
+  declare_field_types(AnchorNode)  // No additional fields.
+
   static const bool kIsAbstract = false;
   using BaseClass = NodeBase;
-
-  using FieldTypes = std::tuple<>;
 
   __device__ AnchorNode(float pos_x, float pos_y);
 };
@@ -62,12 +64,13 @@ class AnchorNode : public NodeBase {
 
 class AnchorPullNode : public AnchorNode {
  public:
+  declare_field_types(
+      AnchorPullNode,
+      float,          // vel_x_
+      float)          // vel_y_
+
   static const bool kIsAbstract = false;
   using BaseClass = AnchorNode;
-
-  using FieldTypes = std::tuple<
-      float,          // vel_x_
-      float>;         // vel_y_
 
  private:
   SoaField<AnchorPullNode, 0> vel_x_;
@@ -83,13 +86,14 @@ class AnchorPullNode : public AnchorNode {
 
 class Node : public NodeBase {
  public:
-  static const bool kIsAbstract = false;
-  using BaseClass = NodeBase;
-
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Node,
       float,          // vel_x_
       float,          // vel_y_
-      float>;         // mass_
+      float)          // mass_
+
+  static const bool kIsAbstract = false;
+  using BaseClass = NodeBase;
 
  private:
   SoaField<Node, 0> vel_x_;
@@ -105,13 +109,14 @@ class Node : public NodeBase {
 
 class Spring : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Spring,
       NodeBase*,      // p1_
       NodeBase*,      // p2_
       float,          // spring_factor_
       float,          // initial_length_
       float,          // force_
-      float>;         // max_force_
+      float)          // max_force_
 
  private:
   SoaField<Spring, 0> p1_;

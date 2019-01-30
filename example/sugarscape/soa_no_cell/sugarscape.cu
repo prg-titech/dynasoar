@@ -127,7 +127,7 @@ __device__ void Agent::age_and_metabolize() {
 
   if (dead) {
     Cell_leave(cell_);
-    device_allocator->free<Agent>(this);
+    destroy(device_allocator, this);
   }
 }
 
@@ -401,11 +401,11 @@ __device__ void Male::mate() {
     // Otherwise: unspecified launch failure.
     Agent* child;
     if (random_float() <= 0.5f) {
-      child = device_allocator->make_new<Male>(
+      child = new(device_allocator) Male(
           (int) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism);
     } else {
-      child = device_allocator->make_new<Female>(
+      child = new(device_allocator) Female(
           (int) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism, female_request_->max_children());
     }
@@ -594,11 +594,11 @@ __global__ void create_agents() {
 
     if (r < kProbMale) {
       // Create male agent.
-      agent = device_allocator->make_new<Male>(
+      agent = new(device_allocator) Male(
           i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism);
     } else if (r < kProbMale + kProbFemale) {
       // Create female agent.
-      agent = device_allocator->make_new<Female>(
+      agent = new(device_allocator) Female(
           i, c_vision, /*age=*/ 0, c_max_age, c_endowment, c_metabolism,
           c_max_children);
     }   // else: Do not create agent.

@@ -13,7 +13,7 @@ __global__ void  kernel_benchmark(int num_alloc, DummyClass** ptrs) {
   DummyClass** my_ptrs = ptrs + tid*num_alloc;
 
   for (int i = 0; i < num_alloc; ++i) {
-    DummyClass* p = device_allocator->make_new<DummyClass>();
+    DummyClass* p = new(device_allocator) DummyClass();
     my_ptrs[i] = p;
     if (p == nullptr) {
       asm("trap;");
@@ -21,7 +21,7 @@ __global__ void  kernel_benchmark(int num_alloc, DummyClass** ptrs) {
   }
 
   for (int i = 0; i < num_alloc; ++i) {
-    device_allocator->free(my_ptrs[i]);
+    destroy(device_allocator, my_ptrs[i]);
   }
 }
 

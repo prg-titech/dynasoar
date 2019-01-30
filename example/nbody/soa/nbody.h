@@ -14,14 +14,15 @@ using AllocatorT = SoaAllocator<64*64*64*64, Body>;
 
 class Body : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Body,
       float,          // pos_x_
       float,          // pos_y_,
       float,          // vel_x_,
       float,          // vel_y_,
       float,          // force_x_,
       float,          // force_y_,
-      float>;         // mass_
+      float)          // mass_
 
  private:
   SoaField<Body, 0> pos_x_;

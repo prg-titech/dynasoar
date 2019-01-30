@@ -64,7 +64,7 @@ __device__ void NodeBase::remove_spring(Spring* spring) {
   --num_springs_;
 
   if (num_springs_ == 0) {
-    device_allocator->free<NodeBase>(this);
+    destroy(device_allocator, this);
   }
 }
 
@@ -91,7 +91,7 @@ __device__ void Spring::compute_force() {
   if (force_ > max_force_) {
     p1_->remove_spring(this);
     p2_->remove_spring(this);
-    device_allocator->free<Spring>(this);
+    destroy(device_allocator, this);
   }
 }
 
@@ -212,14 +212,14 @@ __global__ void kernel_create_nodes(DsNode* nodes, int num_nodes) {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < num_nodes; i += blockDim.x * gridDim.x) {
     if (nodes[i].type == kTypeNode) {
-      tmp_nodes[i] = device_allocator->make_new<Node>(nodes[i].pos_x,
-                                                      nodes[i].pos_y,
-                                                      nodes[i].mass);
+      tmp_nodes[i] = new(device_allocator) Node(nodes[i].pos_x,
+                                                nodes[i].pos_y,
+                                                nodes[i].mass);
     } else if (nodes[i].type == kTypeAnchorPullNode) {
-      tmp_nodes[i] = device_allocator->make_new<AnchorPullNode>(nodes[i].pos_x,
-                                                                nodes[i].pos_y,
-                                                                nodes[i].vel_x,
-                                                                nodes[i].vel_y);
+      tmp_nodes[i] = new(device_allocator) AnchorPullNode(nodes[i].pos_x,
+                                                          nodes[i].pos_y,
+                                                          nodes[i].vel_x,
+                                                          nodes[i].vel_y);
     } else {
       assert(false);
     }
@@ -233,10 +233,10 @@ __global__ void kernel_create_springs(DsSpring* springs, int num_springs) {
     assert(tmp_nodes[springs[i].p1] != nullptr);
     assert(tmp_nodes[springs[i].p2] != nullptr);
 
-    device_allocator->make_new<Spring>(tmp_nodes[springs[i].p1],
-                                       tmp_nodes[springs[i].p2],
-                                       springs[i].spring_factor,
-                                       springs[i].max_force);
+    new(device_allocator) Spring(tmp_nodes[springs[i].p1],
+                                 tmp_nodes[springs[i].p2],
+                                 springs[i].spring_factor,
+                                 springs[i].max_force);
   }
 }
 
@@ -271,34 +271,34 @@ __global__ void load_example() {
   float max_force = 100.0f;
   float mass = 500.0f;
 
-  auto* a1 = device_allocator->make_new<AnchorPullNode>(0.1, 0.5, 0.0, -0.02);
-  auto* a2 = device_allocator->make_new<AnchorPullNode>(0.3, 0.5, 0.0, -0.02);
-  auto* a3 = device_allocator->make_new<AnchorPullNode>(0.5, 0.5, 0.0, -0.02);
+  auto* a1 = new(device_allocator) AnchorPullNode(0.1, 0.5, 0.0, -0.02);
+  auto* a2 = new(device_allocator) AnchorPullNode(0.3, 0.5, 0.0, -0.02);
+  auto* a3 = new(device_allocator) AnchorPullNode(0.5, 0.5, 0.0, -0.02);
 
-  auto* n1 = device_allocator->make_new<Node>(0.05, 0.6, mass);
-  auto* n2 = device_allocator->make_new<Node>(0.3, 0.6, mass);
-  auto* n3 = device_allocator->make_new<Node>(0.7, 0.6, mass);
+  auto* n1 = new(device_allocator) Node(0.05, 0.6, mass);
+  auto* n2 = new(device_allocator) Node(0.3, 0.6, mass);
+  auto* n3 = new(device_allocator) Node(0.7, 0.6, mass);
 
-  auto* n4 = device_allocator->make_new<Node>(0.2, 0.7, mass);
-  auto* n5 = device_allocator->make_new<Node>(0.4, 0.7, mass);
-  auto* n6 = device_allocator->make_new<Node>(0.8, 0.7, mass);
+  auto* n4 = new(device_allocator) Node(0.2, 0.7, mass);
+  auto* n5 = new(device_allocator) Node(0.4, 0.7, mass);
+  auto* n6 = new(device_allocator) Node(0.8, 0.7, mass);
 
-  auto* a4 = device_allocator->make_new<AnchorNode>(0.1, 0.9);
-  auto* a5 = device_allocator->make_new<AnchorNode>(0.3, 0.9);
-  auto* a6 = device_allocator->make_new<AnchorNode>(0.6, 0.9);
+  auto* a4 = new(device_allocator) AnchorNode(0.1, 0.9);
+  auto* a5 = new(device_allocator) AnchorNode(0.3, 0.9);
+  auto* a6 = new(device_allocator) AnchorNode(0.6, 0.9);
 
-  device_allocator->make_new<Spring>(a1, n1, spring_factor, max_force);
-  device_allocator->make_new<Spring>(a2, n2, spring_factor, max_force);
-  device_allocator->make_new<Spring>(a3, n3, spring_factor, max_force);
+  new(device_allocator) Spring(a1, n1, spring_factor, max_force);
+  new(device_allocator) Spring(a2, n2, spring_factor, max_force);
+  new(device_allocator) Spring(a3, n3, spring_factor, max_force);
 
-  device_allocator->make_new<Spring>(n1, n4, spring_factor, max_force);
-  device_allocator->make_new<Spring>(n2, n5, spring_factor, max_force);
-  device_allocator->make_new<Spring>(n3, n6, spring_factor, max_force);
-  device_allocator->make_new<Spring>(n2, n6, spring_factor, max_force);
+  new(device_allocator) Spring(n1, n4, spring_factor, max_force);
+  new(device_allocator) Spring(n2, n5, spring_factor, max_force);
+  new(device_allocator) Spring(n3, n6, spring_factor, max_force);
+  new(device_allocator) Spring(n2, n6, spring_factor, max_force);
 
-  device_allocator->make_new<Spring>(n4, a4, spring_factor, max_force);
-  device_allocator->make_new<Spring>(n5, a5, spring_factor, max_force);
-  device_allocator->make_new<Spring>(n6, a6, spring_factor, max_force);
+  new(device_allocator) Spring(n4, a4, spring_factor, max_force);
+  new(device_allocator) Spring(n5, a5, spring_factor, max_force);
+  new(device_allocator) Spring(n6, a6, spring_factor, max_force);
 }
 
 

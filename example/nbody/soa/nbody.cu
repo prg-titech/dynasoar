@@ -7,7 +7,11 @@
 
 namespace nbody {
 
+// Host side pointer.
+AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ AllocatorT* device_allocator;
+
+// Helper variable for checksum computation.
 __device__ double device_checksum;
 
 // Helper variables for drawing.
@@ -15,9 +19,6 @@ __device__ int draw_counter = 0;
 __device__ float Body_pos_x[kNumBodies];
 __device__ float Body_pos_y[kNumBodies];
 __device__ float Body_mass[kNumBodies];
-
-// Host side pointer.
-AllocatorHandle<AllocatorT>* allocator_handle;
 
 
 __DEV__ Body::Body(float pos_x, float pos_y,
@@ -78,7 +79,7 @@ __DEV__ void Body::add_to_draw_array() {
 
 __global__ void kernel_compute_checksum() {
   device_checksum = 0.0f;
-  device_allocator->template device_do<Body>(&Body::add_checksum);
+  device_allocator->device_do<Body>(&Body::add_checksum);
 }
 
 
@@ -88,7 +89,7 @@ __global__ void kernel_initialize_bodies() {
   curand_init(kSeed, tid, 0, &rand_state);
 
   for (int i = tid; i < kNumBodies; i += blockDim.x * gridDim.x) {
-    device_allocator->make_new<Body>(
+    new(device_allocator) Body(
         /*pos_x=*/ 2 * curand_uniform(&rand_state) - 1,
         /*pos_y=*/ 2 * curand_uniform(&rand_state) - 1,
         /*vel_x=*/ (curand_uniform(&rand_state) - 0.5) / 1000,

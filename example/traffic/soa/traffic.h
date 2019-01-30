@@ -17,7 +17,8 @@ using AllocatorT = SoaAllocator<22*64*64*64, Car, Cell, ProducerCell>;
 
 class Cell : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Cell,
       DeviceArray<Cell*, kMaxDegree>,         // incoming_
       DeviceArray<Cell*, kMaxDegree>,         // outgoing_
       Car*,                                   // car_
@@ -27,7 +28,7 @@ class Cell : public SoaBase<AllocatorT> {
       int,                                    // num_outgoing_
       float,                                  // x_
       float,                                  // y_
-      bool>;                                  // is_target_;
+      bool)                                   // is_target_;
 
  private:
   SoaField<Cell, 0> incoming_;
@@ -98,7 +99,8 @@ class Cell : public SoaBase<AllocatorT> {
 class ProducerCell : public Cell {
  public:
   using BaseClass = Cell;
-  using FieldTypes = std::tuple<curandState_t>;     // random_state_
+
+  declare_field_types(ProducerCell, curandState_t)  // random_state_
 
  private:
   SoaField<ProducerCell, 0> random_state_;
@@ -115,13 +117,14 @@ class ProducerCell : public Cell {
 
 class Car : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Car,
       curandState_t,                            // random_state_
       DeviceArray<Cell*, kMaxVelocity>,         // path_
       Cell*,                                    // position_
       int,                                      // path_length_
       int,                                      // velocity_
-      int>;                                     // max_velocity_
+      int)                                      // max_velocity_
 
  private:
   SoaField<Car, 0> random_state_;
@@ -164,6 +167,7 @@ class Car : public SoaBase<AllocatorT> {
 };
 
 
+// TODO: Consider migrating this to SoaAlloc. Not performance critical.
 class TrafficLight {
  private:
   DeviceArray<Cell*, kMaxDegree> cells_;

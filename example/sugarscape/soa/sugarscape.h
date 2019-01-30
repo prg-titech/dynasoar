@@ -16,14 +16,15 @@ using AllocatorT = SoaAllocator<32*64*64*64, Agent, Male, Female, Cell>;
 
 class Cell : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Cell,
       curandState_t,        // random_state_
       Agent*,               // agent_
       int,                  // sugar_diffusion_ (alignment 4 bytes)
       int,                  // sugar_
       int,                  // sugar_capacity_
       int,                  // grow_rate_
-      int>;                 // cell_id_
+      int)                  // cell_id_
 
  private:
   SoaField<Cell, 0> random_state_;
@@ -73,7 +74,8 @@ class Agent : public SoaBase<AllocatorT> {
  public:
   static const bool kIsAbstract = true;
 
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Agent,
       curandState_t,    // random_state_
       Cell*,            // cell_
       Cell*,            // cell_request_
@@ -83,7 +85,7 @@ class Agent : public SoaBase<AllocatorT> {
       int,              // sugar_
       int,              // metabolism_
       int,              // endowment_
-      bool>;            // permission_
+      bool)             // permission_
 
  protected:
   SoaField<Agent, 0> random_state_;
@@ -135,9 +137,11 @@ class Male : public Agent {
  public:
   static const bool kIsAbstract = false;
   using BaseClass = Agent;
-  using FieldTypes = std::tuple<
+
+  declare_field_types(
+      Male,
       Female*,    // female_request_
-      bool>;      // proposal_accepted_
+      bool)       // proposal_accepted_
 
  private:
   SoaField<Male, 0> female_request_;
@@ -163,9 +167,11 @@ class Female : public Agent {
  public:
   static const bool kIsAbstract = false;
   using BaseClass = Agent;
-  using FieldTypes = std::tuple<
+
+  declare_field_types(
+      Female,
       int,            // max_children_
-      int>;           // num_children_
+      int)            // num_children_
 
  private:
   SoaField<Female, 0> max_children_;

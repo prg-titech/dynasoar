@@ -69,7 +69,7 @@ __device__ void Agent::age_and_metabolize() {
 
   if (dead) {
     cell_->leave();
-    device_allocator->free<Agent>(this);
+    destroy(device_allocator, this);
   }
 }
 
@@ -395,11 +395,11 @@ __device__ void Male::mate() {
     // Otherwise: unspecified launch failure.
     Agent* child;
     if (random_float() <= 0.5f) {
-      child = device_allocator->make_new<Male>(
+      child = new(device_allocator) Male(
           (Cell*) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism);
     } else {
-      child = device_allocator->make_new<Female>(
+      child = new(device_allocator) Female(
           (Cell*) cell_request_, c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism, female_request_->max_children());
     }
@@ -524,7 +524,7 @@ void defrag() {
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kSize*kSize; i += blockDim.x * gridDim.x) {
-    cells[i] = device_allocator->make_new<Cell>(
+    cells[i] = new(device_allocator) Cell(
         kSeed, /*sugar=*/ 0, /*sugar_capacity=*/ kSugarCapacity,
         /*max_grow_rate=*/ 50, /*cell_id=*/ i);
   }
@@ -546,12 +546,12 @@ __global__ void create_agents() {
 
     if (r < kProbMale) {
       // Create male agent.
-      agent = device_allocator->make_new<Male>(
+      agent = new(device_allocator) Male(
           cells[i], c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism);
     } else if (r < kProbMale + kProbFemale) {
       // Create female agent.
-      agent = device_allocator->make_new<Female>(
+      agent = new(device_allocator) Female(
           cells[i], c_vision, /*age=*/ 0, c_max_age, c_endowment,
           c_metabolism, c_max_children);
     }   // else: Do not create agent.
