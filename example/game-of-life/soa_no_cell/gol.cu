@@ -88,9 +88,8 @@ __device__ void Alive::update() {
   } else {
     if (action_ == kActionDie) {
       // Replace with Candidate. Or should we?
-      cells[cid].agent_ =
-          device_allocator->make_new<Candidate>(cid);
-      device_allocator->free<Alive>(this);
+      cells[cid].agent_ = new(device_allocator) Candidate(cid);
+      destroy(device_allocator, this);
     }
   }
 }
@@ -133,7 +132,7 @@ __device__ void Alive::maybe_create_candidate(int x, int y) {
             if (alive == this) {
               // Create candidate now.
               cells[y*SIZE_X + x].agent_ =
-                  device_allocator->make_new<Candidate>(y*SIZE_X + x);
+                  new(device_allocator) Candidate(y*SIZE_X + x);
             }  // else: Created by other thread.
 
             return;
@@ -171,11 +170,11 @@ __device__ void Candidate::update() {
   int cid = cell_id_;
 
   if (action_ == kActionSpawnAlive) {
-    cells[cid].agent_ = device_allocator->make_new<Alive>(cid);
-    device_allocator->free<Candidate>(this);
+    cells[cid].agent_ = new(device_allocator) Alive(cid);
+    destroy(device_allocator, this);
   } else if (action_ == kActionDie) {
     cells[cid].agent_ = nullptr;
-    device_allocator->free<Candidate>(this);
+    destroy(device_allocator, this);
   }
 }
 
@@ -192,8 +191,7 @@ __global__ void create_cells() {
 __global__ void load_game(int* cell_ids, int num_cells) {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < num_cells; i += blockDim.x * gridDim.x) {
-    cells[cell_ids[i]].agent_ =
-        device_allocator->make_new<Alive>(cell_ids[i]);
+    cells[cell_ids[i]].agent_ = new(device_allocator) Alive(cell_ids[i]);
     assert(cells[cell_ids[i]].agent()->cell_id() == cell_ids[i]);
   }
 }

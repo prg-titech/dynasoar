@@ -5,7 +5,7 @@
 #include "allocator/soa_helper.h"
 #include "allocator/soa_field.h"
 
-#define define_field_types(classname, ...) \
+#define declare_field_types(classname, ...) \
   __DEV__ void* operator new(size_t sz, AllocatorT* allocator) { \
     return allocator->allocate_new<classname>(); \
   } \

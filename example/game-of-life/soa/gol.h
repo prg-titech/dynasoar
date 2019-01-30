@@ -19,7 +19,7 @@ static const int kActionSpawnAlive = 2;
 
 class Cell : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<Agent*>;  // agent_
+  declare_field_types(Cell, Agent*)  // agent_
 
   SoaField<Cell, 0> agent_;
 
@@ -33,9 +33,10 @@ class Cell : public SoaBase<AllocatorT> {
 
 class Agent : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
-      int,  // cell_id_
-      char>;  // action_
+  declare_field_types(
+      Agent,
+      int,   // cell_id_
+      char)  // action_
 
   static const bool kIsAbstract = true;
 
@@ -54,7 +55,7 @@ class Agent : public SoaBase<AllocatorT> {
 
 class Alive : public Agent {
  public:
-  using FieldTypes = std::tuple<bool>;  // is_new_
+  declare_field_types(Alive, bool)  // is_new_
 
   using BaseClass = Agent;
   static const bool kIsAbstract = false;
@@ -83,8 +84,7 @@ class Alive : public Agent {
 
 class Candidate : public Agent {
  public:
-  // TODO: This should be empty but it cannot be at the moment.
-  using FieldTypes = std::tuple<>;  // no additional fields
+  declare_field_types(Candidate)  // no additional fields
 
   using BaseClass = Agent;
   static const bool kIsAbstract = false;

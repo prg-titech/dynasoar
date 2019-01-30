@@ -1,3 +1,4 @@
+add_subdirectory(api-example)
 add_subdirectory(barnes-hut-dynamic)
 add_subdirectory(collision)
 add_subdirectory(configuration)

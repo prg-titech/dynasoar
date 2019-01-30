@@ -19,7 +19,7 @@ class Cell : public SoaBase<AllocatorT> {
   // Sanity check for DeviceArray.
   static_assert(sizeof(DeviceArray<bool, 5>) == 5, "Size mismatch.");
 
-  define_field_types(
+  declare_field_types(
       Cell,
       curandState_t,                 // random_state_ (48 bytes)
       DeviceArray<Cell*, 4>,         // neighbors_
@@ -76,7 +76,7 @@ class Cell : public SoaBase<AllocatorT> {
 
 class Agent : public SoaBase<AllocatorT> {
  public:
-  define_field_types(
+  declare_field_types(
       Agent,
       curandState_t,    // random_state_
       Cell*,            // position_
@@ -104,7 +104,7 @@ class Agent : public SoaBase<AllocatorT> {
 
 class Fish : public Agent {
  public:
-  define_field_types(
+  declare_field_types(
       Fish,
       uint32_t)        // egg_timer_
 
@@ -125,7 +125,7 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  public:
-  define_field_types(
+  declare_field_types(
       Shark,
       uint32_t,        // energy_
       uint32_t)        // egg_timer_

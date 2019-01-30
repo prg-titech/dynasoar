@@ -17,7 +17,7 @@ using IndexT = int;
 
 class Agent : public SoaBase<AllocatorT> {
  public:
-  define_field_types(
+  declare_field_types(
       Agent,
       curandState_t,    // random_state_
       IndexT,           // position_
@@ -45,7 +45,7 @@ class Agent : public SoaBase<AllocatorT> {
 
 class Fish : public Agent {
  public:
-  define_field_types(
+  declare_field_types(
       Fish,
       uint32_t)        // egg_timer_
 
@@ -66,7 +66,7 @@ class Fish : public Agent {
 
 class Shark : public Agent {
  public:
-  define_field_types(
+  declare_field_types(
       Shark,
       uint32_t,        // energy_
       uint32_t)        // egg_timer_

@@ -7,7 +7,7 @@ class Foo;
 class Bar;
 
 // Declare allocator type. First argument is max. number of objects that can be created.
-using AllocatorT = SoaAllocator<64*64*64*64, Foo, Bar>;
+using AllocatorT = SoaAllocator<64*64*64*64, Bar, Foo>;
 
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
@@ -15,7 +15,7 @@ AllocatorHandle<AllocatorT>* allocator_handle;
 
 class Bar : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<int, int, int>;
+  declare_field_types(Bar, int, int, int)
 
   SoaField<Bar, 0> field1_;
   SoaField<Bar, 1> field2_;
@@ -29,7 +29,7 @@ class Bar : public SoaBase<AllocatorT> {
 class Foo : public SoaBase<AllocatorT> {
  public:
   // Pre-declare types of all fields.
-  using FieldTypes = std::tuple<float, int, char>;
+  declare_field_types(Foo, float, int, char)
   
   // Declare fields.
   SoaField<Foo, 0> field1_;  // float
@@ -50,11 +50,11 @@ class Foo : public SoaBase<AllocatorT> {
 };
 
 __global__ void create_objects() {
-  device_allocator->make_new<Foo>(1.0f, threadIdx.x, 2);
-  // Delete objects with: device_allocator->free<Foo>(ptr)
+  new(device_allocator) Foo(1.0f, threadIdx.x, 2);
+  // Delete objects with: destroy(device_allocator, ptr)
 }
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();

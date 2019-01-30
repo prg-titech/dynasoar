@@ -13,7 +13,8 @@ using AllocatorT = SoaAllocator<64*64*64*64, Body>;
 
 class Body : public SoaBase<AllocatorT> {
  public:
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      Body,
       Body*,          // merge_target_
       float,          // pos_x_
       float,          // pos_y_,
@@ -23,7 +24,7 @@ class Body : public SoaBase<AllocatorT> {
       float,          // force_y_,
       float,          // mass_
       bool,           // has_incoming_merge_
-      bool>;          // successful_merge_
+      bool)           // successful_merge_
 
  private:
   SoaField<Body, 0> merge_target_;
@@ -179,7 +180,7 @@ __DEV__ void Body::update_merge() {
 
 __DEV__ void Body::delete_merged() {
   if (successful_merge_) {
-    device_allocator->free<Body>(this);
+    destroy(device_allocator, this);
   }
 }
 
@@ -200,7 +201,7 @@ __global__ void kernel_initialize_bodies() {
   curand_init(kSeed, tid, 0, &rand_state);
 
   for (int i = tid; i < kNumBodies; i += blockDim.x * gridDim.x) {
-    device_allocator->make_new<Body>(
+    new(device_allocator) Body(
         /*pos_x=*/ 2 * curand_uniform(&rand_state) - 1,
         /*pos_y=*/ 2 * curand_uniform(&rand_state) - 1,
         /*vel_x=*/ (curand_uniform(&rand_state) - 0.5) / 1000,

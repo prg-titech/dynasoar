@@ -1,6 +1,8 @@
 #ifndef ALLOCATOR_SOA_EXECUTOR_H
 #define ALLOCATOR_SOA_EXECUTOR_H
 
+#include <chrono>
+
 // For benchmarks: Measure time spent outside of parallel sections.
 // Measure time in microseconds because numbers are small.
 long unsigned int bench_prefix_sum_time = 0;
