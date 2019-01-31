@@ -212,7 +212,7 @@ struct AllocatorWrapperDefrag {
         }
       };
 
-      bool operator()(AllocatorT* allocator) {
+      bool operator()(AllocatorT* allocator, bool first_iteration) {
         static_assert(NumRecords <= kMaxDefragRecords,
                       "Too many defragmentation records requested.");
 
@@ -228,8 +228,10 @@ struct AllocatorWrapperDefrag {
 //                            NumRecords*sizeof(DefragRecord<BlockBitmapT>),
 //                            allocator);
 
-         // Initialize iteration: Perform scan operation on bitmap.
-          allocator->allocated_[kScanTypeIndex].scan();
+          if (first_iteration) {
+            // Initialize iteration: Perform scan operation on bitmap.
+            allocator->allocated_[kScanTypeIndex].scan();
+          }
 
           // Determine number of CUDA threads.
           auto* d_num_soa_blocks_ptr =
@@ -521,7 +523,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
   auto num_leq_blocks =
       copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
 
-  while (true) {
+  for (bool first_iteration = true; ; first_iteration = false) {
     // E.g.: n = 3: Retain 3/4 = 75% of blocks. Round up.
     const int max_num_source_blocks = num_leq_blocks / (kDefragFactor + 1);
     if (max_num_source_blocks <= min_num_compactions) break;
@@ -574,7 +576,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     TupleHelper<Types...>
         ::template for_all<AllocatorWrapperDefrag<ThisAllocator>
         ::template SoaPointerUpdater<T, NumRecords>
-        ::template ClassIterator>(this);
+        ::template ClassIterator>(this, first_iteration);
 
     auto time_4 = std::chrono::system_clock::now();
     bench_rewrite_time += std::chrono::duration_cast<std::chrono::microseconds>(
