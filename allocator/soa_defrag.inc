@@ -219,25 +219,18 @@ struct AllocatorWrapperDefrag {
         bool process_class = SoaClassHelper<ScanClassT>::template for_all<
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
-//          ParallelExecutor<AllocatorT, ScanClassT, ScanClassT, void,
-//                           SoaBase<AllocatorT>, /*Args...=*/ AllocatorT*>
-//              ::template FunctionWrapper<&SoaBase<AllocatorT>
-//                  ::template rewrite_object<ThisClass, ScanClassT>>
-//              ::template WithPre<&AllocatorT::template load_records_to_shared_mem<NumRecords>>
-//              ::parallel_do(allocator,
-//                            NumRecords*sizeof(DefragRecord<BlockBitmapT>),
-//                            allocator);
+          // Initialized during first iteration.
+          static BitmapIndexT num_soa_blocks;
 
           if (first_iteration) {
             // Initialize iteration: Perform scan operation on bitmap.
             allocator->allocated_[kScanTypeIndex].scan();
-          }
 
-          // Determine number of CUDA threads.
-          auto* d_num_soa_blocks_ptr =
-              &allocator->allocated_[kScanTypeIndex]
-                  .data_.enumeration_result_size;
-          auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
+            auto* d_num_soa_blocks_ptr =
+                &allocator->allocated_[kScanTypeIndex]
+                    .data_.enumeration_result_size;
+            num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
+          }
 
           if (num_soa_blocks > 0) {
             auto total_threads = num_soa_blocks * kScanBlockSize;
