@@ -358,9 +358,7 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 
   int total_time = 0;
   for (int i = 0; i < kNumIterations; ++i) {
-#ifndef NDEBUG
     printf("%i\n", i);
-#endif  // NDEBUG
 
     if (kOptionPrintStats) {
       //allocator_handle->DBG_print_state_stats();

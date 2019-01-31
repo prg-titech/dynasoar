@@ -12,7 +12,7 @@ class Cell;
 class Fish;
 class Shark;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Agent, Fish, Shark, Cell>;
+using AllocatorT = SoaAllocator<4*64*64*64*64, Agent, Fish, Shark, Cell>;
 
 class Cell : public SoaBase<AllocatorT> {
  public:

@@ -2,10 +2,12 @@
 #define ALLOCATOR_SOA_EXECUTOR_H
 
 #include <chrono>
+#include <limits>
 
 // For benchmarks: Measure time spent outside of parallel sections.
 // Measure time in microseconds because numbers are small.
 long unsigned int bench_prefix_sum_time = 0;
+static const int kMaxInt32 = std::numeric_limits<int>::max();
 
 template<typename WrapperT, typename AllocatorT, typename... Args>
 __global__ void kernel_parallel_do(AllocatorT* allocator, Args... args) {
@@ -165,6 +167,7 @@ struct ParallelExecutor {
         for (int j = tid/kSize; j < N_alloc; j += num_threads/kSize) {
           // i is the index of in the scan array.
           auto block_idx = allocator->allocated_[kTypeIndex].scan_get_index(j);
+          assert(block_idx <= kMaxInt32/64);
 
           // TODO: Consider doing a scan over "allocated" bitmap.
           auto* block = allocator->template get_block<IterT>(block_idx);

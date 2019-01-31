@@ -480,10 +480,12 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx) {
-    assert(block_idx < N);
-    return reinterpret_cast<typename BlockHelper<T>::BlockType*>(
+  __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx) const {
+    assert(block_idx < N && block_idx >= 0);
+    auto* result = reinterpret_cast<typename BlockHelper<T>::BlockType*>(
         data_ + block_idx*kBlockSizeBytes);
+    assert(reinterpret_cast<char*>(result) >= data_);
+    return result;
   }
 
   template<class T>
@@ -492,11 +494,10 @@ class SoaAllocator {
 
     do {
       // Retry a couple of times. May reduce fragmentation.
-      // TODO: Tune number of retries.
-      int retries = 3;   // retries=2 before
+      int retries = 0;   // retries=2 before
       do {
         block_idx = active_[BlockHelper<T>::kIndex]
-            .template find_allocated<false>(retries);
+            .template find_allocated<false>(retries + blockIdx.x);
       } while (block_idx == Bitmap<BlockIndexT, N>::kIndexError
                && --retries > 0);
 
@@ -523,7 +524,9 @@ class SoaAllocator {
     static_assert(sizeof(typename BlockHelper<T>::BlockType)
           % kNumBlockElements == 0,
         "Internal error: SOA block not aligned to 64 bytes.");
-    new(get_block<T>(block_idx)) typename BlockHelper<T>::BlockType();
+    auto* block_ptr = get_block<T>(block_idx);
+    assert(reinterpret_cast<char*>(block_ptr) >= data_);
+    new(block_ptr) typename BlockHelper<T>::BlockType();
   }
 
   template<class T>

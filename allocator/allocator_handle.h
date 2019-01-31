@@ -52,13 +52,18 @@ class AllocatorHandle {
     AllocatorT::DBG_print_stats();
 #endif  // NDEBUG
 
-    cudaMalloc(&allocator_, sizeof(AllocatorT));
+    gpuErrchk(cudaMalloc(&allocator_, sizeof(AllocatorT)));
     assert(allocator_ != nullptr);
 
-    cudaMalloc(&data_buffer_, AllocatorT::kDataBufferSize);
+    gpuErrchk(cudaMalloc(&data_buffer_, AllocatorT::kDataBufferSize));
 #ifndef NDEBUG
     void* maybe_out_of_memory = nullptr;  // To show OOM text...
     assert(data_buffer_ != maybe_out_of_memory);
+
+    gpuErrchk(cudaMemGetInfo(&free_mem, &total_mem));
+    printf("  Data buffer:  %p\n", data_buffer_);
+    printf("  Available (free) global memory after init: %f MB\n\n",
+           (free_mem/1000000.0));
 #endif  // NDEBUG
 
     init_allocator_kernel<<<256, 256>>>(allocator_, data_buffer_);
