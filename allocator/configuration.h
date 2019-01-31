@@ -17,6 +17,8 @@ static const int kBlockDataSectionOffset = 64;
 
 static const int kMinDefragCandidates = 512;
 
+static const int kFindActiveBlockRetries = 5;
+
 using BlockIndexT = int;
 
 using TypeIndexT = int8_t;
