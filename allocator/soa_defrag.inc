@@ -51,6 +51,8 @@ struct AllocatorWrapperDefrag {
       };
 
       __DEV__ static void iterate_rewrite_objects(AllocatorT* allocator) {
+        allocator->template load_records_to_shared_mem<NumRecords>();
+
         const auto N_alloc =
             allocator->allocated_[kScanTypeIndex].scan_num_bits();
 
@@ -495,7 +497,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
 template<BlockIndexT N_Objects, class... Types>
 template<int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>
-    ::load_records_to_shared_mem(SoaAllocator<N_Objects, Types...>* allocator) {
+    ::load_records_to_shared_mem() {
   extern __shared__ DefragRecord<BlockBitmapT> records[];
 
   // Every block loads records into shared memory.

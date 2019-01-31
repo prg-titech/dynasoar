@@ -50,7 +50,7 @@ class SoaAllocator {
   __DEV__ void defrag_update_block_state();
 
   template<int NumRecords>
-  __DEV__ void load_records_to_shared_mem(ThisAllocator* allocator);
+  __DEV__ void load_records_to_shared_mem();
 
   void DBG_print_defrag_time();
 
