@@ -484,8 +484,9 @@ class SoaAllocator {
   __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx)
       const {
     assert(block_idx < N && block_idx >= 0);
+    uintptr_t increment = static_cast<uintptr_t>(block_idx)*kBlockSizeBytes;
     auto* result = reinterpret_cast<typename BlockHelper<T>::BlockType*>(
-        data_ + block_idx*kBlockSizeBytes);
+        data_ + increment);
     assert(reinterpret_cast<char*>(result) >= data_);
     return result;
   }
