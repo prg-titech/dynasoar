@@ -60,6 +60,8 @@ struct AllocatorWrapperDefrag {
         int num_threads = ((blockDim.x * gridDim.x)/kScanBlockSize)*kScanBlockSize;
         int tid = blockIdx.x * blockDim.x + threadIdx.x;
         if (tid < num_threads) {
+          char* data_buffer = allocator->data_;
+
           for (int j = tid/kScanBlockSize; j < N_alloc; j += num_threads/kScanBlockSize) {
             // i is the index of in the scan array.
             auto block_idx = allocator->allocated_[kScanTypeIndex].scan_get_index(j);
@@ -72,7 +74,7 @@ struct AllocatorWrapperDefrag {
             if ((allocation_bitmap & (1ULL << thread_offset)) != 0ULL) {
               SoaClassHelper<ScanClassT>
                   ::template dev_for_all<FieldUpdater, /*IterateBase=*/ true>(
-                      allocator, block, thread_offset);
+                      data_buffer, block, thread_offset);
             }
           }
         }
@@ -90,7 +92,7 @@ struct AllocatorWrapperDefrag {
         template<bool Check, int Dummy> 
         struct FieldSelector {
           template<typename BlockT>
-          __DEV__ static void call(AllocatorT* allocator,
+          __DEV__ static void call(char* data_buffer,
                                    BlockT* block, ObjectIndexT object_id) {
             extern __shared__ DefragRecord<BlockBitmapT> records[];
 
@@ -100,9 +102,9 @@ struct AllocatorWrapperDefrag {
                 SoaFieldType::template data_ptr_from_location<BlockT::kN>(
                     block_char_p, object_id);
 
-            assert(reinterpret_cast<char*>(scan_location) >= allocator->data_
+            assert(reinterpret_cast<char*>(scan_location) >= data_buffer
                 && reinterpret_cast<char*>(scan_location)
-                    < allocator->data_ + AllocatorT::kDataBufferSize);
+                    < data_buffer + AllocatorT::kDataBufferSize);
             FieldType scan_value = *scan_location;
 
             if (scan_value == nullptr) return;
@@ -110,15 +112,12 @@ struct AllocatorWrapperDefrag {
             if (scan_value->get_type() != BlockHelper<DefragT>::kIndex) return;
 
             // Calculate block index of scan_value.
-            // TODO: Find a better way to do this.
-            // TODO: There could be some random garbage in the field if it was
-            // not initialized. Replace asserts with if-check and return stmt.
             char* block_base =
                 PointerHelper::block_base_from_obj_ptr(scan_value);
-            assert(block_base >= allocator->data_
-                   && block_base < allocator->data_ + AllocatorT::kDataBufferSize);
-            assert((block_base - allocator->data_) % AllocatorT::kBlockSizeBytes == 0);
-            auto scan_block_idx = (block_base - allocator->data_)
+            assert(block_base >= data_buffer
+                   && block_base < data_buffer + AllocatorT::kDataBufferSize);
+            assert((block_base - data_buffer) % AllocatorT::kBlockSizeBytes == 0);
+            auto scan_block_idx = (block_base - data_buffer)
                 / AllocatorT::kBlockSizeBytes;
             assert(scan_block_idx < AllocatorT::N);
 
@@ -167,14 +166,10 @@ struct AllocatorWrapperDefrag {
               int target_obj_id = __ffsll(target_bitmap) - 1;
               assert(target_obj_id < BlockHelper<DefragT>::kSize);
               assert(target_obj_id >= 0);
-              assert((allocator->template get_block<DefragT>(
-                          target_block_idx)->free_bitmap
-                      & (1ULL << target_obj_id)) == 0);
 
               // Rewrite pointer.
-              auto* target_block = allocator->template get_block<
-                  typename std::remove_pointer<FieldType>::type>(
-                      target_block_idx);
+              char* target_block = AllocatorT::get_block_base(
+                  data_buffer, target_block_idx);
               *scan_location = PointerHelper::rewrite_pointer(
                       scan_value, target_block, target_obj_id);
 
@@ -197,7 +192,7 @@ struct AllocatorWrapperDefrag {
         template<int Dummy>
         struct FieldSelector<false, Dummy> {
           template<typename BlockT>
-          __DEV__ static void call(AllocatorT* allocator,
+          __DEV__ static void call(char* data_buffer,
                                    BlockT* block, ObjectIndexT object_id) {}
         };
 
@@ -220,7 +215,7 @@ struct AllocatorWrapperDefrag {
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
           // Initialized during first iteration.
-          static BitmapIndexT num_soa_blocks;
+          static BlockIndexT num_soa_blocks;
 
           if (first_iteration) {
             // Initialize iteration: Perform scan operation on bitmap.
