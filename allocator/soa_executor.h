@@ -9,8 +9,9 @@
 long unsigned int bench_prefix_sum_time = 0;
 static const int kMaxInt32 = std::numeric_limits<int>::max();
 
+// TODO: Is it safe to make these static?
 template<typename WrapperT, typename AllocatorT, typename... Args>
-__global__ void kernel_parallel_do(AllocatorT* allocator, Args... args) {
+__global__ static void kernel_parallel_do(AllocatorT* allocator, Args... args) {
   // TODO: Check overhead of allocator pointer dereference.
   // There is definitely a 2% overhead or so.....
   WrapperT::parallel_do_cuda(allocator, args...);
@@ -19,7 +20,8 @@ __global__ void kernel_parallel_do(AllocatorT* allocator, Args... args) {
 // Run member function on allocator, then perform do-all operation.
 template<typename WrapperT, typename PreT,
          typename AllocatorT, typename... Args>
-__global__ void kernel_parallel_do_with_pre(AllocatorT* allocator, Args... args) {
+__global__ static void kernel_parallel_do_with_pre(AllocatorT* allocator,
+                                                   Args... args) {
   // TODO: Check overhead of allocator pointer dereference.
   // There is definitely a 2% overhead or so.....
   PreT::run_pre(allocator, args...);

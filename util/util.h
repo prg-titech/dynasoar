@@ -43,7 +43,7 @@ struct is_device_array<DeviceArray<T, N>> : std::true_type {};
 
 // Reads value at a device address and return it.
 template<typename T>
-T read_from_device(T* ptr) {
+__forceinline__ static T read_from_device(T* ptr) {
   T host_storage;
   cudaMemcpy(&host_storage, ptr, sizeof(T), cudaMemcpyDeviceToHost);
   gpuErrchk(cudaDeviceSynchronize());
@@ -52,17 +52,17 @@ T read_from_device(T* ptr) {
 
 // A wrapper that runs a device member function.
 template<typename C, void (C::*func)()>
-__global__ void member_func_kernel(C* ptr) {
+__global__ static void member_func_kernel(C* ptr) {
   (ptr->*func)();
 }
 
 template<typename C, typename T1, void (C::*func)(T1)>
-__global__ void member_func_kernel(C* ptr, T1 t1) {
+__global__ static void member_func_kernel(C* ptr, T1 t1) {
   (ptr->*func)(t1);
 }
 
 template<typename C, typename T1, typename T2, void (C::*func)(T1, T2)>
-__global__ void member_func_kernel(C* ptr, T1 t1, T2 t2) {
+__global__ static void member_func_kernel(C* ptr, T1 t1, T2 t2) {
   (ptr->*func)(t1, t2);
 }
 

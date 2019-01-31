@@ -469,18 +469,20 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ ObjectIndexT get_object_id(T* ptr) {
+  __DEV__ static ObjectIndexT get_object_id(T* ptr) {
     return PointerHelper::obj_id_from_obj_ptr(ptr);
   }
 
   template<class T>
-  __DEV__ T* get_object(typename BlockHelper<T>::BlockType* block, ObjectIndexT obj_id) {
+  __DEV__ static T* get_object(typename BlockHelper<T>::BlockType* block,
+                               ObjectIndexT obj_id) {
     assert(obj_id < 64);
     return block->make_pointer(obj_id);
   }
 
   template<class T>
-  __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx) const {
+  __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx)
+      const {
     assert(block_idx < N && block_idx >= 0);
     auto* result = reinterpret_cast<typename BlockHelper<T>::BlockType*>(
         data_ + block_idx*kBlockSizeBytes);
@@ -524,6 +526,7 @@ class SoaAllocator {
     static_assert(sizeof(typename BlockHelper<T>::BlockType)
           % kNumBlockElements == 0,
         "Internal error: SOA block not aligned to 64 bytes.");
+    assert(block_idx >= 0);
     auto* block_ptr = get_block<T>(block_idx);
     assert(reinterpret_cast<char*>(block_ptr) >= data_);
     new(block_ptr) typename BlockHelper<T>::BlockType();
@@ -641,7 +644,7 @@ __DEV__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
     auto pos = __ffsll(bitmap) - 1;
     bitmap &= bitmap - 1;
 
-    auto* obj = allocator->template get_object<T>(block, pos);
+    auto* obj = AllocatorT::template get_object<T>(block, pos);
     (obj->*func)(args...);
   }
 }

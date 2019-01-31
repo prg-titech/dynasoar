@@ -20,14 +20,15 @@
   } \
   using FieldTypes = std::tuple<__VA_ARGS__>;
 
+// TODO: Is it safe to make these static?
 template<typename AllocatorT, typename T>
-__DEV__ __forceinline__ void destroy(AllocatorT* allocator, T* ptr) {
+__DEV__ __forceinline__ static void destroy(AllocatorT* allocator, T* ptr) {
   allocator->template free<T>(ptr);
 }
 
 
 template<typename AllocatorT, typename C, int Field>
-__DEV__ __forceinline__ void destroy(AllocatorT* allocator,
+__DEV__ __forceinline__ static void destroy(AllocatorT* allocator,
                                      const SoaField<C, Field>& value) {
   allocator->template free(value.get());
 }
