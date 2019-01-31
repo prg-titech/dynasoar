@@ -491,14 +491,6 @@ class SoaAllocator {
     return result;
   }
 
-  __DEV__ static char* get_block_base(char* data_buffer, BlockIndexT block_idx) {
-    assert(block_idx < N && block_idx >= 0);
-    uintptr_t increment = static_cast<uintptr_t>(block_idx)*kBlockSizeBytes;
-    char* result = data_buffer + increment;
-    assert(result >= data_buffer);
-    return result;
-  }
-
   template<class T>
   __DEV__ BlockIndexT find_active_block() {
     BlockIndexT block_idx;
