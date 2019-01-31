@@ -44,13 +44,6 @@ class SoaBase {
 
   __DEV__ TypeIndexT get_type() const { return AllocatorT::get_type(this); }
 
-  template<typename ClassIterT, typename ScanClassT>
-  __DEV__ void rewrite_object(AllocatorT* allocator) {
-    SoaClassHelper<ScanClassT>::template dev_for_all<ClassIterT::FieldUpdater,
-                                                     /*IterateBase=*/ true>(
-        allocator, static_cast<ScanClassT*>(this));
-  }
-
   __DEV__ void DBG_print_ptr_decoding() const {
     char* block_ptr = PointerHelper::block_base_from_obj_ptr(this);
     int obj_id = PointerHelper::obj_id_from_obj_ptr(this);

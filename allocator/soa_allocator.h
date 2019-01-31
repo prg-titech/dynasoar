@@ -497,7 +497,7 @@ class SoaAllocator {
 
     do {
       // Retry a couple of times. May reduce fragmentation.
-      int retries = 0;   // retries=2 before
+      int retries = kMinDefragCandidates;   // retries=2 before
       do {
         block_idx = active_[BlockHelper<T>::kIndex]
             .template find_allocated<false>(retries + blockIdx.x);

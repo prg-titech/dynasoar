@@ -8,6 +8,13 @@ __DEV__ IndexT block_idx_hash(IndexT block_idx) {
   return block_idx % NumBuckets;
 }
 
+
+template<typename ClassIteratorT, typename AllocatorT>
+__global__ void kernel_iterate_rewrite_objects(AllocatorT* allocator) {
+  ClassIteratorT::iterate_rewrite_objects(allocator);
+}
+
+
 template<typename AllocatorT>
 struct AllocatorWrapperDefrag {
   template<typename T>
@@ -15,6 +22,7 @@ struct AllocatorWrapperDefrag {
 
   using BlockBitmapT = typename AllocatorT::BlockBitmapT;
 
+  static const int kCudaBlockSize = 256;
 
   // Select fields of type DefragT* and rewrite pointers if necessary.
   // DefragT: Type that was defragmented.
@@ -25,6 +33,9 @@ struct AllocatorWrapperDefrag {
     template<typename ScanClassT>
     struct ClassIterator {
       using ThisClass = ClassIterator<ScanClassT>;
+
+      static const int kScanBlockSize = BlockHelper<ScanClassT>::kSize;
+      static const int kScanTypeIndex = BlockHelper<ScanClassT>::kIndex;
 
       // Checks if this field should be rewritten.
       template<typename SoaFieldHelperT>
@@ -39,6 +50,32 @@ struct AllocatorWrapperDefrag {
         }
       };
 
+      __DEV__ static void iterate_rewrite_objects(AllocatorT* allocator) {
+        const auto N_alloc =
+            allocator->allocated_[kScanTypeIndex].scan_num_bits();
+
+        // Round to multiple of kScanBlockSize.
+        int num_threads = ((blockDim.x * gridDim.x)/kScanBlockSize)*kScanBlockSize;
+        int tid = blockIdx.x * blockDim.x + threadIdx.x;
+        if (tid < num_threads) {
+          for (int j = tid/kScanBlockSize; j < N_alloc; j += num_threads/kScanBlockSize) {
+            // i is the index of in the scan array.
+            auto block_idx = allocator->allocated_[kScanTypeIndex].scan_get_index(j);
+
+            // TODO: Consider doing a scan over "allocated" bitmap.
+            auto* block = allocator->template get_block<ScanClassT>(block_idx);
+            const auto& iteration_bitmap = block->iteration_bitmap;
+            int thread_offset = tid % kScanBlockSize;
+
+            if ((iteration_bitmap & (1ULL << thread_offset)) != 0ULL) {
+              SoaClassHelper<ScanClassT>
+                  ::template dev_for_all<FieldUpdater, /*IterateBase=*/ true>(
+                      allocator, block, thread_offset);
+            }
+          }
+        }
+      }
+
       // Scan and rewrite field.
       template<typename SoaFieldHelperT>
       struct FieldUpdater {
@@ -50,16 +87,17 @@ struct AllocatorWrapperDefrag {
         // Scan this field.
         template<bool Check, int Dummy> 
         struct FieldSelector {
-          template<typename... Args>
+          template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
-                                   ScanClassT* object) {
+                                   BlockT* block, ObjectIndexT object_id) {
             extern __shared__ DefragRecord<BlockBitmapT> records[];
 
             // Location of field value to be scanned/rewritten.
-            // TODO: This is inefficient. We first build a pointer and then
-            // disect it again. (Inside *_from_obj_ptr().)
+            auto* block_char_p = reinterpret_cast<char*>(block);
             FieldType* scan_location =
-                SoaFieldType::data_ptr_from_obj_ptr(object);
+                SoaFieldType::template data_ptr_from_location<BlockT::kN>(
+                    block_char_p, object_id);
+
             assert(reinterpret_cast<char*>(scan_location) >= allocator->data_
                 && reinterpret_cast<char*>(scan_location)
                     < allocator->data_ + AllocatorT::kDataBufferSize);
@@ -156,17 +194,18 @@ struct AllocatorWrapperDefrag {
         // Do not scan this field.
         template<int Dummy>
         struct FieldSelector<false, Dummy> {
+          template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
-                                   ScanClassT* object) {}
+                                   BlockT* block, ObjectIndexT object_id) {}
         };
 
-        __DEV__ bool operator()(AllocatorT* allocator, ScanClassT* object) {
+        template<typename... Args>
+        __DEV__ bool operator()(Args... args) {
           // Rewrite field if field type is a super class (or exact class)
           // of DefragT.
           FieldSelector<std::is_pointer<FieldType>::value
               && std::is_base_of<typename std::remove_pointer<FieldType>::type,
-                                 DefragT>::value, 0>::call(
-              allocator, object);
+                                 DefragT>::value, 0>::call(args...);
           return true;  // Continue processing.
         }
       };
@@ -178,14 +217,39 @@ struct AllocatorWrapperDefrag {
         bool process_class = SoaClassHelper<ScanClassT>::template for_all<
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
-          ParallelExecutor<AllocatorT, ScanClassT, ScanClassT, void,
-                           SoaBase<AllocatorT>, /*Args...=*/ AllocatorT*>
-              ::template FunctionWrapper<&SoaBase<AllocatorT>
-                  ::template rewrite_object<ThisClass, ScanClassT>>
-              ::template WithPre<&AllocatorT::template load_records_to_shared_mem<NumRecords>>
-              ::parallel_do(allocator,
-                            NumRecords*sizeof(DefragRecord<BlockBitmapT>),
-                            allocator);
+//          ParallelExecutor<AllocatorT, ScanClassT, ScanClassT, void,
+//                           SoaBase<AllocatorT>, /*Args...=*/ AllocatorT*>
+//              ::template FunctionWrapper<&SoaBase<AllocatorT>
+//                  ::template rewrite_object<ThisClass, ScanClassT>>
+//              ::template WithPre<&AllocatorT::template load_records_to_shared_mem<NumRecords>>
+//              ::parallel_do(allocator,
+//                            NumRecords*sizeof(DefragRecord<BlockBitmapT>),
+//                            allocator);
+
+         // Initialize iteration: Perform scan operation on bitmap.
+          allocator->allocated_[kScanTypeIndex].scan();
+
+          // Determine number of CUDA threads.
+          auto* d_num_soa_blocks_ptr =
+              &allocator->allocated_[kScanTypeIndex]
+                  .data_.enumeration_result_size;
+          auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
+
+          if (num_soa_blocks > 0) {
+            // TODO: Use iteration bitmap instead.
+            member_func_kernel<AllocatorT,
+                               &AllocatorT::template initialize_iteration<ScanClassT>>
+                <<<(num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
+                   kCudaBlockSize>>>(allocator);
+            gpuErrchk(cudaDeviceSynchronize());
+
+            auto total_threads = num_soa_blocks * kScanBlockSize;
+            kernel_iterate_rewrite_objects<ThisClass>
+                <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
+                  kCudaBlockSize,
+                  NumRecords*sizeof(DefragRecord<BlockBitmapT>)>>>(allocator);
+            gpuErrchk(cudaDeviceSynchronize());
+          }
         }
 
         return true;  // Continue processing.

@@ -15,6 +15,8 @@ static const int kDefragFactor = 9;
 // and other data structures in blocks.
 static const int kBlockDataSectionOffset = 64;
 
+static const int kMinDefragCandidates = 512;
+
 using BlockIndexT = int;
 
 using TypeIndexT = int8_t;

@@ -25,6 +25,8 @@ class SoaBlock {
  public:
   using BitmapT = unsigned long long int;
 
+  static const int kN = N;
+
 #ifdef OPTION_DEFRAG
   // This is the number of allocated objects.
   static const ObjectIndexT kLeq50Threshold =
