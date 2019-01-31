@@ -38,7 +38,6 @@ class SoaBlock {
   // Initializes a new block.
   __DEV__ SoaBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % 64 == 0);   // Alignment.
-    printf("CONSTR:   %p\n", this);
     type_id = TypeId;
     __threadfence();  // Initialize bitmap after type_id is visible.
     free_bitmap = kBitmapInitState;
