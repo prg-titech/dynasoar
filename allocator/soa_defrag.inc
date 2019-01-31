@@ -66,10 +66,10 @@ struct AllocatorWrapperDefrag {
 
             // TODO: Consider doing a scan over "allocated" bitmap.
             auto* block = allocator->template get_block<ScanClassT>(block_idx);
-            const auto& iteration_bitmap = block->iteration_bitmap;
+            const auto allocation_bitmap = block->allocation_bitmap();
             int thread_offset = tid % kScanBlockSize;
 
-            if ((iteration_bitmap & (1ULL << thread_offset)) != 0ULL) {
+            if ((allocation_bitmap & (1ULL << thread_offset)) != 0ULL) {
               SoaClassHelper<ScanClassT>
                   ::template dev_for_all<FieldUpdater, /*IterateBase=*/ true>(
                       allocator, block, thread_offset);
@@ -238,13 +238,6 @@ struct AllocatorWrapperDefrag {
           auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
           if (num_soa_blocks > 0) {
-            // TODO: Use iteration bitmap instead.
-            member_func_kernel<AllocatorT,
-                               &AllocatorT::template initialize_iteration<ScanClassT>>
-                <<<(num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
-                   kCudaBlockSize>>>(allocator);
-            gpuErrchk(cudaDeviceSynchronize());
-
             auto total_threads = num_soa_blocks * kScanBlockSize;
             kernel_iterate_rewrite_objects<ThisClass>
                 <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
