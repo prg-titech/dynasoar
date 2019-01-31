@@ -220,7 +220,7 @@ struct AllocatorWrapperDefrag {
             FieldChecker, /*IterateBase=*/ true>();
         if (process_class) {
           // Initialized during first iteration.
-          static BitmapIndexT num_soa_blocks;
+          static BlockIndexT num_soa_blocks;
 
           if (first_iteration) {
             // Initialize iteration: Perform scan operation on bitmap.
