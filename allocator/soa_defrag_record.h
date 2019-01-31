@@ -33,7 +33,6 @@ struct SoaDefragRecords {
 static const int kSharedMemorySize = 48*1024;
 
 // Maximum number of defragmentation records.
-static const int kMaxDefragRecords = kSharedMemorySize
-    / sizeof(DefragRecord<unsigned long long int>);
+static const int kMaxDefragRecords = kSharedMemorySize / sizeof(BlockIndexT);
 
 #endif  // ALLOCATOR_SOA_DEFRAG_RECORD_H
