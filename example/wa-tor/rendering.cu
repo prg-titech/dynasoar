@@ -12,8 +12,6 @@ SDL_Renderer* renderer = nullptr;
 
 // Render simulation. Return value indicates if similation should continue.
 void draw(char* pixels) {
-  SDL_Delay(80);
-
   // Clear scene.
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
   SDL_RenderClear(renderer);
@@ -21,16 +19,18 @@ void draw(char* pixels) {
 
   // Draw all cells.
   for (int i = 0; i < kSizeX*kSizeY; ++i) {
-    int x = i % kSizeX;
-    int y = i / kSizeX;
+    int pos_x = i % kSizeX;
+    int pos_y = i / kSizeX;
 
     if (pixels[i] == 1) {
-      SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
-    } else if (pixels[i] == 2) {
       SDL_SetRenderDrawColor(renderer, 0, 255, 0, SDL_ALPHA_OPAQUE);
+    } else if (pixels[i] == 2) {
+      SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
+    } else {
+      SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     }
 
-    SDL_RenderDrawPoint(renderer, x, y);
+    SDL_RenderDrawPoint(renderer, pos_x, pos_y);
   }
 
   SDL_RenderPresent(renderer);
