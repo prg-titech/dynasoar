@@ -286,8 +286,8 @@ __global__ void print_checksum() {
 
 #ifdef OPTION_DEFRAG
 void defrag() {
-  allocator_handle->parallel_defrag<Fish>(1);
-  allocator_handle->parallel_defrag<Shark>(1);
+  allocator_handle->parallel_defrag<Fish>();
+  allocator_handle->parallel_defrag<Shark>();
 }
 #endif  // OPTION_DEFRAG
 
@@ -358,9 +358,8 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 
   int total_time = 0;
   for (int i = 0; i < kNumIterations; ++i) {
-    printf("%i\n", i);
-
     if (kOptionPrintStats) {
+      printf("%i\n", i);
       //allocator_handle->DBG_print_state_stats();
       allocator_handle->DBG_collect_stats();
     }
