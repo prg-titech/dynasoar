@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "../configuration.h"
+#include "../rendering.h"
 #include "wator.h"
 
 
@@ -401,13 +402,12 @@ void initialize() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-__device__ uint32_t d_gui_map[kSizeY * kSizeX];
-uint32_t gui_map[kSizeY * kSizeX];
+__device__ char d_gui_map[kSizeY * kSizeX];
+char gui_map[kSizeY * kSizeX];
 
 __global__ void fill_gui_map() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < kSizeY*kSizeX) {
+  for (int tid = threadIdx.x + blockDim.x*blockIdx.x;
+       tid < kSizeX*kSizeY; tid += blockDim.x * gridDim.x) {
     if (dev_Cell_agent[tid] != nullptr) {
       d_gui_map[tid] = dev_Cell_agent[tid]->get_type();
     } else {
@@ -420,14 +420,21 @@ void update_gui_map() {
   fill_gui_map<<<kSizeX*kSizeY/1024 + 1, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*kSizeX*kSizeY,
+  cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(char)*kSizeX*kSizeY,
                        0, cudaMemcpyDeviceToHost);
   gpuErrchk(cudaDeviceSynchronize());
+
+  // Draw pixels.
+  draw(gui_map);
 }
 
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();
+
+  if (kOptionRender) {
+    init_renderer();
+  }
 
   int total_time = 0;
   auto time_before = std::chrono::system_clock::now();
@@ -436,6 +443,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #ifndef NDEBUG
     printf("%i\n", i);
 #endif  // NDEBUG
+
+    if (kOptionRender) {
+      update_gui_map();
+    }
 
     if (kOptionPrintStats) {
       // print_stats();
@@ -463,5 +474,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #endif  // NDEBUG
 
   printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
+
+  if (kOptionRender) {
+    close_renderer();
+  }
+
   return 0;
 }
