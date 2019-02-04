@@ -28,4 +28,11 @@ __forceinline__ __device__ unsigned warp_id()
     return ret;
 }
 
+__device__ __inline__ unsigned long long int ld_gbl_cg(
+    const unsigned long long int *addr) {
+  unsigned long long int return_value;
+  asm("ld.global.cg.s64 %0, [%1];" : "=l"(return_value) : "l"(addr));
+  return return_value;
+}
+
 #endif  // BITMAP_UTIL_H

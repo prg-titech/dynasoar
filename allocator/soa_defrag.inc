@@ -525,6 +525,11 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     assert(min_remaining_records >= (num_leq_blocks - min_remaining_records)
            * kDefragFactor);
 
+#ifndef NDEBUG
+    printf("[DEFRAG]  min_remaining:  %i / %i\n",
+           (int) min_remaining_records, (int) num_leq_blocks);
+#endif  // NDEBUG
+
     auto time_1 = std::chrono::system_clock::now();
 
     // TODO: Assign one warp per defrag record.
@@ -583,7 +588,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     num_leq_blocks = copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
 
 #ifndef NDEBUG
-    printf("Completed defragmention pass [%s]:  %i --> %i   (%i)\n", typeid(T).name(),
+    printf("[DEFRAG]  Completed pass [%s]:  %i --> %i   (%i)\n", typeid(T).name(),
            num_leq_blocks_before, num_leq_blocks, num_leq_blocks_before - num_leq_blocks);
 #endif  // NDEBUG
   }

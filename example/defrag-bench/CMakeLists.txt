@@ -1,0 +1,1 @@
+cuda_add_executable(defrag_bench defrag_benchmark.cu)
