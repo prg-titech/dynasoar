@@ -588,7 +588,8 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     num_leq_blocks = copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
 
 #ifndef NDEBUG
-    printf("[DEFRAG]  Completed pass [%s]:  %i --> %i   (%i)\n", typeid(T).name(),
+    printf("[DEFRAG]  Completed pass<%i> [%s]:  %i --> %i   (%i)\n",
+           NumRecords, typeid(T).name(),
            num_leq_blocks_before, num_leq_blocks, num_leq_blocks_before - num_leq_blocks);
 #endif  // NDEBUG
   }
