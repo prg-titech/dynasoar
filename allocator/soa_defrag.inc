@@ -133,24 +133,45 @@ struct AllocatorWrapperDefrag {
 
               // ... but this pointer could contain garbage data.
               // In that case, we do not want need to rewrite.
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+              bool valid_pointer =
+                  allocator->defrag_records_.source_bitmap[record_id]
+                  & (1ULL << src_obj_id);
+#else
               bool valid_pointer = record.source_bitmap & (1ULL << src_obj_id);
+#endif  // OPTION_DEFRAG_USE_GLOBAL
               if (!valid_pointer) return;
 
               // First src_obj_id bits are set to 1.
               BlockBitmapT cnt_mask = src_obj_id ==
                  63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
               assert(__popcll(cnt_mask) == src_obj_id + 1);
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+              int src_bit_idx = __popcll(cnt_mask
+                  & allocator->defrag_records_.source_bitmap[record_id]) - 1;
+#else
               int src_bit_idx = __popcll(cnt_mask & record.source_bitmap) - 1;
+#endif  // OPTION_DEFRAG_USE_GLOBAL
 
               // Find correct target block and bit in target bitmaps.
               BlockBitmapT target_bitmap;
               auto target_block_idx = kInvalidBlockIndex;
               for (int i = 0; i < kDefragFactor; ++i) {
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+                target_bitmap =
+                    allocator->defrag_records_.target_bitmap[i][record_id];
+#else
                 target_bitmap = record.target_bitmap[i];
+#endif  // OPTION_DEFRAG_USE_GLOBAL
 
                 if (__popcll(target_bitmap) > src_bit_idx) {
                   // Target block found.
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+                  target_block_idx =
+                      allocator->defrag_records_.target_block_idx[i][record_id];
+#else
                   target_block_idx = record.target_block_idx[i];
+#endif  // OPTION_DEFRAG_USE_GLOBAL
                   break;
                 } else {
                   src_bit_idx -= __popcll(target_bitmap);
