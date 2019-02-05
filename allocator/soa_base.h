@@ -2,6 +2,7 @@
 #define ALLOCATOR_SOA_BASE_H
 
 #include "allocator/configuration.h"
+#include "allocator/soa_block.h"
 #include "allocator/soa_helper.h"
 #include "allocator/soa_field.h"
 
@@ -59,6 +60,30 @@ class SoaBase {
       return nullptr;
     }
   }
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+  __DEV__ SoaBase<AllocatorT>** forwarding_pointer_address() const {
+    char* block_base = PointerHelper::block_base_from_obj_ptr(this);
+    // Address of SOA array.
+    auto* soa_array = reinterpret_cast<SoaBase<AllocatorT>**>(
+        block_base + kBlockDataSectionOffset);
+    return soa_array + PointerHelper::obj_id_from_obj_ptr(this);
+  }
+
+  __DEV__ SoaBase<AllocatorT>* get_forwarding_pointer() const {
+    return *forwarding_pointer_address();
+  }
+
+  __DEV__ void set_forwarding_pointer(SoaBase<AllocatorT>* ptr) {
+    *forwarding_pointer_address() = ptr;
+  }
+
+  __DEV__ bool has_forwarding_pointer() const {
+    char* block_base = PointerHelper::block_base_from_obj_ptr(this);
+    auto* block = reinterpret_cast<AbstractBlock*>(block_base);
+    return block->has_forwarding;
+  }
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 };
 
 #endif  // ALLOCATOR_SOA_BASE_H

@@ -16,16 +16,52 @@ enum DeallocationState : int8_t {
 };
 
 
-// TODO: Fix visibility.
-// A SOA block containing objects.
-// T: Base type of the block.
-// N: Maximum number of objects in a block of type T.
-template<class T, TypeIndexT TypeId, ObjectIndexT N>
-class SoaBlock {
+class AbstractBlock {
  public:
   using BitmapT = unsigned long long int;
 
+  __DEV__ AbstractBlock() {
+    assert(reinterpret_cast<uintptr_t>(this) % 64 == 0);   // Alignment.
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+    has_forwarding = false;
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
+  }
+
+  __DEV__ bool is_slot_allocated(ObjectIndexT index) {
+    return (free_bitmap & (1ULL << index)) == 0;
+  }
+
+  // Dummy area that may be overwritten by zero initialization.
+  // Data section begins after kBlockDataSectionOffset bytes.
+  // TODO: Do we need this on GPU? Can this be replaced when using ROSE?
+  char initialization_header_[kBlockDataSectionOffset - 3*sizeof(BitmapT)];
+
+  // Bitmap of free slots.
+  BitmapT free_bitmap;
+
+  // A copy of ~free_bitmap. Set before the beginning of an iteration. Does
+  // not contain dirty objects.
+  BitmapT iteration_bitmap;
+
+  // Padding to 8 bytes.
+  volatile TypeIndexT type_id;
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+  bool has_forwarding;
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
+};
+
+
+// A SOA block containing objects.
+// T: Base type of the block.
+// TypeId: Type ID of T.
+// N: Maximum number of objects in a block of type T.
+template<class T, TypeIndexT TypeId, ObjectIndexT N>
+class SoaBlock : public AbstractBlock {
+ public:
   static const int kN = N;
+  static_assert(N <= 64, "Assertion failed: N <= 64");
 
 #ifdef OPTION_DEFRAG
   // This is the number of allocated objects.
@@ -38,8 +74,7 @@ class SoaBlock {
       N == 64 ? (~0ULL) : ((1ULL << N) - 1);
 
   // Initializes a new block.
-  __DEV__ SoaBlock() {
-    assert(reinterpret_cast<uintptr_t>(this) % 64 == 0);   // Alignment.
+  __DEV__ SoaBlock() : AbstractBlock() {
     type_id = TypeId;
     __threadfence();  // Initialize bitmap after type_id is visible.
     free_bitmap = kBitmapInitState;
@@ -107,33 +142,9 @@ class SoaBlock {
     return N - __popcll(free_bitmap);
   }
 
-  __DEV__ bool is_slot_allocated(ObjectIndexT index) {
-    return (free_bitmap & (1ULL << index)) == 0;
-  }
-
-  template<BlockIndexT, class...> friend class SoaAllocator;
-
-  // Dummy area that may be overridden by zero initialization.
-  // Data section begins after kBlockDataSectionOffset bytes.
-  // TODO: Do we need this on GPU?
-  // TODO: Can this be replaced when using ROSE?
-  char initialization_header_[kBlockDataSectionOffset - 3*sizeof(BitmapT)];
-
-  // Bitmap of free slots.
-  BitmapT free_bitmap;
-
-  // A copy of ~free_bitmap. Set before the beginning of an iteration. Does
-  // not contain dirty objects.
-  BitmapT iteration_bitmap;
-
-  // Padding to 8 bytes.
-  volatile TypeIndexT type_id;
-
   // Size of data segment.
   static const int kStorageBytes =
       SoaClassHelper<T>::template BlockConfig<N>::kDataSegmentSize;
-
-  static_assert(N <= 64, "Assertion failed: N <= 64");
 
   // Data storage.
   char data_[kStorageBytes];
