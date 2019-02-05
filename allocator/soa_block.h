@@ -49,6 +49,23 @@ class AbstractBlock {
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
   bool has_forwarding;
+
+  __DEV__ void** forwarding_pointer_address(ObjectIndexT pos) const {
+    assert(has_forwarding);
+    char* block_base = const_cast<char*>(reinterpret_cast<const char*>(this));
+    // Address of SOA array.
+    auto* soa_array = reinterpret_cast<void**>(
+        block_base + kBlockDataSectionOffset);
+    return soa_array + pos;
+  }
+
+  __DEV__ void set_forwarding_pointer(ObjectIndexT pos, void* ptr) {
+    *forwarding_pointer_address(pos) = ptr;
+  }
+
+  __DEV__ void* get_forwarding_pointer(ObjectIndexT pos) const {
+    return *forwarding_pointer_address(pos);
+  }
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
 };
 
@@ -140,6 +157,10 @@ class SoaBlock : public AbstractBlock {
 
   __DEV__ ObjectIndexT DBG_allocated_bits() {
     return N - __popcll(free_bitmap);
+  }
+
+  __DEV__ TypeIndexT get_static_type() const {
+    return TypeId;
   }
 
   // Size of data segment.

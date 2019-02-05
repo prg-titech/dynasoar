@@ -1,3 +1,5 @@
+#include <curand_kernel.h>
+
 #include "allocator/soa_allocator.h"
 #include "allocator/soa_base.h"
 #include "allocator/allocator_handle.h"
@@ -9,7 +11,7 @@ class C1;
 class C2;
 
 // Declare allocator type.
-using AllocatorT = SoaAllocator<8*64*64*64*64, C1, C2>;
+using AllocatorT = SoaAllocator<16*64*64*64*64, C1, C2>;
 
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
@@ -28,7 +30,7 @@ class C1 : public SoaBase<AllocatorT> {
   SoaField<C1, 5> int5_;
   SoaField<C1, 6> int6_;
 
-  __device__ C1(int id) : id_(id) {}
+  __device__ C1(int id) : id_(id), other_(nullptr) {}
 };
 
 // 32 byte objects.
@@ -44,22 +46,40 @@ class C2 : public SoaBase<AllocatorT> {
   SoaField<C2, 5> int5_;
   SoaField<C2, 6> int6_;
 
-  __device__ C2(int id) : id_(id) {}
+  __device__ C2(int id) : id_(id), other_(nullptr) {}
 
   __device__ void maybe_destroy_object() {
     if (id_ % kRetainFactor != 0) {
+      if (other_ != nullptr) {
+        other_->other_ = nullptr;
+      }
+
       destroy(device_allocator, this);
     }
   }
 };
 
+__device__ C1* ptr_c1[kSize];
+__device__ C2* ptr_c2[kSize];
+
 __global__ void create_objects() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSize; i += blockDim.x * gridDim.x) {
-    C1* c1 = new(device_allocator) C1(i);
-    C2* c2 = new(device_allocator) C2(i);
-    c1->other_ = c2;
-    c2->other_ = c1;
+    ptr_c1[i] = new(device_allocator) C1(i);
+    ptr_c2[i] = new(device_allocator) C2(i);
+  }
+}
+
+__global__ void set_pointers() {
+  curandState_t random_state;
+  curand_init(42, threadIdx.x + blockDim.x*blockIdx.x,
+              0, &random_state);
+
+  for (int i = threadIdx.x + blockDim.x*blockIdx.x;
+       i < kSize; i += blockDim.x * gridDim.x) {
+    int other_idx = curand(&random_state) % kSize;
+    ptr_c2[i]->other_ = ptr_c1[other_idx];
+    ptr_c1[other_idx]->other_ = ptr_c2[i];
   }
 }
 
@@ -72,6 +92,9 @@ int main(int /*argc*/, char** /*argv*/) {
 
   // Create objects.
   create_objects<<<512, 512>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  set_pointers<<<512, 512>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   // Destroy some objects.

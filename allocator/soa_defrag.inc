@@ -51,7 +51,9 @@ struct AllocatorWrapperDefrag {
       };
 
       __DEV__ static void iterate_rewrite_objects(AllocatorT* allocator) {
+#ifndef OPTION_DEFRAG_FORWARDING_POINTER
         allocator->template load_records_to_shared_mem<NumRecords>();
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
         const auto N_alloc =
             allocator->allocated_[kScanTypeIndex].scan_num_bits();
@@ -92,7 +94,9 @@ struct AllocatorWrapperDefrag {
           template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
                                    BlockT* block, ObjectIndexT object_id) {
+#ifndef OPTION_DEFRAG_FORWARDING_POINTER
             extern __shared__ DefragRecord<BlockBitmapT> records[];
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
             // Location of field value to be scanned/rewritten.
             auto* block_char_p = reinterpret_cast<char*>(block);
@@ -118,6 +122,23 @@ struct AllocatorWrapperDefrag {
             assert(block_base >= allocator->data_
                    && block_base < allocator->data_ + AllocatorT::kDataBufferSize);
             assert((block_base - allocator->data_) % AllocatorT::kBlockSizeBytes == 0);
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+            auto* source_block = reinterpret_cast<typename BlockHelper<DefragT>::BlockType*>(block_base);
+            if (source_block->has_forwarding) {
+              // Rewrite this pointer.
+              auto src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
+              bool valid_pointer = (source_block->allocation_bitmap() & (1ULL << src_obj_id)) != 0;
+
+              if (valid_pointer) {
+                auto* forwarding_ptr = reinterpret_cast<FieldType>(
+                    source_block->get_forwarding_pointer(src_obj_id));
+                assert(forwarding_ptr->get_type() == scan_value->get_type());
+
+                *scan_location = forwarding_ptr;
+              }
+            }
+#else
             auto scan_block_idx = (block_base - allocator->data_)
                 / AllocatorT::kBlockSizeBytes;
             assert(scan_block_idx < AllocatorT::N);
@@ -211,6 +232,7 @@ struct AllocatorWrapperDefrag {
               assert((loc_block->free_bitmap & (1ULL << target_obj_id)) == 0);
 #endif  // NDEBUG
             }
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
           }
         };
 
@@ -258,7 +280,13 @@ struct AllocatorWrapperDefrag {
             kernel_iterate_rewrite_objects<ThisClass>
                 <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
                   kCudaBlockSize,
-                  NumRecords*sizeof(DefragRecord<BlockBitmapT>)>>>(allocator);
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+                  /* No shared memory */
+                  0
+#else
+                  NumRecords*sizeof(DefragRecord<BlockBitmapT>)
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
+                  >>>(allocator);
             gpuErrchk(cudaDeviceSynchronize());
           }
         }
@@ -339,6 +367,10 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_source_block(
 
         // Remove from leq_50 to avoid block from being selected as target.
         ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(bid));
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+        get_block<T>(bid)->has_forwarding = true;
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
       } else {
         atomicAdd(&num_leq_50_[BlockHelper<T>::kIndex], 1);
         defrag_records_.source_block_idx[tid] = kInvalidBlockIndex;
@@ -433,11 +465,22 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move() {
         int target_object_id = __ffsll(target_bitmap) - 1;
         assert(target_object_id >= 0);
 
+        auto* source_block = get_block<T>(source_block_idx);
+        auto* target_block = get_block<T>(target_block_idx);
+
         SoaClassHelper<T>::template dev_for_all<AllocatorWrapperDefrag<ThisAllocator>
             ::template SoaObjectCopier<T>::ObjectCopyHelper, true>(
-                reinterpret_cast<char*>(get_block<T>(source_block_idx)),
-                reinterpret_cast<char*>(get_block<T>(target_block_idx)),
+                reinterpret_cast<char*>(source_block),
+                reinterpret_cast<char*>(target_block),
                 source_object_id, target_object_id);
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+        // Store forwarding pointer.
+        auto* target_obj_ptr = target_block->make_pointer(target_object_id);
+        assert(target_obj_ptr->get_type() == BlockHelper<T>::kIndex);
+        assert(target_obj_ptr->get_type() == source_block->get_static_type());
+        source_block->set_forwarding_pointer(source_object_id, target_obj_ptr);
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
       }
     }
   }
