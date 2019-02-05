@@ -1,10 +1,13 @@
 #include <curand_kernel.h>
+#include <limits>
 
 #include "allocator/soa_allocator.h"
 #include "allocator/soa_base.h"
 #include "allocator/allocator_handle.h"
 
 #include "configuration.h"
+
+static const int kIntMax = std::numeric_limits<int>::max();
 
 // Pre-declare all classes.
 class C1;
@@ -24,13 +27,14 @@ class C1 : public SoaBase<AllocatorT> {
 
   SoaField<C1, 0> other_;
   SoaField<C1, 1> id_;
-  SoaField<C1, 2> int2_;
+  SoaField<C1, 2> rand_num_;
   SoaField<C1, 3> int3_;
   SoaField<C1, 4> int4_;
   SoaField<C1, 5> int5_;
   SoaField<C1, 6> int6_;
 
-  __device__ C1(int id) : id_(id), other_(nullptr) {}
+  __device__ C1(int id, int rand_num)
+      : id_(id), rand_num_(rand_num), other_(nullptr) {}
 };
 
 // 32 byte objects.
@@ -40,16 +44,17 @@ class C2 : public SoaBase<AllocatorT> {
 
   SoaField<C2, 0> other_;
   SoaField<C2, 1> id_;
-  SoaField<C2, 2> int2_;
+  SoaField<C2, 2> rand_num_;
   SoaField<C2, 3> int3_;
   SoaField<C2, 4> int4_;
   SoaField<C2, 5> int5_;
   SoaField<C2, 6> int6_;
 
-  __device__ C2(int id) : id_(id), other_(nullptr) {}
+  __device__ C2(int id, int rand_num)
+      : id_(id), rand_num_(rand_num), other_(nullptr) {}
 
   __device__ void maybe_destroy_object() {
-    if (id_ % kRetainFactor != 0) {
+    if (rand_num_ % kRetainFactor == 0) {
       if (other_ != nullptr) {
         other_->other_ = nullptr;
       }
@@ -63,10 +68,14 @@ __device__ C1* ptr_c1[kSize];
 __device__ C2* ptr_c2[kSize];
 
 __global__ void create_objects() {
+  curandState_t random_state;
+  curand_init(43, threadIdx.x + blockDim.x*blockIdx.x,
+              0, &random_state);
+
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSize; i += blockDim.x * gridDim.x) {
-    ptr_c1[i] = new(device_allocator) C1(i);
-    ptr_c2[i] = new(device_allocator) C2(i);
+    ptr_c1[i] = new(device_allocator) C1(i, curand(&random_state) % kIntMax);
+    ptr_c2[i] = new(device_allocator) C2(i, curand(&random_state) % kIntMax);
   }
 }
 
