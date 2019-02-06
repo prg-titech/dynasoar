@@ -566,6 +566,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>
 long unsigned int bench_init_leq_time = 0;
 long unsigned int bench_defrag_move_time = 0;
 long unsigned int bench_rewrite_time = 0;
+long unsigned int bench_total_defrag_time = 0;
 
 // Should be invoked from host side. Perform defragmentation only if there are
 // enough blocks so that at least min_num_compactions many defragmentation
@@ -575,6 +576,8 @@ template<typename T, int NumRecords>
 void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions) {
   static_assert(NumRecords <= kMaxDefragRecords, "Too many records requested.");
   assert(min_num_compactions >= 1);
+
+  auto time_0 = std::chrono::system_clock::now();
 
   // Determine number of records.
   auto num_leq_blocks =
@@ -657,6 +660,10 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
            num_leq_blocks_before, num_leq_blocks, num_leq_blocks_before - num_leq_blocks);
 #endif  // NDEBUG
   }
+
+  auto time_5 = std::chrono::system_clock::now();
+  bench_total_defrag_time += std::chrono::duration_cast<std::chrono::microseconds>(
+      time_5 - time_0).count();
 }
 
 template<BlockIndexT N_Objects, class... Types>
@@ -667,8 +674,9 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
 
 template<BlockIndexT N_Objects, class... Types>
 void SoaAllocator<N_Objects, Types...>::DBG_print_defrag_time() {
-  printf("%lu, %lu, %lu\n",
+  printf("%lu, %lu, %lu, %lu\n",
          bench_init_leq_time / 1000,
          bench_defrag_move_time / 1000,
-         bench_rewrite_time / 1000);
+         bench_rewrite_time / 1000,
+         bench_total_defrag_time / 1000);
 }
