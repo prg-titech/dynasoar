@@ -1,5 +1,7 @@
 #include <curand_kernel.h>
 #include <limits>
+#include <algorithm>
+#include <random>
 
 #include "allocator/soa_allocator.h"
 #include "allocator/soa_base.h"
@@ -20,6 +22,8 @@ using AllocatorT = SoaAllocator<16*64*64*64*64, C1, C2>;
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
+__device__ unsigned long long int d_checksum;
+
 // 32 byte objects.
 class C1 : public SoaBase<AllocatorT> {
  public:
@@ -35,6 +39,8 @@ class C1 : public SoaBase<AllocatorT> {
 
   __device__ C1(int id, int rand_num)
       : id_(id), rand_num_(rand_num), other_(nullptr) {}
+
+  __device__ void compute_checksum();
 };
 
 // 32 byte objects.
@@ -54,7 +60,7 @@ class C2 : public SoaBase<AllocatorT> {
       : id_(id), rand_num_(rand_num), other_(nullptr) {}
 
   __device__ void maybe_destroy_object() {
-    if (rand_num_ % kRetainFactor == 0) {
+    if (rand_num_ % kDeleteFactor == 0) {
       if (other_ != nullptr) {
         other_->other_ = nullptr;
       }
@@ -64,10 +70,13 @@ class C2 : public SoaBase<AllocatorT> {
   }
 };
 
-__device__ C1* ptr_c1[kSize];
-__device__ C2* ptr_c2[kSize];
+__device__ void C1::compute_checksum() {
+  if (other_ != nullptr) {
+    atomicAdd(&d_checksum,  (id_ * other_->id_) % 97);
+  }
+}
 
-__global__ void create_objects() {
+__global__ void kernel_create_objects(C1** ptr_c1, C2** ptr_c2) {
   curandState_t random_state;
   curand_init(43, threadIdx.x + blockDim.x*blockIdx.x,
               0, &random_state);
@@ -79,17 +88,34 @@ __global__ void create_objects() {
   }
 }
 
-__global__ void set_pointers() {
+size_t h_assoc[kSize];
+
+__global__ void kernel_set_pointers(C1** ptr_c1, C2** ptr_c2,
+                                    size_t* d_assoc) {
   curandState_t random_state;
   curand_init(42, threadIdx.x + blockDim.x*blockIdx.x,
               0, &random_state);
 
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSize; i += blockDim.x * gridDim.x) {
-    int other_idx = curand(&random_state) % kSize;
-    ptr_c2[i]->other_ = ptr_c1[other_idx];
-    ptr_c1[other_idx]->other_ = ptr_c2[i];
+    ptr_c2[i]->other_ = ptr_c1[d_assoc[i]];
+    ptr_c1[d_assoc[i]]->other_ = ptr_c2[i];
   }
+}
+
+void set_pointers(C1** ptr_c1, C2** ptr_c2) {
+  for (size_t i = 0; i < kSize; ++i) {
+    h_assoc[i] = i;
+  }
+  shuffle(h_assoc, h_assoc + kSize, std::default_random_engine(42));
+
+  size_t* d_assoc;
+  cudaMalloc(&d_assoc, sizeof(size_t)*kSize);
+  cudaMemcpy(d_assoc, h_assoc, sizeof(size_t)*kSize,
+             cudaMemcpyHostToDevice);
+
+  kernel_set_pointers<<<512, 512>>>(ptr_c1, ptr_c2, d_assoc);
+  gpuErrchk(cudaDeviceSynchronize());
 }
 
 int main(int /*argc*/, char** /*argv*/) {
@@ -99,12 +125,16 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
 
+  C1** d_ptr_c1;
+  C2** d_ptr_c2;
+  gpuErrchk(cudaMalloc(&d_ptr_c1, sizeof(C1*)*kSize));
+  gpuErrchk(cudaMalloc(&d_ptr_c2, sizeof(C2*)*kSize));
+
   // Create objects.
-  create_objects<<<512, 512>>>();
+  kernel_create_objects<<<512, 512>>>(d_ptr_c1, d_ptr_c2);
   gpuErrchk(cudaDeviceSynchronize());
 
-  set_pointers<<<512, 512>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  set_pointers(d_ptr_c1, d_ptr_c2);
 
   // Destroy some objects.
   allocator_handle->parallel_do<C2, &C2::maybe_destroy_object>();
@@ -126,6 +156,18 @@ int main(int /*argc*/, char** /*argv*/) {
 #ifdef OPTION_DEFRAG
   allocator_handle->DBG_print_defrag_time();
 #endif  // OPTION_DEFRAG
+
+  // Compute checksum.
+  unsigned long long int h_checksum = 0;
+  cudaMemcpyToSymbol(d_checksum, &h_checksum, sizeof(unsigned long long int),
+                     0, cudaMemcpyHostToDevice);
+
+  allocator_handle->parallel_do<C1, &C1::compute_checksum>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cudaMemcpyFromSymbol(&h_checksum, d_checksum, sizeof(unsigned long long int),
+                       0, cudaMemcpyDeviceToHost);
+  printf("Checksum: %llu\n", h_checksum);
 
   printf("%i\n", total_time);
 }
