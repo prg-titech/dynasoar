@@ -5,9 +5,9 @@
 #define OPTION_DEFRAG
 
 // Store defragmentation records in global memory.
-//#define OPTION_DEFRAG_USE_GLOBAL
+#define OPTION_DEFRAG_USE_GLOBAL
 
-//#define OPTION_DEFRAG_FORWARDING_POINTER
+#define OPTION_DEFRAG_FORWARDING_POINTER
 
 // Defragmentation factor.
 // 1 -- 50% -- Merge 1 block into 1 block

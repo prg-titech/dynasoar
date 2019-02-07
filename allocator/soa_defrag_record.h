@@ -45,7 +45,10 @@ struct SoaDefragRecords {
 
 static const int kSharedMemorySize = 48*1024;
 
-#ifdef OPTION_DEFRAG_USE_GLOBAL
+#if defined(OPTION_DEFRAG_FORWARDING_POINTER)
+// Shared memory is not used.
+static const int kMaxDefragRecords = 64*64*64;
+#elif defined(OPTION_DEFRAG_USE_GLOBAL)
 // Store only source_block_idx in shared memory.
 static const int kMaxDefragRecords = kSharedMemorySize / sizeof(BlockIndexT);
 #else
