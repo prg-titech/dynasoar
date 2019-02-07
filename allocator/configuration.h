@@ -16,6 +16,9 @@
 // leq_threshold = kDefragFactor / (kDefragFactor + 1)
 static const int kDefragFactor = 1;
 
+// Leave at least that many block, i.e., do not defragment too much.
+static const int kMinDefragRetainBlocks = 32;
+
 // Data section begins after 128 bytes. This leaves enough space for bitmaps
 // and other data structures in blocks.
 static const int kBlockDataSectionOffset = 64;
