@@ -473,18 +473,76 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_move() {
                 reinterpret_cast<char*>(source_block),
                 reinterpret_cast<char*>(target_block),
                 source_object_id, target_object_id);
+      }
+    }
+  }
+}
+
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
+// TODO: Remove code duplication.
+template<BlockIndexT N_Objects, class... Types>
+template<typename T, int NumRecords>
+__DEV__ void SoaAllocator<N_Objects, Types...>::defrag_store_forwarding_ptr() {
+  // Use 64 threads per SOA block.
+  assert(blockDim.x % 64 == 0);
+
+  for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
+       tid < 64 * NumRecords; tid += blockDim.x * gridDim.x) {
+    const int source_pos = tid % 64;
+    const int record_id = tid / 64;
+    const auto source_block_idx = defrag_records_.source_block_idx[record_id];
+
+    if (source_block_idx != kInvalidBlockIndex) {
+      BlockBitmapT source_bitmap = defrag_records_.source_bitmap[record_id];
+
+      // This thread should move the source_pos-th object (if it exists).
+      if (source_pos < __popcll(source_bitmap)) {
+        // Determine positition in source bitmap: Find index of source_pos-th set bit.
+        for (int i = 0; i < source_pos; ++i) {
+          source_bitmap &= source_bitmap - 1;
+        }
+        int source_object_id = __ffsll(source_bitmap) - 1;
+        assert(source_object_id >= 0);
+
+        // Determine target block and target position.
+        int target_pos = source_pos;
+        auto target_block_idx = kInvalidBlockIndex;
+        BlockBitmapT target_bitmap;
+
+        for (int i = 0; i < kDefragFactor; ++i) {
+          target_bitmap = defrag_records_.target_bitmap[i][record_id];
+          const auto num_slots = __popcll(target_bitmap);
+          if (target_pos < num_slots) {
+            // This object goes in here.
+            target_block_idx = defrag_records_.target_block_idx[i][record_id];
+            break;
+          } else {
+            target_pos -= num_slots;
+          }
+        }
+        assert(target_block_idx != kInvalidBlockIndex);
+
+        // Determine target object ID: Find index of target_pos-th set bit.
+        for (int i = 0; i < target_pos; ++i) {
+          target_bitmap &= target_bitmap - 1;
+        }
+        int target_object_id = __ffsll(target_bitmap) - 1;
+        assert(target_object_id >= 0);
+
+        auto* source_block = get_block<T>(source_block_idx);
+        auto* target_block = get_block<T>(target_block_idx);
+
         // Store forwarding pointer.
         auto* target_obj_ptr = target_block->make_pointer(target_object_id);
         assert(target_obj_ptr->get_type() == BlockHelper<T>::kIndex);
         assert(target_obj_ptr->get_type() == source_block->get_static_type());
         source_block->set_forwarding_pointer(source_object_id, target_obj_ptr);
-#endif  // OPTION_DEFRAG_FORWARDING_POINTER
       }
     }
   }
 }
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
 
 template<BlockIndexT N_Objects, class... Types>
@@ -626,6 +684,14 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
         &ThisAllocator::defrag_move<T, NumRecords>>
         <<<(num_move_threads + 256 - 1) / 256, 256>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+    member_func_kernel<
+        ThisAllocator,
+        &ThisAllocator::defrag_store_forwarding_ptr<T, NumRecords>>
+        <<<(num_move_threads + 256 - 1) / 256, 256>>>(this);
+    gpuErrchk(cudaDeviceSynchronize());
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
     // Update block states.
     member_func_kernel<

@@ -47,7 +47,12 @@ class SoaAllocator {
   __DEV__ void defrag_move();
 
   template<typename T, int NumRecords>
+  __DEV__ void defrag_store_forwarding_ptr();
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+  template<typename T, int NumRecords>
   __DEV__ void defrag_update_block_state();
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
   template<int NumRecords>
   __DEV__ void load_records_to_shared_mem();
