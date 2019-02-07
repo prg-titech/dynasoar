@@ -586,8 +586,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
   for (bool first_iteration = true; ; first_iteration = false) {
     // E.g.: n = 3: Retain 3/4 = 75% of blocks. Round up.
     const int max_num_source_blocks =
-        num_leq_blocks / (kDefragFactor + 1)
-        - kMinDefragRetainBlocks;
+        (num_leq_blocks - kMinDefragRetainBlocks) / (kDefragFactor + 1);
     if (max_num_source_blocks <= min_num_compactions) break;
 
     const int min_remaining_records = num_leq_blocks - max_num_source_blocks;
