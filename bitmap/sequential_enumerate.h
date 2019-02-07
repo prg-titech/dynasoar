@@ -84,9 +84,9 @@ struct SequentialEnumerator {
 template<typename BitmapT>
 using BitmapEnumerator = SequentialEnumerator<BitmapT, BitmapT::kHasNested, 0>;
 
-template<typename SizeT, SizeT N, typename ContainerT>
+template<typename SizeT, SizeT N, typename ContainerT, int ScanType>
 template<typename F, typename... Args>
-__DEV__ void Bitmap<SizeT, N, ContainerT>::enumerate(F func, Args... args) {
+__DEV__ void Bitmap<SizeT, N, ContainerT, ScanType>::enumerate(F func, Args... args) {
   BitmapEnumerator<Bitmap<SizeT, N, ContainerT>>
       ::template HandlerWrapper<Args...>::enumerate(this, func, args...);
 }

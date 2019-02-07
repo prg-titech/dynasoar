@@ -81,7 +81,7 @@ struct ParallelExecutor {
       // Determine number of CUDA threads.
       auto* d_num_soa_blocks_ptr =
           &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
-              .data_.enumeration_result_size;
+              .data_.scan_data.enumeration_result_size;
       auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
       if (num_soa_blocks > 0) {
@@ -123,7 +123,7 @@ struct ParallelExecutor {
         // Determine number of CUDA threads.
         auto* d_num_soa_blocks_ptr =
             &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
-                .data_.enumeration_result_size;
+                .data_.scan_data.enumeration_result_size;
         auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
         if (num_soa_blocks > 0) {

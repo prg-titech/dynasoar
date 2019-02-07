@@ -4,12 +4,9 @@
 #include <assert.h>
 #include <limits>
 #include <stdint.h>
+#include <cub/cub.cuh>
 
 #include "bitmap/util.h"
-
-#ifdef SCAN_CUB
-#include <cub/cub.cuh>
-#endif  // SCAN_CUB
 
 #ifndef NDEBUG
 static const int kMaxRetry = 10000000;
@@ -22,9 +19,47 @@ static const int kMaxRetry = 10000000;
 #define ASSERT_SUCCESS(expr) expr;
 #endif  // NDEBUG
 
+static const int kCubScan = 0;
+static const int kAtomicScan = 1;
+
+static const int kNumBlocksAtomicAdd = 256;
+
+template<typename SizeT, int NumContainers, int Bitsize>
+struct CubScanData {
+  // Buffers for parallel enumeration.
+  SizeT enumeration_result_buffer[NumContainers*Bitsize];
+  SizeT enumeration_result_size;
+  SizeT enumeration_base_buffer[NumContainers*Bitsize];
+  SizeT enumeration_id_buffer[NumContainers*Bitsize];
+  SizeT enumeration_cub_temp[3*NumContainers*Bitsize];
+  SizeT enumeration_cub_output[NumContainers*Bitsize];
+};
+
+template<typename SizeT, int NumContainers, int Bitsize>
+struct AtomicScanData {
+  // Buffers for parallel enumeration.
+  SizeT enumeration_result_buffer[NumContainers*Bitsize];
+  SizeT enumeration_result_size;
+};
+
+template<int Type>
+struct ScanData;
+
+template<>
+struct ScanData<kCubScan> {
+  template<typename SizeT, int NumContainers, int Bitsize>
+  using type = CubScanData<SizeT, NumContainers, Bitsize>;
+};
+
+template<>
+struct ScanData<kAtomicScan> {
+  template<typename SizeT, int NumContainers, int Bitsize>
+  using type = AtomicScanData<SizeT, NumContainers, Bitsize>;
+};
 
 // TODO: Only works with ContainerT = unsigned long long int.
-template<typename SizeT, SizeT N, typename ContainerT = unsigned long long int>
+template<typename SizeT, SizeT N, typename ContainerT = unsigned long long int,
+         int ScanType = kAtomicScan>
 class Bitmap {
  public:
   static const SizeT kIndexError = std::numeric_limits<SizeT>::max();
@@ -183,7 +218,7 @@ class Bitmap {
   }
 
   // Copy other bitmap.
-  __DEV__ void initialize(const Bitmap<SizeT, N, ContainerT>& other) {
+  __DEV__ void initialize(const Bitmap<SizeT, N, ContainerT, ScanType>& other) {
     for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
          i < kNumContainers;
          i += blockDim.x*gridDim.x) {
@@ -235,12 +270,12 @@ class Bitmap {
 
   // May only be called after scan.
   __DEV__ SizeT scan_num_bits() const {
-    return data_.enumeration_result_size;
+    return data_.scan_data.enumeration_result_size;
   }
 
   // Returns the index of the pos-th set bit.
   __DEV__ SizeT scan_get_index(SizeT pos) const {
-    return data_.enumeration_result_buffer[pos];
+    return data_.scan_data.enumeration_result_buffer[pos];
   }
 
   // Nested bitmap data structure.
@@ -256,12 +291,11 @@ class Bitmap {
 
     ContainerT containers[NumContainers];
 
-    // Buffers for parallel enumeration (prefix sum).
-    SizeT enumeration_result_buffer[NumContainers*kBitsize];
-    SizeT enumeration_result_size;
+    // Buffers for parallel enumeration.
+    typename ScanData<ScanType>::type<SizeT, NumContainers, kBitsize> scan_data;
 
     // Containers that store the bits.
-    using BitmapT = Bitmap<SizeT, NumContainers, ContainerT>;
+    using BitmapT = Bitmap<SizeT, NumContainers, ContainerT, ScanType>;
     BitmapT nested;
 
     static const int kLevels = 1 + BitmapT::kLevels;
@@ -301,15 +335,135 @@ class Bitmap {
       nested.initialize(allocated);
     }
 
-#ifdef SCAN_CUB
-    #include "bitmap/scan_cub.inc"
-    // Pre-processing step for parallel enumeration: Prefix sum (scan).
-    void scan() { run_cub_scan(); }
-#else
-    #include "bitmap/scan_atomic.inc"
-    // Pre-processing step for parallel enumeration: Based on atomic ops.
-    void scan() { run_atomic_add_scan(); }
-#endif  // CUB_SCAN
+    template<int S = ScanType>
+    __DEV__ typename std::enable_if<S == kCubScan, void>::type
+    set_result_size() {
+      SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
+      // Base buffer contains prefix sum.
+      SizeT result_size = scan_data.enumeration_cub_output[
+          num_selected*kBitsize - 1];
+      scan_data.enumeration_result_size = result_size;
+    }
+
+    // TODO: Run with num_selected threads, then we can remove the loop.
+    template<int S = ScanType>
+    __DEV__ typename std::enable_if<S == kCubScan, void>::type
+    pre_scan() {
+      SizeT* selected = nested.data_.scan_data.enumeration_result_buffer;
+      SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
+
+      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
+           sid < num_selected; sid += blockDim.x * gridDim.x) {
+        SizeT container_id = selected[sid];
+        auto value = containers[container_id];
+        for (int i = 0; i < kBitsize; ++i) {
+          // Write "1" if allocated, "0" otherwise.
+          bool bit_selected = value & (static_cast<ContainerT>(1) << i);
+          scan_data.enumeration_base_buffer[sid*kBitsize + i] = bit_selected;
+          if (bit_selected) {
+            scan_data.enumeration_id_buffer[sid*kBitsize + i] =
+                kBitsize*container_id + i;
+          }
+        }
+      }
+    }
+
+    // Run with num_selected threads.
+    // Assumption: enumeration_base_buffer contains exclusive prefix sum.
+    template<int S = ScanType>
+    __DEV__ typename std::enable_if<S == kCubScan, void>::type
+    post_scan() {
+      SizeT* selected = nested.data_.scan_data.enumeration_result_buffer;
+      SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
+
+      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
+           sid < num_selected; sid += blockDim.x * gridDim.x) {
+        SizeT container_id = selected[sid];
+        auto value = containers[container_id];
+        for (int i = 0; i < kBitsize; ++i) {
+          // Write "1" if allocated, "0" otherwise.
+          bool bit_selected = value & (static_cast<ContainerT>(1) << i);
+          if (bit_selected) {
+            // Minus one because scan operation is inclusive.
+            scan_data.enumeration_result_buffer[
+                scan_data.enumeration_cub_output[sid*kBitsize + i] - 1] =
+                    scan_data.enumeration_id_buffer[sid*kBitsize + i];
+          }
+        }
+      }
+    }
+
+    template<int S = ScanType>
+    typename std::enable_if<S == kCubScan, void>::type
+    scan() {  
+      nested.scan();
+
+      SizeT num_selected = read_from_device<SizeT>(
+          &nested.data_.scan_data.enumeration_result_size);
+      member_func_kernel<ThisClass, &ThisClass::pre_scan>
+          <<<num_selected/256+1, 256>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+
+      size_t temp_size = 3*NumContainers*kBitsize;
+      cub::DeviceScan::InclusiveSum(scan_data.enumeration_cub_temp,
+                                    temp_size,
+                                    scan_data.enumeration_base_buffer,
+                                    scan_data.enumeration_cub_output,
+                                    num_selected*kBitsize);
+      member_func_kernel<ThisClass, &ThisClass::post_scan>
+          <<<num_selected/256+1, 256>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+      member_func_kernel<ThisClass, &ThisClass::set_result_size><<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
+
+    template<int S = ScanType>
+    __DEV__ typename std::enable_if<S == kAtomicScan, void>::type
+    atomic_add_scan_init() {
+      scan_data.enumeration_result_size = 0;
+    }
+
+    template<int S = ScanType>
+    __DEV__ typename std::enable_if<S == kAtomicScan, void>::type
+    atomic_add_scan() {
+      SizeT* selected = nested.data_.scan_data.enumeration_result_buffer;
+      SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
+      //printf("num_selected=%i\n", (int) num_selected);
+
+      for (int sid = threadIdx.x + blockIdx.x * blockDim.x;
+           sid < num_selected; sid += blockDim.x * gridDim.x) {
+        SizeT container_id = selected[sid];
+        auto value = containers[container_id];
+        int num_bits = __popcll(value);
+
+        auto before = atomicAdd(
+            reinterpret_cast<unsigned int*>(&scan_data.enumeration_result_size),
+            num_bits);
+
+        for (int i = 0; i < num_bits; ++i) {
+          int next_bit = __ffsll(value) - 1;
+          assert(next_bit >= 0);
+          scan_data.enumeration_result_buffer[before + i] =
+              container_id*kBitsize + next_bit;
+
+          // Advance to next bit.
+          value &= value - 1;
+        }
+      }      
+    }
+
+    template<int S = ScanType>
+    typename std::enable_if<S == kAtomicScan, void>::type scan() {
+      nested.scan();
+
+      SizeT num_selected = read_from_device<SizeT>(&nested.data_.scan_data.enumeration_result_size);
+      member_func_kernel<ThisClass, &ThisClass::atomic_add_scan_init><<<1, 1>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+      member_func_kernel<ThisClass, &ThisClass::atomic_add_scan>
+          <<<(num_selected + kNumBlocksAtomicAdd - 1)/kNumBlocksAtomicAdd,
+             kNumBlocksAtomicAdd>>>(this);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
   };
 
   // Bitmap data structure without a nested bitmap.
@@ -327,9 +481,8 @@ class Bitmap {
     // Bitmaps without a nested bitmap have exactly one container.
     ContainerT containers[NumContainers];
 
-    // Buffers for parallel enumeration (prefix sum).
-    SizeT enumeration_result_buffer[NumContainers*kBitsize];
-    SizeT enumeration_result_size;
+    // Buffers for parallel enumeration.
+    typename ScanData<kAtomicScan>::type<SizeT, NumContainers, kBitsize> scan_data;
 
     __DEV__ SizeT DBG_count_num_ones() {
       return __popcll(containers[0]);
@@ -351,24 +504,20 @@ class Bitmap {
 
     __DEV__ void nested_initialize(bool allocated) { assert(false); }
 
-    __DEV__ void atomic_add_scan_init() {
-      enumeration_result_size = 0;
-    }
-
     __DEV__ void trivial_scan() {
       assert(blockDim.x == 64 && gridDim.x == 1);
+      auto val = containers[0];
 
-      if (containers[0] & (kOne << threadIdx.x)) {
-        enumeration_result_buffer[atomicAdd(&enumeration_result_size, 1)]
-            = threadIdx.x;
+      if (val & (kOne << threadIdx.x)) {
+        // Count number of bits before threadIdx.x.
+        int pos = __popcll(val & ((1ULL << threadIdx.x) - 1));
+        scan_data.enumeration_result_buffer[pos] = threadIdx.x;
       }
+
+      scan_data.enumeration_result_size = __popcll(val);
     }
 
     void scan() {
-      member_func_kernel<ThisClass, &ThisClass::atomic_add_scan_init>
-          <<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-
       // Does not perform a prefix scan but computes the result directly.
       member_func_kernel<ThisClass, &ThisClass::trivial_scan>
           <<<1, 64>>>(this);
@@ -442,7 +591,7 @@ class Bitmap {
   static const int kLevels = BitmapDataT::kLevels;
 
   // Type of outer bitmap.
-  using OuterBitmapT = Bitmap<SizeT, N*kBitsize, ContainerT>;
+  using OuterBitmapT = Bitmap<SizeT, N*kBitsize, ContainerT, ScanType>;
 };
 
 #include "bitmap/sequential_enumerate.h"

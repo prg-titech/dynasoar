@@ -271,7 +271,7 @@ struct AllocatorWrapperDefrag {
 
             auto* d_num_soa_blocks_ptr =
                 &allocator->allocated_[kScanTypeIndex]
-                    .data_.enumeration_result_size;
+                    .data_.scan_data.enumeration_result_size;
             num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
           }
 
