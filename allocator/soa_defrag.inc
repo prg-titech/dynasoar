@@ -668,6 +668,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
       if (num_target_slots <= remaining_objs) {
         // This target block is now full.
         ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].deallocate<true>(target_block_idx));
+        ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(target_block_idx));
         atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
         get_block<T>(target_block_idx)->free_bitmap = 0ULL;
         // leq_50 is already cleared.
@@ -676,8 +677,8 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
         int num_target_after = BlockHelper<T>::kSize - num_target_slots + remaining_objs;
         if (num_target_after <= BlockHelper<T>::kLeq50Threshold) {
           // This block is still leq_50.
-          ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].allocate<true>(target_block_idx));
         } else {
+          ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(target_block_idx));
           atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
         }
 
