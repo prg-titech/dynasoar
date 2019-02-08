@@ -43,13 +43,28 @@ class SoaAllocator {
   template<typename T, int NumRecords>
   __DEV__ void defrag_choose_target_blocks();
 
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+  template<typename T>
+  __DEV__ void defrag_update_block_state();
+
+  template<typename T>
+  __DEV__ void defrag_clear_source_leq_50();
+
+  template<typename T>
+  __DEV__ BlockIndexT get_num_defrag_compactions();
+
+  template<typename T>
+  __DEV__ BlockIndexT get_defrag_candidate_index(int did, int idx);
+
+  template<typename T>
+  __DEV__ void defrag_move();
+
+  template<typename T>
+  __DEV__ void defrag_store_forwarding_ptr();
+#else
   template<typename T, int NumRecords>
   __DEV__ void defrag_move();
 
-  template<typename T, int NumRecords>
-  __DEV__ void defrag_store_forwarding_ptr();
-
-#ifdef OPTION_DEFRAG_FORWARDING_POINTER
   template<typename T, int NumRecords>
   __DEV__ void defrag_update_block_state();
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
@@ -624,7 +639,8 @@ class SoaAllocator {
 
 #ifdef OPTION_DEFRAG
   // Bit set if block is <= 50% full and active.
-  Bitmap<BlockIndexT, N> leq_50_[kNumTypes];
+  // kCubScan preserves order of bits during scan.
+  Bitmap<BlockIndexT, N, unsigned long long int, kCubScan> leq_50_[kNumTypes];
   BlockIndexT num_leq_50_[kNumTypes];
 
   // Temporary storage for defragmentation records.

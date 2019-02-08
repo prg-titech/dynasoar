@@ -77,12 +77,6 @@ class SoaBase {
   __DEV__ void set_forwarding_pointer(SoaBase<AllocatorT>* ptr) {
     *forwarding_pointer_address() = ptr;
   }
-
-  __DEV__ bool has_forwarding_pointer() const {
-    char* block_base = PointerHelper::block_base_from_obj_ptr(this);
-    auto* block = reinterpret_cast<AbstractBlock*>(block_base);
-    return block->has_forwarding;
-  }
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
 };
 

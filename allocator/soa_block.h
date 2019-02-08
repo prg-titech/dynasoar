@@ -22,10 +22,6 @@ class AbstractBlock {
 
   __DEV__ AbstractBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % 64 == 0);   // Alignment.
-
-#ifdef OPTION_DEFRAG_FORWARDING_POINTER
-    has_forwarding = false;
-#endif  // OPTION_DEFRAG_FORWARDING_POINTER
   }
 
   __DEV__ bool is_slot_allocated(ObjectIndexT index) {
@@ -48,10 +44,7 @@ class AbstractBlock {
   volatile TypeIndexT type_id;
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
-  bool has_forwarding;
-
   __DEV__ void** forwarding_pointer_address(ObjectIndexT pos) const {
-    assert(has_forwarding);
     char* block_base = const_cast<char*>(reinterpret_cast<const char*>(this));
     // Address of SOA array.
     auto* soa_array = reinterpret_cast<void**>(
