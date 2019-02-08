@@ -419,7 +419,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
 template<BlockIndexT N_Objects, class... Types>
 template<typename T>
 __DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::get_num_defrag_compactions() {
-  return leq_50_[BlockHelper<T>::kIndex].scan_num_bits()
+  return (leq_50_[BlockHelper<T>::kIndex].scan_num_bits() - kMinDefragRetainBlocks)
       / (kDefragFactor + 1);
 }
 
@@ -804,6 +804,11 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
         (num_leq_blocks - kMinDefragRetainBlocks) / (kDefragFactor + 1);
     if (max_num_source_blocks <= min_num_compactions) break;
 
+    auto time_1 = std::chrono::system_clock::now();
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+    leq_50_[BlockHelper<T>::kIndex].scan();
+#else
     const int min_remaining_records = num_leq_blocks - max_num_source_blocks;
     assert(min_remaining_records >= (num_leq_blocks - min_remaining_records)
            * kDefragFactor);
@@ -813,11 +818,6 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
            (int) min_remaining_records, (int) num_leq_blocks);
 #endif  // NDEBUG
 
-    auto time_1 = std::chrono::system_clock::now();
-
-#ifdef OPTION_DEFRAG_FORWARDING_POINTER
-    leq_50_[BlockHelper<T>::kIndex].scan();
-#else
     // TODO: Assign one warp per defrag record.
     // Step 1: Choose source blocks.
     member_func_kernel<
@@ -838,8 +838,13 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     bench_init_leq_time += std::chrono::duration_cast<std::chrono::microseconds>(
         time_2 - time_1).count();
 
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
     // Move objects. 64 threads per block.
+    const int num_move_threads = 64*max_num_source_blocks;
+#else
     const int num_move_threads = 64*NumRecords;
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
+
     member_func_kernel<
         ThisAllocator,
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
@@ -863,10 +868,11 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
         ThisAllocator,
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
         &ThisAllocator::defrag_update_block_state<T>>
+        <<<512, (max_num_source_blocks + 512 - 1) / 512>>>(this);
 #else
         &ThisAllocator::defrag_update_block_state<T, NumRecords>>
-#endif  // OPTION_DEFRAG_FORWARDING_POINTER
         <<<512, (NumRecords + 512 - 1) / 512>>>(this);
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
     gpuErrchk(cudaDeviceSynchronize());
 
     auto time_3 = std::chrono::system_clock::now();
@@ -884,7 +890,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     member_func_kernel<
         ThisAllocator,
         &ThisAllocator::template defrag_clear_source_leq_50<T>>
-        <<<512, (NumRecords + 512 - 1) / 512>>>(this);
+        <<<512, (max_num_source_blocks + 512 - 1) / 512>>>(this);
     gpuErrchk(cudaDeviceSynchronize());
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
