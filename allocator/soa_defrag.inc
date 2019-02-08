@@ -415,6 +415,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
   }
 }
 
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
 template<BlockIndexT N_Objects, class... Types>
 template<typename T>
 __DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::get_num_defrag_compactions() {
@@ -432,8 +433,6 @@ __DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::get_defrag_candidate_inde
   return leq_50_[BlockHelper<T>::kIndex].scan_get_index(did*num_blocks + idx);
 }
 
-
-#ifdef OPTION_DEFRAG_FORWARDING_POINTER
 template<BlockIndexT N_Objects, class... Types>
 template<typename T>
 __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_clear_source_leq_50() {
