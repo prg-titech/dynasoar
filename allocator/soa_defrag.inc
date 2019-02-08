@@ -61,9 +61,9 @@ struct AllocatorWrapperDefrag {
       __DEV__ static void iterate_rewrite_objects(AllocatorT* allocator
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
                                                   , BlockIndexT max_source_block) {
-        allocator->template load_records_to_shared_mem<NumRecords>();
 #else
                                                                        ) {
+        allocator->template load_records_to_shared_mem<NumRecords>();
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
         const auto N_alloc =
