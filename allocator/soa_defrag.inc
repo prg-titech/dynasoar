@@ -443,6 +443,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_clear_source_leq_50() {
        tid < num_compactions; tid += blockDim.x * gridDim.x) {
     ASSERT_SUCCESS(leq_50_[BlockHelper<T>::kIndex].deallocate<true>(
         get_defrag_candidate_index<T>(0, tid)));
+    atomicSub(&num_leq_50_[BlockHelper<T>::kIndex], 1);
   }
 }
 
