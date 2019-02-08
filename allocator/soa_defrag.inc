@@ -9,10 +9,18 @@ __DEV__ IndexT block_idx_hash(IndexT block_idx) {
 }
 
 
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+template<typename ClassIteratorT, typename AllocatorT>
+__global__ void kernel_iterate_rewrite_objects(AllocatorT* allocator,
+                                               BlockIndexT max_source_block) {
+  ClassIteratorT::iterate_rewrite_objects(allocator, max_source_block);
+}
+#else
 template<typename ClassIteratorT, typename AllocatorT>
 __global__ void kernel_iterate_rewrite_objects(AllocatorT* allocator) {
   ClassIteratorT::iterate_rewrite_objects(allocator);
 }
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
 
 template<typename AllocatorT>
@@ -50,9 +58,12 @@ struct AllocatorWrapperDefrag {
         }
       };
 
-      __DEV__ static void iterate_rewrite_objects(AllocatorT* allocator) {
-#ifndef OPTION_DEFRAG_FORWARDING_POINTER
+      __DEV__ static void iterate_rewrite_objects(AllocatorT* allocator
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+                                                  , BlockIndexT max_source_block) {
         allocator->template load_records_to_shared_mem<NumRecords>();
+#else
+                                                                       ) {
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
         const auto N_alloc =
@@ -74,7 +85,12 @@ struct AllocatorWrapperDefrag {
             if ((allocation_bitmap & (1ULL << thread_offset)) != 0ULL) {
               SoaClassHelper<ScanClassT>
                   ::template dev_for_all<FieldUpdater, /*IterateBase=*/ true>(
-                      allocator, block, thread_offset);
+                      allocator, block, thread_offset
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+                                                     , max_source_block);
+#else
+                                                     );
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
             }
           }
         }
@@ -93,8 +109,11 @@ struct AllocatorWrapperDefrag {
         struct FieldSelector {
           template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+                                   BlockT* block, ObjectIndexT object_id,
+                                   BlockIndexT max_source_block) {
+#else
                                    BlockT* block, ObjectIndexT object_id) {
-#ifndef OPTION_DEFRAG_FORWARDING_POINTER
             extern __shared__ DefragRecord<BlockBitmapT> records[];
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
@@ -129,9 +148,13 @@ struct AllocatorWrapperDefrag {
             assert(scan_block_idx < AllocatorT::N);
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
+            // Ensure max_source_block was computed correctly.
+            assert(max_source_block ==
+                allocator->template get_defrag_candidate_index<DefragT>(
+                    0, allocator->template get_num_defrag_compactions<DefragT>() - 1));
+
             if (allocator->leq_50_[BlockHelper<DefragT>::kIndex][scan_block_idx]
-                && scan_block_idx <= allocator->template get_defrag_candidate_index<DefragT>(
-                    0, allocator->template get_num_defrag_compactions<DefragT>() - 1)) {
+                && scan_block_idx <= max_source_block) {
               // Rewrite this pointer.
               auto* source_block = reinterpret_cast<
                   typename BlockHelper<DefragT>::BlockType*>(block_base);
@@ -245,7 +268,13 @@ struct AllocatorWrapperDefrag {
         struct FieldSelector<false, Dummy> {
           template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
-                                   BlockT* block, ObjectIndexT object_id) {}
+                                   BlockT* block, ObjectIndexT object_id
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+                                   , BlockIndexT max_source_block) {}
+#else
+
+                                                                        ) {}
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
         };
 
         template<typename... Args>
@@ -259,7 +288,12 @@ struct AllocatorWrapperDefrag {
         }
       };
 
-      bool operator()(AllocatorT* allocator, bool first_iteration) {
+      bool operator()(AllocatorT* allocator, bool first_iteration
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+                      , BlockIndexT max_source_block) {
+#else
+                                                                 ) {
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
         static_assert(NumRecords <= kMaxDefragRecords,
                       "Too many defragmentation records requested.");
 
@@ -287,10 +321,11 @@ struct AllocatorWrapperDefrag {
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
                   /* No shared memory */
                   0
+                  >>>(allocator, max_source_block);
 #else
                   NumRecords*sizeof(DefragRecord<BlockBitmapT>)
-#endif  // OPTION_DEFRAG_FORWARDING_POINTER
                   >>>(allocator);
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
             gpuErrchk(cudaDeviceSynchronize());
           }
         }
@@ -808,6 +843,9 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
     leq_50_[BlockHelper<T>::kIndex].scan();
+    auto max_source_block = copy_from_device(
+        &leq_50_[BlockHelper<T>::kIndex].data_.scan_data.enumeration_result_buffer[
+            num_leq_blocks / (kDefragFactor + 1) - 1]);
 #else
     const int min_remaining_records = num_leq_blocks - max_num_source_blocks;
     assert(min_remaining_records >= (num_leq_blocks - min_remaining_records)
@@ -883,7 +921,12 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     TupleHelper<Types...>
         ::template for_all<AllocatorWrapperDefrag<ThisAllocator>
         ::template SoaPointerUpdater<T, NumRecords>
-        ::template ClassIterator>(this, first_iteration);
+        ::template ClassIterator>(this, first_iteration
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+                                  , max_source_block);
+#else
+                                                       );
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
     // Clear leq_50 of source blocks.
