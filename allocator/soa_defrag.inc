@@ -845,7 +845,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     leq_50_[BlockHelper<T>::kIndex].scan();
     auto max_source_block = copy_from_device(
         &leq_50_[BlockHelper<T>::kIndex].data_.scan_data.enumeration_result_buffer[
-            num_leq_blocks / (kDefragFactor + 1) - 1]);
+            (num_leq_blocks - kMinDefragRetainBlocks) / (kDefragFactor + 1) - 1]);
 #else
     const int min_remaining_records = num_leq_blocks - max_num_source_blocks;
     assert(min_remaining_records >= (num_leq_blocks - min_remaining_records)
