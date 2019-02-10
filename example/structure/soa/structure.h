@@ -24,7 +24,8 @@ class NodeBase : public SoaBase<AllocatorT> {
       DeviceArray<Spring*, kMaxDegree>,   // springs_
       float,                              // pos_x_
       float,                              // pos_y_
-      int)                                // num_springs_
+      int,                                // num_springs_
+      int)                                // distance_
 
   static const bool kIsAbstract = true;
 
@@ -33,6 +34,7 @@ class NodeBase : public SoaBase<AllocatorT> {
   SoaField<NodeBase, 1> pos_x_;
   SoaField<NodeBase, 2> pos_y_;
   SoaField<NodeBase, 3> num_springs_;
+  SoaField<NodeBase, 4> distance_;
 
  public:
   __device__ NodeBase(float pos_x, float pos_y);
@@ -48,6 +50,12 @@ class NodeBase : public SoaBase<AllocatorT> {
   __device__ int num_springs() const { return num_springs_; }
 
   __device__ void remove_spring(Spring* spring);
+
+  __device__ void initialize_bfs();
+
+  __device__ void bfs_visit(int distance);
+
+  __device__ void bfs_set_delete_flags();
 };
 
 
@@ -116,7 +124,8 @@ class Spring : public SoaBase<AllocatorT> {
       float,          // spring_factor_
       float,          // initial_length_
       float,          // force_
-      float)          // max_force_
+      float,          // max_force_
+      bool)           // delete_flag_
 
  private:
   SoaField<Spring, 0> p1_;
@@ -125,6 +134,7 @@ class Spring : public SoaBase<AllocatorT> {
   SoaField<Spring, 3> initial_length_;
   SoaField<Spring, 4> force_;
   SoaField<Spring, 5> max_force_;
+  SoaField<Spring, 6> delete_flag_;
 
  public:
   __device__ Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
@@ -139,6 +149,12 @@ class Spring : public SoaBase<AllocatorT> {
   __device__ float force() const { return force_; }
 
   __device__ float max_force() const { return max_force_; }
+
+  __device__ void self_destruct();
+
+  __device__ void bfs_delete();
+
+  __device__ void set_delete_flag() { delete_flag_ = true; }
 
   // For rendering purposes.
   __device__ void add_to_rendering_array();

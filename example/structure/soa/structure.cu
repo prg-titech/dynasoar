@@ -5,6 +5,7 @@
 #include "../rendering.h"
 #include "structure.h"
 
+
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
@@ -30,13 +31,15 @@ __device__ Node::Node(float pos_x, float pos_y, float mass)
 __device__ Spring::Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
                           float max_force)
     : p1_(p1), p2_(p2), spring_factor_(spring_factor), force_(0.0f),
-      max_force_(max_force), initial_length_(p1->distance_to(p2)) {
+      max_force_(max_force), initial_length_(p1->distance_to(p2)),
+      delete_flag_(false) {
   assert(initial_length_ > 0.0f);
   p1_->add_spring(this);
   p2_->add_spring(this);
 }
 
 
+// Only used during graph creation.
 __device__ void NodeBase::add_spring(Spring* spring) {
   int idx = atomicAdd(&num_springs_, 1);
   springs_[idx] = spring;
@@ -46,26 +49,19 @@ __device__ void NodeBase::add_spring(Spring* spring) {
 
 
 __device__ void NodeBase::remove_spring(Spring* spring) {
-  // TODO: This won't work if two springs break at the same time.
-
-  int i = 0;
-  Spring* s = nullptr;
-
-  do {
-    assert(i < kMaxDegree);
-    s = springs_[i];
-    ++i;
-  } while(s != spring);
-
-  for (; i < num_springs_; ++i) {
-    springs_[i - 1] = springs_[i];
+  for (int i = 0; i < kMaxDegree; ++i) {
+    if (springs_[i] == spring) {
+      springs_[i] = nullptr;
+      if (atomicSub(&num_springs_, 1) == 1) {
+        // Deleted last spring.
+        destroy(device_allocator, this);
+      }
+      return;
+    }
   }
 
-  --num_springs_;
-
-  if (num_springs_ == 0) {
-    destroy(device_allocator, this);
-  }
+  // Spring not found.
+  assert(false);
 }
 
 
@@ -88,11 +84,14 @@ __device__ void Spring::compute_force() {
   float displacement = max(0.0f, dist - initial_length_);
   force_ = spring_factor_ * displacement;
 
-  if (force_ > max_force_) {
-    p1_->remove_spring(this);
-    p2_->remove_spring(this);
-    destroy(device_allocator, this);
-  }
+  if (force_ > max_force_) { self_destruct(); }
+}
+
+
+__device__ void Spring::self_destruct() {
+  p1_->remove_spring(this);
+  p2_->remove_spring(this);
+  destroy(device_allocator, this);
 }
 
 
@@ -100,30 +99,32 @@ __device__ void Node::move() {
   float force_x = 0.0f;
   float force_y = 0.0f;
 
-  for (int i = 0; i < num_springs_; ++i) {
+  for (int i = 0; i < kMaxDegree; ++i) {
     Spring* s = springs_[i];
-    NodeBase* from;
-    NodeBase* to;
+    if (s != nullptr) {
+      NodeBase* from;
+      NodeBase* to;
 
-    if (s->p1() == this) {
-      from = this;
-      to = s->p2();
-    } else {
-      assert(s->p2() == this);
-      from = this;
-      to = s->p1();
+      if (s->p1() == this) {
+        from = this;
+        to = s->p2();
+      } else {
+        assert(s->p2() == this);
+        from = this;
+        to = s->p1();
+      }
+
+      // Calculate unit vector.
+      float dx = to->pos_x() - from->pos_x();
+      float dy = to->pos_y() - from->pos_y();
+      float dist = sqrt(dx*dx + dy*dy);
+      float unit_x = dx/dist;
+      float unit_y = dy/dist;
+
+      // Apply force.
+      force_x += unit_x*s->force();
+      force_y += unit_y*s->force();
     }
-
-    // Calculate unit vector.
-    float dx = to->pos_x() - from->pos_x();
-    float dy = to->pos_y() - from->pos_y();
-    float dist = sqrt(dx*dx + dy*dy);
-    float unit_x = dx/dist;
-    float unit_y = dy/dist;
-
-    // Apply force.
-    force_x += unit_x*s->force();
-    force_y += unit_y*s->force();
   }
 
   // Calculate new velocity and position.
@@ -133,6 +134,59 @@ __device__ void Node::move() {
   vel_y_ *= 1.0f - kVelocityDampening;
   pos_x_ += vel_x_*kDt;
   pos_y_ += vel_y_*kDt;
+}
+
+
+__device__ void NodeBase::initialize_bfs() {
+  if (this->cast<AnchorNode>() != nullptr) {
+    distance_ = 0;
+  } else {
+    distance_ = 32768;  // should be int_max
+  }
+}
+
+
+__device__ bool dev_bfs_continue;
+
+__device__ void NodeBase::bfs_visit(int distance) {
+  if (distance == distance_) {
+    // Continue until all vertices were visited.
+    dev_bfs_continue = true;
+
+    for (int i = 0; i < kMaxDegree; ++i) {
+      auto* spring = springs_[i];
+
+      if (spring != nullptr) {
+        // Find neighboring vertices.
+        NodeBase* n;
+        if (this == spring->p1()) {
+          n = spring->p2();
+        } else {
+          n = spring->p1();
+        }
+
+        // Set distance on neighboring vertex.
+        n->distance_ = distance + 1;
+      }
+    }
+  }
+}
+
+
+__device__ void NodeBase::bfs_set_delete_flags() {
+  if (distance_ == 32768) {  // should be int_max
+    for (int i = 0; i < kMaxDegree; ++i) {
+      auto* spring = springs_[i];
+      if (spring != nullptr) {
+        spring->set_delete_flag();
+      }
+    }
+  }
+}
+
+
+__device__ void Spring::bfs_delete() {
+  if (delete_flag_) { self_destruct(); }
 }
 
 
@@ -192,12 +246,35 @@ void compute() {
 }
 
 
+void bfs_and_delete() {
+  // Perform BFS to check reachability.
+  allocator_handle->parallel_do<NodeBase, &NodeBase::initialize_bfs>();
+
+  for (int i = 0; i < 32768; ++i) {
+    bool continue_flag = false;
+    cudaMemcpyToSymbol(dev_bfs_continue, &continue_flag, sizeof(bool), 0,
+                       cudaMemcpyHostToDevice);
+    allocator_handle->parallel_do<NodeBase, int, &NodeBase::bfs_visit>(i);
+    cudaMemcpyFromSymbol(&continue_flag, dev_bfs_continue, sizeof(bool), 0,
+                         cudaMemcpyDeviceToHost);
+
+    if (!continue_flag) break;
+  }
+
+  // Delete springs (and nodes).
+  allocator_handle->parallel_do<NodeBase, &NodeBase::bfs_set_delete_flags>();
+  allocator_handle->parallel_do<Spring, &Spring::bfs_delete>();
+}
+
+
 void step() {
   allocator_handle->parallel_do<AnchorPullNode, &AnchorPullNode::pull>();
 
   for (int i = 0; i < kNumComputeIterations; ++i) {
     compute();
   }
+
+  bfs_and_delete();
 
   if (kOptionRender) {
     transfer_data();

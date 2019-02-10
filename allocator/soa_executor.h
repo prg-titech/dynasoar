@@ -58,6 +58,36 @@ struct ParallelDoTypeHelper {
   };
 };
 
+template<typename AllocatorT, class BaseClass, typename P1,
+         void(BaseClass::*func)(P1)>
+struct ParallelDoTypeHelperP1 {
+  // Iterating over all types T in the allocator.
+  template<typename IterT>
+  struct InnerHelper {
+    // IterT is a subclass of BaseClass. Check if same type.
+    template<bool Check, int Dummy>
+    struct ClassSelector {
+      static bool call(AllocatorT* allocator, P1 p1) {
+        allocator->template parallel_do_single_type<IterT, BaseClass, P1, func>(p1);
+        return true;  // true means "continue processing".
+      }
+    };
+
+    // IterT is not a subclass of BaseClass. Skip.
+    template<int Dummy>
+    struct ClassSelector<false, Dummy> {
+      static bool call(AllocatorT* /*allocator*/, P1 /*p1*/) {
+        return true;
+      }
+    };
+
+    bool operator()(AllocatorT* allocator, P1 p1) {
+      return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
+          ::call(allocator, p1);
+    }
+  };
+};
+
 template<typename AllocatorT, typename IterT, typename T, typename R,
          typename Base, typename... Args>
 struct ParallelExecutor {

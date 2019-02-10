@@ -294,12 +294,26 @@ class SoaAllocator {
         ::parallel_do(this, /*shared_mem_size=*/ 0);
   }
 
+  template<class IterT, class T, typename P1, void(T::*func)(P1)>
+  void parallel_do_single_type(P1 p1) {
+    ParallelExecutor<ThisAllocator, IterT, T, void, T, P1>
+        ::template FunctionWrapper<func>
+        ::parallel_do(this, /*shared_mem_size=*/ 0, p1);
+  }
+
   // Call a member function on all objects of type T and its subclasses.
   template<class T, void(T::*func)()>
   void parallel_do() {
     TupleHelper<Types...>
         ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func>
         ::template InnerHelper>(this);
+  }
+
+  template<class T, typename P1, void(T::*func)(P1)>
+  void parallel_do(P1 p1) {
+    TupleHelper<Types...>
+        ::template for_all<ParallelDoTypeHelperP1<ThisAllocator, T, P1, func>
+        ::template InnerHelper>(this, p1);
   }
 
   // Call a member function on all objects of type.

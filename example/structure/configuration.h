@@ -1,6 +1,8 @@
 #ifndef EXAMPLE_STRUCTURE_SOA_CONFIGURATION_H
 #define EXAMPLE_STRUCTURE_SOA_CONFIGURATION_H
 
+#include <limits>
+
 // Runs about 90 seconds on my machine (Titan Xp).
 // Note: SoaAlloc does not pay off with small problem sizes. Probably because
 // overheads due to kernel launch and pre-iteration bitmap scans dominate.

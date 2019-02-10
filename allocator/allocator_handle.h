@@ -101,6 +101,11 @@ class AllocatorHandle {
     allocator_->parallel_do<T, func>();
   }
 
+  template<class T, typename P1, void(T::*func)(P1)>
+  void parallel_do(P1 p1) {
+    allocator_->parallel_do<T, P1, func>(p1);
+  }
+
 #ifdef OPTION_DEFRAG
   // Defrag/compact all objects of type T. Also updates all affected pointers
   // in the data buffer.
