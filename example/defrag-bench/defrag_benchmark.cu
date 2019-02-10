@@ -3,10 +3,7 @@
 #include <algorithm>
 #include <random>
 
-#include "allocator/soa_allocator.h"
-#include "allocator/soa_base.h"
-#include "allocator/allocator_handle.h"
-
+#include "dynasoar.h"
 #include "configuration.h"
 
 static const int kIntMax = std::numeric_limits<int>::max();

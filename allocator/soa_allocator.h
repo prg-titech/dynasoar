@@ -113,6 +113,10 @@ class SoaAllocator {
 
   template<typename T>
   struct BlockHelper {
+    // SoaBase<> has size 1, everything else size 0.
+    static_assert(sizeof(T) == 1,
+                  "Unexpected superclass size.");
+
     static const int kIndex = TYPE_INDEX(Types..., T);
 
     static const int kSize =

@@ -50,13 +50,14 @@ class SoaField {
  private:
   using T = typename SoaFieldHelper<C, Field>::type;
 
+  // Dummy field forces size of class to be zero.
+  char _[0];
+
   // Calculate data pointer from address.
   __DEV__ T* data_ptr() const {
-    // Base address of the pointer, i.e., without the offset of the SoaField
-    // type.
-    auto ptr_base = reinterpret_cast<uintptr_t>(this)
-        - sizeof(SoaField<C, Field>)
-            * (Field + SoaClassUtil<typename C::BaseClass>::kNumFields);
+    // Base address of the pointer. SoaBase<> has size 1, all SoaField<>
+    // have size 0.
+    auto ptr_base = reinterpret_cast<uintptr_t>(this) - 1;
     return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
   }
 

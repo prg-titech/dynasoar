@@ -1,6 +1,4 @@
-#include "allocator/soa_allocator.h"
-#include "allocator/soa_base.h"
-#include "allocator/allocator_handle.h"
+#include "dynasoar.h"
 
 // Pre-declare all classes.
 class Foo;

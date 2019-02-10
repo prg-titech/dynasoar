@@ -39,9 +39,7 @@ SoaAlloc has a host side API (`AllocatorHandle<AllocatorT>`) and a device side A
 This example does not compute anything meaningful and is only meant to show the API. Take a look at the code in the `example` directory for more interesting examples.
 
 ```c++
-#include "allocator/soa_allocator.h"
-#include "allocator/soa_base.h"
-#include "allocator/allocator_handle.h"
+#include "dynasoar.h"
 
 // Pre-declare all classes.
 class Foo;
