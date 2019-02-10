@@ -79,6 +79,8 @@ class SoaField {
 
     // Object slot ID.
     ObjectIndexT obj_id = PointerHelper::obj_id_from_obj_ptr(obj);
+    assert(obj_id < block_size);
+
     // Base address of the block.
     char* block_base = PointerHelper::block_base_from_obj_ptr(obj);
     return data_ptr_from_location(block_base, block_size, obj_id);

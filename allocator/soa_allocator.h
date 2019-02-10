@@ -254,6 +254,7 @@ class SoaAllocator {
           block_idx, __popc(__lanemask_lt() & active), allocation_bitmap);
     } while (result == nullptr);
 
+    assert(PointerHelper::obj_id_from_obj_ptr(result) < BlockHelper<T>::kSize);
     return result;
   }
 

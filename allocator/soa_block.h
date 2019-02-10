@@ -94,6 +94,7 @@ class SoaBlock : public AbstractBlock {
   // Constructs an object identifier.
   __DEV__ T* make_pointer(ObjectIndexT index) {
     uint8_t obj_idx = reinterpret_cast<uint8_t&>(index);
+    assert(obj_idx < N);
     uintptr_t ptr_as_int = obj_idx;
 
     ObjectIndexT block_size = N;

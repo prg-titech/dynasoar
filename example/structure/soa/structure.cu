@@ -220,6 +220,9 @@ __global__ void kernel_create_nodes(DsNode* nodes, int num_nodes) {
                                                           nodes[i].pos_y,
                                                           nodes[i].vel_x,
                                                           nodes[i].vel_y);
+    } else if (nodes[i].type == kTypeAnchorNode) {
+      tmp_nodes[i] = new(device_allocator) AnchorNode(nodes[i].pos_x,
+                                                      nodes[i].pos_y);
     } else {
       assert(false);
     }

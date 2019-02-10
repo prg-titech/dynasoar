@@ -338,6 +338,8 @@ __global__ void kernel_create_nodes(DsNode* nodes, int num_nodes) {
     } else if (nodes[i].type == kTypeAnchorPullNode) {
       new_AnchorPullNode(idx, nodes[i].pos_x, nodes[i].pos_y, nodes[i].vel_x,
                          nodes[i].vel_y);
+    } else if (nodes[i].type == kTypeAnchorNode) {
+      new_AnchorNode(idx, nodes[i].pos_x, nodes[i].pos_y);
     } else {
       assert(false);
     }

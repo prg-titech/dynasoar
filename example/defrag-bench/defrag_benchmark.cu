@@ -155,6 +155,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
 #ifdef OPTION_DEFRAG
   allocator_handle->DBG_print_defrag_time();
+  allocator_handle->DBG_collect_stats();
+  allocator_handle->DBG_print_collected_stats();
 #endif  // OPTION_DEFRAG
 
   // Compute checksum.

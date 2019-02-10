@@ -13,10 +13,11 @@ void random_dataset(Dataset& result) {
   float mass_min = 500.0f;
   float mass_max = 500.0f;
 
-  int num_nodes = 0.9*kMaxNodes;
+  int num_nodes = 0.8*kMaxNodes;
   int num_pull_nodes = 0.1*kMaxNodes;
+  int num_anchor_nodes = 0.1*kMaxNodes;
   int num_springs = 0.7*kMaxSprings;
-  int num_total_nodes = num_nodes + num_pull_nodes;
+  int num_total_nodes = num_nodes + num_pull_nodes + num_anchor_nodes;
 
   float border_margin = 0.35f;
 
@@ -28,13 +29,20 @@ void random_dataset(Dataset& result) {
     result.nodes.push_back(DsNode(kTypeNode, pos_x, pos_y, 0.0f, 0.0f, mass));
   }
 
-  for (; i < num_total_nodes; ++i) {
+  for (; i < num_nodes + num_pull_nodes; ++i) {
     float pos_x = random_float(border_margin, 1.0 - border_margin);
     float pos_y = random_float(border_margin, 1.0 - border_margin);
     float vel_x = random_float(-0.05, 0.05);
     float vel_y = random_float(-0.05, 0.05);
     result.nodes.push_back(DsNode(kTypeAnchorPullNode,
-                                   pos_x, pos_y, vel_x, vel_y, 0.0f));
+                                  pos_x, pos_y, vel_x, vel_y, 0.0f));
+  }
+
+  for (; i < num_nodes + num_pull_nodes + num_anchor_nodes; ++i) {
+    float pos_x = random_float(border_margin, 1.0 - border_margin);
+    float pos_y = random_float(border_margin, 1.0 - border_margin);
+    result.nodes.push_back(DsNode(kTypeAnchorNode,
+                                  pos_x, pos_y, 0.0f, 0.0f, 0.0f));
   }
 
   for (i = 0; i < num_springs; ++i) {
