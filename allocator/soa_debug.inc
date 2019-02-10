@@ -16,7 +16,7 @@ struct AllocatorWrapperDebug {
              typeid(T).name(), BlockHelper<T>::kIndex);
       printf("├────────────────────┬──────────────────────────────────────────────────┤\n");
       printf("│ #fields            │ %8i                                         │\n",
-             (int) sizeof(T));
+             (int) SoaClassUtil<T>::kNumFields);
       printf("│ #objects / block   │ %8i                                         │\n",
              (int) BlockHelper<T>::kSize);
 #ifdef OPTION_DEFRAG
