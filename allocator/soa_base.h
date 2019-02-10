@@ -7,13 +7,13 @@
 #include "allocator/soa_field.h"
 
 #define declare_field_types(classname, ...) \
-  __DEV__ void* operator new(size_t sz, AllocatorT* allocator) { \
+  __DEV__ void* operator new(size_t sz, typename classname::Allocator* allocator) { \
     return allocator->allocate_new<classname>(); \
   } \
   __DEV__ void* operator new(size_t sz, classname* ptr) { \
     return ptr; \
   } \
-  __DEV__ void operator delete(void* ptr, AllocatorT* allocator) { \
+  __DEV__ void operator delete(void* ptr, typename classname::Allocator* allocator) { \
     allocator->free<classname>(reinterpret_cast<classname*>(ptr)); \
   } \
   __DEV__ void operator delete(void*, classname*) { \
@@ -38,6 +38,10 @@ __DEV__ __forceinline__ static void destroy(AllocatorT* allocator,
 // User-defined classes should inherit from this class.
 template<class AllocatorT>
 class SoaBase {
+ private:
+  // Class should have size 1.
+  char _;
+
  public:
   using Allocator = AllocatorT;
   using BaseClass = void;
