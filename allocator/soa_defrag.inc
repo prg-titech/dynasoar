@@ -94,149 +94,15 @@ struct AllocatorWrapperDefrag {
           template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
                                    BlockT* block, ObjectIndexT object_id) {
-#ifndef OPTION_DEFRAG_FORWARDING_POINTER
-            extern __shared__ DefragRecord<BlockBitmapT> records[];
-#endif  // OPTION_DEFRAG_FORWARDING_POINTER
-
             // Location of field value to be scanned/rewritten.
             auto* block_char_p = reinterpret_cast<char*>(block);
             FieldType* scan_location =
                 SoaFieldType::template data_ptr_from_location<BlockT::kN>(
                     block_char_p, object_id);
 
-            assert(reinterpret_cast<char*>(scan_location) >= allocator->data_
-                && reinterpret_cast<char*>(scan_location)
-                    < allocator->data_ + AllocatorT::kDataBufferSize);
-            FieldType scan_value = *scan_location;
-
-            if (scan_value == nullptr) return;
-            // Check if value points to an object of type DefragT.
-            if (scan_value->get_type() != BlockHelper<DefragT>::kIndex) return;
-
-            // Calculate block index of scan_value.
-            // TODO: Find a better way to do this.
-            // TODO: There could be some random garbage in the field if it was
-            // not initialized. Replace asserts with if-check and return stmt.
-            char* block_base =
-                PointerHelper::block_base_from_obj_ptr(scan_value);
-            assert(block_base >= allocator->data_
-                   && block_base < allocator->data_ + AllocatorT::kDataBufferSize);
-            assert((block_base - allocator->data_) % AllocatorT::kBlockSizeBytes == 0);
-
-            // Get block index of scan value.
-            auto scan_block_idx = (block_base - allocator->data_)
-                / AllocatorT::kBlockSizeBytes;
-            assert(scan_block_idx < AllocatorT::N);
-
-#ifdef OPTION_DEFRAG_FORWARDING_POINTER
-            if (allocator->leq_50_[BlockHelper<DefragT>::kIndex][scan_block_idx]
-                && scan_block_idx <= allocator->template get_defrag_candidate_index<DefragT>(
-                    0, allocator->template get_num_defrag_compactions<DefragT>() - 1)) {
-              // Rewrite this pointer.
-              auto* source_block = reinterpret_cast<
-                  typename BlockHelper<DefragT>::BlockType*>(block_base);
-              auto src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
-              bool valid_pointer = (source_block->allocation_bitmap() & (1ULL << src_obj_id)) != 0;
-
-              if (valid_pointer) {
-                auto* forwarding_ptr = reinterpret_cast<FieldType>(
-                    source_block->get_forwarding_pointer(src_obj_id));
-                assert(forwarding_ptr->get_type() == scan_value->get_type());
-
-                *scan_location = forwarding_ptr;
-              }
-            }
-#else
-            // Look for defrag record for this block.
-            const auto record_id = block_idx_hash<NumRecords>(scan_block_idx);
-            assert(record_id < NumRecords);
-            const auto& record = records[record_id];
-
-            if (record.source_block_idx == scan_block_idx) {
-              // This pointer must be rewritten.
-              auto src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
-
-              // ... but this pointer could contain garbage data.
-              // In that case, we do not want need to rewrite.
-#ifdef OPTION_DEFRAG_USE_GLOBAL
-              bool valid_pointer =
-                  allocator->defrag_records_.source_bitmap[record_id]
-                  & (1ULL << src_obj_id);
-#else
-              bool valid_pointer = record.source_bitmap & (1ULL << src_obj_id);
-#endif  // OPTION_DEFRAG_USE_GLOBAL
-              if (!valid_pointer) return;
-
-              // First src_obj_id bits are set to 1.
-              BlockBitmapT cnt_mask = src_obj_id ==
-                 63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
-              assert(__popcll(cnt_mask) == src_obj_id + 1);
-#ifdef OPTION_DEFRAG_USE_GLOBAL
-              int src_bit_idx = __popcll(cnt_mask
-                  & allocator->defrag_records_.source_bitmap[record_id]) - 1;
-#else
-              int src_bit_idx = __popcll(cnt_mask & record.source_bitmap) - 1;
-#endif  // OPTION_DEFRAG_USE_GLOBAL
-
-              // Find correct target block and bit in target bitmaps.
-              BlockBitmapT target_bitmap;
-              auto target_block_idx = kInvalidBlockIndex;
-              for (int i = 0; i < kDefragFactor; ++i) {
-#ifdef OPTION_DEFRAG_USE_GLOBAL
-                target_bitmap =
-                    allocator->defrag_records_.target_bitmap[i][record_id];
-#else
-                target_bitmap = record.target_bitmap[i];
-#endif  // OPTION_DEFRAG_USE_GLOBAL
-
-                if (__popcll(target_bitmap) > src_bit_idx) {
-                  // Target block found.
-#ifdef OPTION_DEFRAG_USE_GLOBAL
-                  target_block_idx =
-                      allocator->defrag_records_.target_block_idx[i][record_id];
-#else
-                  target_block_idx = record.target_block_idx[i];
-#endif  // OPTION_DEFRAG_USE_GLOBAL
-                  break;
-                } else {
-                  src_bit_idx -= __popcll(target_bitmap);
-                }
-              }
-
-              // Assert that target block was found.
-              assert(target_block_idx < AllocatorT::N);
-
-              // Find src_bit_idx-th bit in target bitmap.
-              for (int j = 0; j < src_bit_idx; ++j) {
-                target_bitmap &= target_bitmap - 1;
-              }
-              int target_obj_id = __ffsll(target_bitmap) - 1;
-              assert(target_obj_id < BlockHelper<DefragT>::kSize);
-              assert(target_obj_id >= 0);
-              assert((allocator->template get_block<DefragT>(
-                          target_block_idx)->free_bitmap
-                      & (1ULL << target_obj_id)) == 0);
-
-              // Rewrite pointer.
-              auto* target_block = allocator->template get_block<
-                  typename std::remove_pointer<FieldType>::type>(
-                      target_block_idx);
-              *scan_location = PointerHelper::rewrite_pointer(
-                      scan_value, target_block, target_obj_id);
-
-#ifndef NDEBUG
-              // Sanity checks.
-              assert(PointerHelper::block_base_from_obj_ptr(*scan_location)
-                  == reinterpret_cast<char*>(target_block));
-              assert((*scan_location)->get_type()
-                  == BlockHelper<DefragT>::kIndex);
-              auto* loc_block = reinterpret_cast<typename BlockHelper<DefragT>::BlockType*>(
-                  PointerHelper::block_base_from_obj_ptr(*scan_location));
-              assert(loc_block->type_id == BlockHelper<DefragT>::kIndex);
-              assert((loc_block->free_bitmap & (1ULL << target_obj_id)) == 0);
-#endif  // NDEBUG
-            }
-#endif  // OPTION_DEFRAG_FORWARDING_POINTER
+            // Rewrite value at address.
+            allocator->template maybe_rewrite_pointer<
+                DefragT, NumRecords, ScanClassT, FieldType>(scan_location);
           }
         };
 
@@ -930,4 +796,137 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_defrag_time() {
          bench_defrag_move_time / 1000,
          bench_rewrite_time / 1000,
          bench_total_defrag_time / 1000);
+}
+
+template<BlockIndexT N_Objects, class... Types>
+template<typename DefragT, int NumRecords, typename ScanClassT,
+         typename FieldT>
+__DEV__ void SoaAllocator<N_Objects, Types...>::maybe_rewrite_pointer(
+    FieldT* scan_location) {
+#ifndef OPTION_DEFRAG_FORWARDING_POINTER
+  extern __shared__ DefragRecord<BlockBitmapT> records[];
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
+
+  assert(reinterpret_cast<char*>(scan_location) >= data_
+      && reinterpret_cast<char*>(scan_location) < data_ + kDataBufferSize);
+  FieldT scan_value = *scan_location;
+
+  if (scan_value == nullptr) return;
+  // Check if value points to an object of type DefragT.
+  if (scan_value->get_type() != BlockHelper<DefragT>::kIndex) return;
+
+  // Calculate block index of scan_value.
+  char* block_base =
+      PointerHelper::block_base_from_obj_ptr(scan_value);
+  assert(block_base >= data_ && block_base < data_ + kDataBufferSize);
+  assert((block_base - data_) % kBlockSizeBytes == 0);
+
+  // Get block index of scan value.
+  auto scan_block_idx = (block_base - data_) / kBlockSizeBytes;
+  assert(scan_block_idx < N);
+
+#ifdef OPTION_DEFRAG_FORWARDING_POINTER
+  if (leq_50_[BlockHelper<DefragT>::kIndex][scan_block_idx]
+      && scan_block_idx <= get_defrag_candidate_index<DefragT>(
+          0, get_num_defrag_compactions<DefragT>() - 1)) {
+    // Rewrite this pointer.
+    auto* source_block = reinterpret_cast<
+        typename BlockHelper<DefragT>::BlockType*>(block_base);
+    auto src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
+    bool valid_pointer = (source_block->allocation_bitmap() & (1ULL << src_obj_id)) != 0;
+
+    if (valid_pointer) {
+      auto* forwarding_ptr = reinterpret_cast<FieldT>(
+          source_block->get_forwarding_pointer(src_obj_id));
+      assert(forwarding_ptr->get_type() == scan_value->get_type());
+
+      *scan_location = forwarding_ptr;
+    }
+  }
+#else
+  // Look for defrag record for this block.
+  const auto record_id = block_idx_hash<NumRecords>(scan_block_idx);
+  assert(record_id < NumRecords);
+  const auto& record = records[record_id];
+
+  if (record.source_block_idx == scan_block_idx) {
+    // This pointer must be rewritten.
+    auto src_obj_id = PointerHelper::obj_id_from_obj_ptr(scan_value);
+
+    // ... but this pointer could contain garbage data.
+    // In that case, we do not want need to rewrite.
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+    bool valid_pointer =
+        defrag_records_.source_bitmap[record_id] & (1ULL << src_obj_id);
+#else
+    bool valid_pointer = record.source_bitmap & (1ULL << src_obj_id);
+#endif  // OPTION_DEFRAG_USE_GLOBAL
+    if (!valid_pointer) return;
+
+    // First src_obj_id bits are set to 1.
+    BlockBitmapT cnt_mask = src_obj_id ==
+       63 ? (~0ULL) : ((1ULL << (src_obj_id + 1)) - 1);
+    assert(__popcll(cnt_mask) == src_obj_id + 1);
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+    int src_bit_idx =
+        __popcll(cnt_mask & defrag_records_.source_bitmap[record_id]) - 1;
+#else
+    int src_bit_idx = __popcll(cnt_mask & record.source_bitmap) - 1;
+#endif  // OPTION_DEFRAG_USE_GLOBAL
+
+    // Find correct target block and bit in target bitmaps.
+    BlockBitmapT target_bitmap;
+    auto target_block_idx = kInvalidBlockIndex;
+    for (int i = 0; i < kDefragFactor; ++i) {
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+      target_bitmap = defrag_records_.target_bitmap[i][record_id];
+#else
+      target_bitmap = record.target_bitmap[i];
+#endif  // OPTION_DEFRAG_USE_GLOBAL
+
+      if (__popcll(target_bitmap) > src_bit_idx) {
+        // Target block found.
+#ifdef OPTION_DEFRAG_USE_GLOBAL
+        target_block_idx = defrag_records_.target_block_idx[i][record_id];
+#else
+        target_block_idx = record.target_block_idx[i];
+#endif  // OPTION_DEFRAG_USE_GLOBAL
+        break;
+      } else {
+        src_bit_idx -= __popcll(target_bitmap);
+      }
+    }
+
+    // Assert that target block was found.
+    assert(target_block_idx < N);
+
+    // Find src_bit_idx-th bit in target bitmap.
+    for (int j = 0; j < src_bit_idx; ++j) {
+      target_bitmap &= target_bitmap - 1;
+    }
+    int target_obj_id = __ffsll(target_bitmap) - 1;
+    assert(target_obj_id < BlockHelper<DefragT>::kSize);
+    assert(target_obj_id >= 0);
+    assert((get_block<DefragT>(target_block_idx)->free_bitmap
+            & (1ULL << target_obj_id)) == 0);
+
+    // Rewrite pointer.
+    auto* target_block = get_block<
+        typename std::remove_pointer<FieldT>::type>(target_block_idx);
+    *scan_location = PointerHelper::rewrite_pointer(
+            scan_value, target_block, target_obj_id);
+
+#ifndef NDEBUG
+    // Sanity checks.
+    assert(PointerHelper::block_base_from_obj_ptr(*scan_location)
+        == reinterpret_cast<char*>(target_block));
+    assert((*scan_location)->get_type()
+        == BlockHelper<DefragT>::kIndex);
+    auto* loc_block = reinterpret_cast<typename BlockHelper<DefragT>::BlockType*>(
+        PointerHelper::block_base_from_obj_ptr(*scan_location));
+    assert(loc_block->type_id == BlockHelper<DefragT>::kIndex);
+    assert((loc_block->free_bitmap & (1ULL << target_obj_id)) == 0);
+#endif  // NDEBUG
+  }
+#endif  // OPTION_DEFRAG_FORWARDING_POINTER
 }

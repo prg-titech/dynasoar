@@ -43,6 +43,10 @@ class SoaAllocator {
   template<typename T, int NumRecords>
   __DEV__ void defrag_choose_target_blocks();
 
+  template<typename DefragT, int NumRecords, typename ScanClassT,
+           typename FieldT>
+  __DEV__ void maybe_rewrite_pointer(FieldT* scan_location);
+
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
   template<typename T>
   __DEV__ void defrag_update_block_state();
