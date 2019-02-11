@@ -341,6 +341,8 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
 template<BlockIndexT N_Objects, class... Types>
 template<typename T>
 __DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::get_num_defrag_compactions() {
+  assert(leq_50_[BlockHelper<T>::kIndex].scan_num_bits()
+      == num_leq_50_[BlockHelper<T>::kIndex]);
   return (leq_50_[BlockHelper<T>::kIndex].scan_num_bits() - kMinDefragRetainBlocks)
       / (kDefragFactor + 1);
 }
@@ -729,7 +731,7 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     auto time_1 = std::chrono::system_clock::now();
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
-    leq_50_[BlockHelper<T>::kIndex].scan();
+    leq_50_[BlockHelper<T>::kIndex].scan(&cub_scan_data_);
 #else
     const int min_remaining_records = num_leq_blocks - max_num_source_blocks;
     assert(min_remaining_records >= (num_leq_blocks - min_remaining_records)

@@ -668,6 +668,9 @@ class SoaAllocator {
 
   // Temporary storage for defragmentation records.
   SoaDefragRecords<BlockBitmapT, kMaxDefragRecords> defrag_records_;
+
+  // Temporary data structure for CUB prefix scans.
+  CubScanData<BlockIndexT, N, /*Bitsize=*/ 64> cub_scan_data_;
 #endif  // OPTION_DEFRAG
 
   char* data_;
