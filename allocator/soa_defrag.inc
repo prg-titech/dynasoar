@@ -341,6 +341,8 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
 template<BlockIndexT N_Objects, class... Types>
 template<typename T>
 __DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::get_num_defrag_compactions() {
+  assert(leq_50_[BlockHelper<T>::kIndex].scan_num_bits()
+         == num_leq_50_[BlockHelper<T>::kIndex]);
   return (leq_50_[BlockHelper<T>::kIndex].scan_num_bits() - kMinDefragRetainBlocks)
       / (kDefragFactor + 1);
 }
