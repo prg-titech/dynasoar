@@ -269,7 +269,16 @@ void bfs_and_delete() {
 }
 
 
+void defrag() {
+  allocator_handle->parallel_defrag<AnchorPullNode>();
+  allocator_handle->parallel_defrag<Node>();
+  allocator_handle->parallel_defrag<Spring>();
+}
+
+
 void step() {
+  defrag();
+
   allocator_handle->parallel_do<AnchorPullNode, &AnchorPullNode::pull>();
 
   for (int i = 0; i < kNumComputeIterations; ++i) {

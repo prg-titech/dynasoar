@@ -106,9 +106,60 @@ struct AllocatorWrapperDefrag {
           }
         };
 
+        // Check array base type.
+        template<bool Check, int Dummy>
+        struct ArrayFieldSelector {
+          using ArrayBaseT = typename FieldType::BaseType;
+
+          // Base type macthes. Scan this array.
+          template<bool Check2, int Dummy2>
+          struct FieldSelector {
+            template<typename BlockT>
+            __DEV__ static void call(AllocatorT* allocator,
+                                     BlockT* block, ObjectIndexT object_id) {
+              // Location of field value to be scanned/rewritten.
+              auto* block_char_p = reinterpret_cast<char*>(block);
+              FieldType& array =
+                  *SoaFieldType::template data_ptr_from_location<BlockT::kN>(
+                      block_char_p, object_id);
+
+              for (int i = 0; i < FieldType::kN; ++i) {
+                // Rewrite value at address.
+                allocator->template maybe_rewrite_pointer<
+                    DefragT, NumRecords, ScanClassT, ArrayBaseT>(&array[i]);
+              }
+            }
+          };
+
+          // Do not scan this array.
+          template<int Dummy2>
+          struct FieldSelector<false, Dummy2> {
+            template<typename BlockT>
+            __DEV__ static void call(AllocatorT* allocator,
+                                     BlockT* block, ObjectIndexT object_id) {}
+          };
+
+          template<typename... Args>
+          __DEV__ static void call(Args... args) {
+            // Rewrite base type is a super class (or exact class)
+            // of DefragT.
+            FieldSelector<std::is_pointer<ArrayBaseT>::value
+                && std::is_base_of<typename std::remove_pointer<ArrayBaseT>::type,
+                                   DefragT>::value, 0>::call(args...);
+          }
+        };
+
         // Do not scan this field.
         template<int Dummy>
         struct FieldSelector<false, Dummy> {
+          template<typename BlockT>
+          __DEV__ static void call(AllocatorT* allocator,
+                                   BlockT* block, ObjectIndexT object_id) {}
+        };
+
+        // Not an array.
+        template<int Dummy>
+        struct ArrayFieldSelector<false, Dummy> {
           template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
                                    BlockT* block, ObjectIndexT object_id) {}
@@ -121,6 +172,11 @@ struct AllocatorWrapperDefrag {
           FieldSelector<std::is_pointer<FieldType>::value
               && std::is_base_of<typename std::remove_pointer<FieldType>::type,
                                  DefragT>::value, 0>::call(args...);
+
+          // For array types: Check base type.
+          ArrayFieldSelector<is_device_array<FieldType>::value, 0>
+              ::call(args...);
+
           return true;  // Continue processing.
         }
       };

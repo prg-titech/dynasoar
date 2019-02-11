@@ -24,6 +24,7 @@ class DeviceArray {
 
  public:
   using BaseType = T;
+  static const int kN = N;
 
   __device__ T& operator[](size_t pos) {
     return data[pos];
