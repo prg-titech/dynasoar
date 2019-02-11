@@ -141,7 +141,7 @@ __device__ void NodeBase::initialize_bfs() {
   if (this->cast<AnchorNode>() != nullptr) {
     distance_ = 0;
   } else {
-    distance_ = 32768;  // should be int_max
+    distance_ = kMaxDistance;  // should be int_max
   }
 }
 
@@ -165,8 +165,10 @@ __device__ void NodeBase::bfs_visit(int distance) {
           n = spring->p1();
         }
 
-        // Set distance on neighboring vertex.
-        n->distance_ = distance + 1;
+        if (n->distance_ == kMaxDistance) {
+          // Set distance on neighboring vertex if unvisited.
+          n->distance_ = distance + 1;
+        }
       }
     }
   }
@@ -174,7 +176,7 @@ __device__ void NodeBase::bfs_visit(int distance) {
 
 
 __device__ void NodeBase::bfs_set_delete_flags() {
-  if (distance_ == 32768) {  // should be int_max
+  if (distance_ == kMaxDistance) {  // should be int_max
     for (int i = 0; i < kMaxDegree; ++i) {
       auto* spring = springs_[i];
       if (spring != nullptr) {
@@ -250,7 +252,7 @@ void bfs_and_delete() {
   // Perform BFS to check reachability.
   allocator_handle->parallel_do<NodeBase, &NodeBase::initialize_bfs>();
 
-  for (int i = 0; i < 32768; ++i) {
+  for (int i = 0; i < kMaxDistance; ++i) {
     bool continue_flag = false;
     cudaMemcpyToSymbol(dev_bfs_continue, &continue_flag, sizeof(bool), 0,
                        cudaMemcpyHostToDevice);
@@ -411,6 +413,10 @@ int main(int /*argc*/, char** /*argv*/) {
       .count();
 
   printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+
+  if (kOptionPrintStats) {
+    allocator_handle->DBG_print_state_stats();
+  }
 
 #ifndef NDEBUG
   printf("Checksum: %f\n", checksum());

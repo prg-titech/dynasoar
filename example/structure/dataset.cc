@@ -13,8 +13,8 @@ void random_dataset(Dataset& result) {
   float mass_min = 500.0f;
   float mass_max = 500.0f;
 
-  int num_nodes = 0.8*kMaxNodes;
-  int num_pull_nodes = 0.1*kMaxNodes;
+  int num_nodes = 0.65*kMaxNodes;
+  int num_pull_nodes = 0.25*kMaxNodes;
   int num_anchor_nodes = 0.1*kMaxNodes;
   int num_springs = 0.7*kMaxSprings;
   int num_total_nodes = num_nodes + num_pull_nodes + num_anchor_nodes;
