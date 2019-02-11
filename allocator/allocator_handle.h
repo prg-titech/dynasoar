@@ -4,6 +4,7 @@
 #include "allocator/configuration.h"
 #include "allocator/tuple_helper.h"
 #include "allocator/util.h"
+#include "bitmap/bitmap.h"
 
 template<typename AllocatorT>
 __global__ void init_allocator_kernel(AllocatorT* allocator,
@@ -65,6 +66,8 @@ class AllocatorHandle {
     printf("  Available (free) global memory after init: %f MB\n\n",
            (free_mem/1000000.0));
 #endif  // NDEBUG
+
+    load_cub_buffer_addresses();
 
     init_allocator_kernel<<<256, 256>>>(allocator_, data_buffer_);
     gpuErrchk(cudaDeviceSynchronize());

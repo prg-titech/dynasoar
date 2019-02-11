@@ -19,42 +19,39 @@ static const int kMaxRetry = 10000000;
 #define ASSERT_SUCCESS(expr) expr;
 #endif  // NDEBUG
 
+// Workaround because there CUB prefix sum does not work correctly on small
+// arrays.
+#define CUB_MIN_ARRAY_SIZE 1024
+#define const_max(a, b) ((a) > (b) ? (a) : (b))
+#define CUB_MAX_NUM_BLOCKS 64*64*64*64
+__device__ int cub_enumeration_base_buffer[CUB_MAX_NUM_BLOCKS];
+__device__ int cub_enumeration_id_buffer[CUB_MAX_NUM_BLOCKS];
+__device__ int cub_enumeration_cub_temp[3*CUB_MAX_NUM_BLOCKS];
+__device__ int cub_enumeration_cub_output[CUB_MAX_NUM_BLOCKS];
+int* cub_enumeration_base_buffer_addr;
+int* cub_enumeration_cub_temp_addr;
+int* cub_enumeration_cub_output_addr;
+
+void load_cub_buffer_addresses() {
+  gpuErrchk(cudaGetSymbolAddress((void**) &cub_enumeration_base_buffer_addr,
+                                 cub_enumeration_base_buffer));
+  gpuErrchk(cudaGetSymbolAddress((void**) &cub_enumeration_cub_temp_addr,
+                                 cub_enumeration_cub_temp));
+  gpuErrchk(cudaGetSymbolAddress((void**) &cub_enumeration_cub_output_addr,
+                                 cub_enumeration_cub_output));
+}
+
+
 static const int kCubScan = 0;
 static const int kAtomicScan = 1;
 
 static const int kNumBlocksAtomicAdd = 256;
 
 template<typename SizeT, int NumContainers, int Bitsize>
-struct CubScanData {
+struct ScanData {
   // Buffers for parallel enumeration.
   SizeT enumeration_result_buffer[NumContainers*Bitsize];
   SizeT enumeration_result_size;
-  SizeT enumeration_base_buffer[NumContainers*Bitsize];
-  SizeT enumeration_id_buffer[NumContainers*Bitsize];
-  SizeT enumeration_cub_temp[3*NumContainers*Bitsize];
-  SizeT enumeration_cub_output[NumContainers*Bitsize];
-};
-
-template<typename SizeT, int NumContainers, int Bitsize>
-struct AtomicScanData {
-  // Buffers for parallel enumeration.
-  SizeT enumeration_result_buffer[NumContainers*Bitsize];
-  SizeT enumeration_result_size;
-};
-
-template<int Type>
-struct ScanData;
-
-template<>
-struct ScanData<kCubScan> {
-  template<typename SizeT, int NumContainers, int Bitsize>
-  using type = CubScanData<SizeT, NumContainers, Bitsize>;
-};
-
-template<>
-struct ScanData<kAtomicScan> {
-  template<typename SizeT, int NumContainers, int Bitsize>
-  using type = AtomicScanData<SizeT, NumContainers, Bitsize>;
 };
 
 // TODO: Only works with ContainerT = unsigned long long int.
@@ -292,7 +289,7 @@ class Bitmap {
     ContainerT containers[NumContainers];
 
     // Buffers for parallel enumeration.
-    typename ScanData<ScanType>::type<SizeT, NumContainers, kBitsize> scan_data;
+    ScanData<SizeT, NumContainers, kBitsize> scan_data;
 
     // Containers that store the bits.
     using BitmapT = Bitmap<SizeT, NumContainers, ContainerT, ScanType>;
@@ -340,9 +337,10 @@ class Bitmap {
     set_result_size() {
       SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
       // Base buffer contains prefix sum.
-      SizeT result_size = scan_data.enumeration_cub_output[
+      SizeT result_size = cub_enumeration_cub_output[
           num_selected*kBitsize - 1];
       scan_data.enumeration_result_size = result_size;
+      assert(result_size >= num_selected);
     }
 
     // TODO: Run with num_selected threads, then we can remove the loop.
@@ -359,9 +357,9 @@ class Bitmap {
         for (int i = 0; i < kBitsize; ++i) {
           // Write "1" if allocated, "0" otherwise.
           bool bit_selected = value & (static_cast<ContainerT>(1) << i);
-          scan_data.enumeration_base_buffer[sid*kBitsize + i] = bit_selected;
+          cub_enumeration_base_buffer[sid*kBitsize + i] = bit_selected;
           if (bit_selected) {
-            scan_data.enumeration_id_buffer[sid*kBitsize + i] =
+            cub_enumeration_id_buffer[sid*kBitsize + i] =
                 kBitsize*container_id + i;
           }
         }
@@ -386,8 +384,8 @@ class Bitmap {
           if (bit_selected) {
             // Minus one because scan operation is inclusive.
             scan_data.enumeration_result_buffer[
-                scan_data.enumeration_cub_output[sid*kBitsize + i] - 1] =
-                    scan_data.enumeration_id_buffer[sid*kBitsize + i];
+                cub_enumeration_cub_output[sid*kBitsize + i] - 1] =
+                    cub_enumeration_id_buffer[sid*kBitsize + i];
           }
         }
       }
@@ -404,12 +402,14 @@ class Bitmap {
           <<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
 
-      size_t temp_size = 3*NumContainers*kBitsize;
-      cub::DeviceScan::InclusiveSum(scan_data.enumeration_cub_temp,
+      size_t temp_size = 3*CUB_MAX_NUM_BLOCKS;
+      // Workaround due to bug in CUB.
+      auto cub_scan_size = max(1024, num_selected*kBitsize);
+      cub::DeviceScan::InclusiveSum(cub_enumeration_cub_temp_addr,
                                     temp_size,
-                                    scan_data.enumeration_base_buffer,
-                                    scan_data.enumeration_cub_output,
-                                    num_selected*kBitsize);
+                                    cub_enumeration_base_buffer_addr,
+                                    cub_enumeration_cub_output_addr,
+                                    cub_scan_size);
       member_func_kernel<ThisClass, &ThisClass::post_scan>
           <<<num_selected/256+1, 256>>>(this);
       gpuErrchk(cudaDeviceSynchronize());
@@ -482,7 +482,7 @@ class Bitmap {
     ContainerT containers[NumContainers];
 
     // Buffers for parallel enumeration.
-    typename ScanData<kAtomicScan>::type<SizeT, NumContainers, kBitsize> scan_data;
+    ScanData<SizeT, NumContainers, kBitsize> scan_data;
 
     __DEV__ SizeT DBG_count_num_ones() {
       return __popcll(containers[0]);

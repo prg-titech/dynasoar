@@ -1,7 +1,7 @@
 #ifndef EXAMPLE_DEFRAG_BENCH_CONFIGURATION_H
 #define EXAMPLE_DEFRAG_BENCH_CONFIGURATION_H
 
-static const int kSize = 32768*3000;
+static const int kSize = 32768*1000;
 static const int kDeleteFactor = 3;
 
 #endif  // EXAMPLE_DEFRAG_BENCH_CONFIGURATION_H

@@ -270,9 +270,9 @@ void bfs_and_delete() {
 
 
 void defrag() {
-  allocator_handle->parallel_defrag<AnchorPullNode>();
-  allocator_handle->parallel_defrag<Node>();
-  allocator_handle->parallel_defrag<Spring>();
+  allocator_handle->parallel_defrag<AnchorPullNode>(1);
+  allocator_handle->parallel_defrag<Node>(1);
+  allocator_handle->parallel_defrag<Spring>(1);
 }
 
 
@@ -413,6 +413,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumSteps; ++i) {
+    printf("%i\n", i);
     step();
   }
 
