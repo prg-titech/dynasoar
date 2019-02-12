@@ -19,10 +19,8 @@ static const int kMaxRetry = 10000000;
 #define ASSERT_SUCCESS(expr) expr;
 #endif  // NDEBUG
 
-// Workaround because there CUB prefix sum does not work correctly on small
-// arrays.
-#define CUB_MIN_ARRAY_SIZE 1024
-#define const_max(a, b) ((a) > (b) ? (a) : (b))
+// Save memory: Allocate only one set of buffers.
+// TODO: This should be stored in SoaAllocator class.
 #define CUB_MAX_NUM_BLOCKS 64*64*64*64
 __device__ int cub_enumeration_base_buffer[CUB_MAX_NUM_BLOCKS];
 __device__ int cub_enumeration_id_buffer[CUB_MAX_NUM_BLOCKS];
@@ -41,6 +39,14 @@ void load_cub_buffer_addresses() {
                                  cub_enumeration_cub_output));
 }
 
+void perform_cub_scan(int cub_scan_size) {
+  size_t temp_size = 3*CUB_MAX_NUM_BLOCKS;
+  gpuErrchk(cub::DeviceScan::InclusiveSum(cub_enumeration_cub_temp_addr,
+                                          temp_size,
+                                          cub_enumeration_base_buffer_addr,
+                                          cub_enumeration_cub_output_addr,
+                                          cub_scan_size));
+}
 
 static const int kCubScan = 0;
 static const int kAtomicScan = 1;
@@ -263,7 +269,10 @@ class Bitmap {
 
   // Initiate scan operation (from the host side). This request is forwarded
   // to the next-level bitmap. Afterwards, scan continues here.
-  void scan() { data_.scan(); }
+  void scan() {
+    gpuErrchk(cudaPeekAtLastError());
+    data_.scan();
+  }
 
   // May only be called after scan.
   __DEV__ SizeT scan_num_bits() const {
@@ -343,6 +352,10 @@ class Bitmap {
       assert(result_size >= num_selected);
     }
 
+    __DEV__ void set_result_size_to_zero() {
+      scan_data.enumeration_result_size = 0;
+    }
+
     // TODO: Run with num_selected threads, then we can remove the loop.
     template<int S = ScanType>
     __DEV__ typename std::enable_if<S == kCubScan, void>::type
@@ -398,23 +411,30 @@ class Bitmap {
 
       SizeT num_selected = read_from_device<SizeT>(
           &nested.data_.scan_data.enumeration_result_size);
-      member_func_kernel<ThisClass, &ThisClass::pre_scan>
-          <<<num_selected/256+1, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
 
-      size_t temp_size = 3*CUB_MAX_NUM_BLOCKS;
-      // Workaround due to bug in CUB.
-      auto cub_scan_size = max(1024, num_selected*kBitsize);
-      cub::DeviceScan::InclusiveSum(cub_enumeration_cub_temp_addr,
-                                    temp_size,
-                                    cub_enumeration_base_buffer_addr,
-                                    cub_enumeration_cub_output_addr,
-                                    cub_scan_size);
-      member_func_kernel<ThisClass, &ThisClass::post_scan>
-          <<<num_selected/256+1, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-      member_func_kernel<ThisClass, &ThisClass::set_result_size><<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+      if (num_selected > 0) {
+        member_func_kernel<ThisClass, &ThisClass::pre_scan>
+            <<<num_selected/256+1, 256>>>(this);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+
+        // Workaround due to bug in CUB.
+        perform_cub_scan(num_selected*kBitsize);
+
+        member_func_kernel<ThisClass, &ThisClass::post_scan>
+            <<<num_selected/256+1, 256>>>(this);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+
+        member_func_kernel<ThisClass, &ThisClass::set_result_size><<<1, 1>>>(this);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+      } else {
+        member_func_kernel<ThisClass, &ThisClass::set_result_size_to_zero>
+            <<<1, 1>>>(this);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+      }
     }
 
     template<int S = ScanType>
@@ -456,13 +476,26 @@ class Bitmap {
     typename std::enable_if<S == kAtomicScan, void>::type scan() {
       nested.scan();
 
-      SizeT num_selected = read_from_device<SizeT>(&nested.data_.scan_data.enumeration_result_size);
-      member_func_kernel<ThisClass, &ThisClass::atomic_add_scan_init><<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
-      member_func_kernel<ThisClass, &ThisClass::atomic_add_scan>
-          <<<(num_selected + kNumBlocksAtomicAdd - 1)/kNumBlocksAtomicAdd,
-             kNumBlocksAtomicAdd>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+      SizeT num_selected = read_from_device<SizeT>(
+          &nested.data_.scan_data.enumeration_result_size);
+
+      if (num_selected > 0) {
+        member_func_kernel<ThisClass, &ThisClass::atomic_add_scan_init>
+            <<<1, 1>>>(this);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+
+        member_func_kernel<ThisClass, &ThisClass::atomic_add_scan>
+            <<<(num_selected + kNumBlocksAtomicAdd - 1)/kNumBlocksAtomicAdd,
+               kNumBlocksAtomicAdd>>>(this);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+      } else {
+        member_func_kernel<ThisClass, &ThisClass::set_result_size_to_zero>
+            <<<1, 1>>>(this);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaDeviceSynchronize());
+      }
     }
   };
 

@@ -269,16 +269,16 @@ void bfs_and_delete() {
 }
 
 
+#ifdef OPTION_DEFRAG
 void defrag() {
   allocator_handle->parallel_defrag<AnchorPullNode>(1);
   allocator_handle->parallel_defrag<Node>(1);
   allocator_handle->parallel_defrag<Spring>(1);
 }
+#endif  // OPTION_DEFRAG
 
 
 void step() {
-  defrag();
-
   allocator_handle->parallel_do<AnchorPullNode, &AnchorPullNode::pull>();
 
   for (int i = 0; i < kNumComputeIterations; ++i) {
@@ -414,6 +414,13 @@ int main(int /*argc*/, char** /*argv*/) {
 
   for (int i = 0; i < kNumSteps; ++i) {
     printf("%i\n", i);
+
+#ifdef OPTION_DEFRAG
+    if (kOptionDefrag && i % 500 == 0) {
+      defrag();
+    }
+#endif  // OPTION_DEFRAG
+
     step();
   }
 
