@@ -44,9 +44,7 @@ struct AllocatorWrapperDefrag {
 
         bool operator()() {
           // Stop iterating if at least one field must be rewritten.
-          return !(std::is_pointer<FieldType>::value
-              && std::is_base_of<typename std::remove_pointer<FieldType>::type,
-                                 DefragT>::value);
+          return !FieldUpdater<SoaFieldHelperT>::kSelected;
         }
       };
 
@@ -110,6 +108,10 @@ struct AllocatorWrapperDefrag {
         template<bool Check, int Dummy>
         struct ArrayFieldSelector {
           using ArrayBaseT = typename FieldType::BaseType;
+          static const bool kSelected =
+              std::is_pointer<ArrayBaseT>::value
+              && std::is_base_of<typename std::remove_pointer<ArrayBaseT>::type,
+                                 DefragT>::value;
 
           // Base type macthes. Scan this array.
           template<bool Check2, int Dummy2>
@@ -143,9 +145,7 @@ struct AllocatorWrapperDefrag {
           __DEV__ static void call(Args... args) {
             // Rewrite base type is a super class (or exact class)
             // of DefragT.
-            FieldSelector<std::is_pointer<ArrayBaseT>::value
-                && std::is_base_of<typename std::remove_pointer<ArrayBaseT>::type,
-                                   DefragT>::value, 0>::call(args...);
+            FieldSelector<kSelected, 0>::call(args...);
           }
         };
 
@@ -160,18 +160,26 @@ struct AllocatorWrapperDefrag {
         // Not an array.
         template<int Dummy>
         struct ArrayFieldSelector<false, Dummy> {
+          static const bool kSelected = false;
+
           template<typename BlockT>
           __DEV__ static void call(AllocatorT* allocator,
                                    BlockT* block, ObjectIndexT object_id) {}
         };
 
+        static const bool kFieldSelected =
+            std::is_pointer<FieldType>::value
+            && std::is_base_of<typename std::remove_pointer<FieldType>::type,
+                               DefragT>::value;
+        static const bool kArraySelected =
+            ArrayFieldSelector<is_device_array<FieldType>::value, 0>::kSelected;
+        static const bool kSelected = kFieldSelected || kArraySelected;
+
         template<typename... Args>
         __DEV__ bool operator()(Args... args) {
           // Rewrite field if field type is a super class (or exact class)
           // of DefragT.
-          FieldSelector<std::is_pointer<FieldType>::value
-              && std::is_base_of<typename std::remove_pointer<FieldType>::type,
-                                 DefragT>::value, 0>::call(args...);
+          FieldSelector<kFieldSelected, 0>::call(args...);
 
           // For array types: Check base type.
           ArrayFieldSelector<is_device_array<FieldType>::value, 0>
@@ -341,8 +349,8 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_choose_target_blocks() {
 template<BlockIndexT N_Objects, class... Types>
 template<typename T>
 __DEV__ BlockIndexT SoaAllocator<N_Objects, Types...>::get_num_defrag_compactions() {
-  assert(leq_50_[BlockHelper<T>::kIndex].scan_num_bits()
-         == num_leq_50_[BlockHelper<T>::kIndex]);
+  // Note: scan_num_bits() is different from num_leq_50 here! The latter one
+  // was already decreased.
   return (leq_50_[BlockHelper<T>::kIndex].scan_num_bits() - kMinDefragRetainBlocks)
       / (kDefragFactor + 1);
 }
