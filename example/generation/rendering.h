@@ -3,6 +3,6 @@
 
 void init_renderer();
 void close_renderer();
-void draw(char* host_cells);
+void draw(int* host_cells);
 
 #endif  // EXAMPLE_GENERATION_SOA_RENDERING_H

@@ -9,19 +9,24 @@ class Agent;
 class Alive;
 class Candidate;
 
-using AllocatorT = SoaAllocator<8*64*64*64*64, Cell, Agent, Alive, Candidate>;
+using AllocatorT = SoaAllocator<64*64*64*64, Cell, Agent, Alive, Candidate>;
 
 
-static const int kActionNone = 0;
-static const int kActionDie = 1;
-static const int kActionSpawnAlive = 2;
+static const char kActionNone = 0;
+static const char kActionDie = 1;
+static const char kActionSpawnAlive = 2;
 
 
 class Cell : public SoaBase<AllocatorT> {
  public:
-  declare_field_types(Cell, Agent*)  // agent_
+  declare_field_types(
+      Cell,
+      Agent*,   // agent_
+      int)      // reserved_
 
   SoaField<Cell, 0> agent_;
+
+  SoaField<Cell, 1> reserved_;
 
   __device__ Cell();
 
@@ -36,7 +41,7 @@ class Agent : public SoaBase<AllocatorT> {
   declare_field_types(
       Agent,
       int,   // cell_id_
-      char)  // action_
+      int)   // action_
 
   static const bool kIsAbstract = true;
 
@@ -72,8 +77,6 @@ class Alive : public Agent {
 
   __device__ void create_candidates();
 
-  __device__ void maybe_create_candidate(int x, int y);
-
   __device__ void prepare();
 
   __device__ void update();
@@ -100,6 +103,9 @@ class Candidate : public Agent {
   __device__ void prepare();
 
   __device__ void update();
+
+  // Only for rendering.
+  __device__ void update_render_array();
 
   // Only for debugging.
   __device__ void update_counter();

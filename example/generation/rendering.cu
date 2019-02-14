@@ -14,11 +14,20 @@ static const int kCellWidth = 4;
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
-static void render_rect(SDL_Renderer* renderer, int x, int y, char state) {
+static void render_rect(SDL_Renderer* renderer, int x, int y, int state) {
   if (state > 0) {
     assert(state <= kNumStates + 1);
     int rgb_val = ((float) state) / (kNumStates + 2) * 255;
     SDL_SetRenderDrawColor(renderer, rgb_val, rgb_val, rgb_val,
+                           SDL_ALPHA_OPAQUE);
+
+    SDL_Rect rect;
+    rect.w = rect.h = kCellWidth;
+    rect.x = x*kCellWidth;
+    rect.y = y*kCellWidth;
+    SDL_RenderFillRect(renderer, &rect);
+  } else if (state == -1) {
+    SDL_SetRenderDrawColor(renderer, 150, 0, 0,
                            SDL_ALPHA_OPAQUE);
 
     SDL_Rect rect;
@@ -31,7 +40,7 @@ static void render_rect(SDL_Renderer* renderer, int x, int y, char state) {
 
 
 // Render simulation. Return value indicates if similation should continue.
-void draw(char* host_cells) {
+void draw(int* host_cells) {
   // Clear scene.
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
   SDL_RenderClear(renderer);
@@ -51,7 +60,7 @@ void draw(char* host_cells) {
     }
   }
 
-  SDL_Delay(50);
+  SDL_Delay(1);
 }
 
 

@@ -26,13 +26,13 @@ dataset_t load_fireworks() {
 }
 */
 
-static const int kBurstLen = 40;
+static const int kBurstLen = 12;
 
 dataset_t load_burst() {
   dataset_t r(/*x=*/ kSize, /*y=*/ kSize);
 
-  for (int dx = kBurstLen+10; dx < r.x - kBurstLen - 10; dx += 2.1*kBurstLen) {
-    for (int dy = kBurstLen+10; dy < r.y - kBurstLen - 10; dy += 2.1*kBurstLen) {
+  for (int dx = kBurstLen+10; dx < r.x - kBurstLen - 10; dx += 4*kBurstLen) {
+    for (int dy = kBurstLen+10; dy < r.y - kBurstLen - 10; dy += 4*kBurstLen) {
       r.set_displacement(dx, dy);
       for (int y = -kBurstLen; y <= -6; ++y) r.add(0, y);
       for (int x = -1; x <= 1; ++x) r.add(x, -5);

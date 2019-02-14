@@ -13,9 +13,9 @@ __device__ AllocatorT* device_allocator;
 
 // Rendering array.
 // TODO: Fix variable names.
-__device__ char* device_render_cells;
-char* host_render_cells;
-char* d_device_render_cells;
+__device__ int* device_render_cells;
+int* host_render_cells;
+int* d_device_render_cells;
 
 
 // Dataset.
@@ -25,7 +25,7 @@ __device__ Cell** cells;
 dataset_t dataset;
 
 
-__device__ Cell::Cell() : agent_(nullptr) {}
+__device__ Cell::Cell() : agent_(nullptr), reserved_(0) {}
 
 
 __device__ Agent* Cell::agent() { return agent_; }
@@ -121,46 +121,25 @@ __device__ void Alive::create_candidates() {
       int ny = cell_y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        if (cells[ny*SIZE_X + nx]->is_empty()) {
-          // Candidate should be created here.
-          maybe_create_candidate(nx, ny);
+        auto cid = ny*SIZE_X + nx;
+        if (cells[cid]->is_empty()) {
+            if (atomicCAS(&cells[cid]->reserved_, 0, 1) == 0) {
+              cells[cid]->agent_ = new(device_allocator) Candidate(cid);
+            }
         }
       }
     }
   }
-}
-
-
-__device__ void Alive::maybe_create_candidate(int x, int y) {
-  // Check neighborhood of cell to determine who should create Candidate.
-  for (int dx = -1; dx < 2; ++dx) {
-    for (int dy = -1; dy < 2; ++dy) {
-      int nx = x + dx;
-      int ny = y + dy;
-
-      if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        Alive* alive = cells[ny*SIZE_X + nx]->agent()->cast<Alive>();
-        if (alive != nullptr) {
-          if (alive->is_new_) {
-            if (alive == this) {
-              // Create candidate now.
-              cells[y*SIZE_X + x]->agent_ =
-                  new(device_allocator) Candidate(y*SIZE_X + x);
-            }  // else: Created by other thread.
-
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  assert(false);
 }
 
 
 __device__ void Alive::update_render_array() {
   device_render_cells[cell_id_] = state_ + 1;
+}
+
+
+__device__ void Candidate::update_render_array() {
+  device_render_cells[cell_id_] = -1;
 }
 
 
@@ -188,6 +167,7 @@ __device__ void Candidate::update() {
     destroy(device_allocator, this);
   } else if (action_ == kActionDie) {
     cells[cid]->agent_ = nullptr;
+    cells[cid]->reserved_ = 0;
     destroy(device_allocator, this);
   }
 }
@@ -223,9 +203,10 @@ void render() {
   initialize_render_arrays<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
   allocator_handle->parallel_do<Alive, &Alive::update_render_array>();
-
+  allocator_handle->parallel_do<Candidate, &Candidate::update_render_array>();
+  
   cudaMemcpy(host_render_cells, d_device_render_cells,
-             sizeof(char)*dataset.x*dataset.y, cudaMemcpyDeviceToHost);
+             sizeof(int)*dataset.x*dataset.y, cudaMemcpyDeviceToHost);
   draw(host_render_cells);
 }
 
@@ -241,7 +222,7 @@ void transfer_dataset() {
   printf("Loading on GPU: %i alive cells.\n", num_alive);
 #endif  // NDEBUG
 
-  load_game<<<128, 128>>>(dev_cell_ids, num_alive);
+  load_game<<<1024, 1024>>>(dev_cell_ids, num_alive);
   gpuErrchk(cudaDeviceSynchronize());
   cudaFree(dev_cell_ids);
 
@@ -283,8 +264,8 @@ int checksum() {
 
 void defrag() {
 #ifdef OPTION_DEFRAG
-  allocator_handle->parallel_defrag<Alive>(1);
-  allocator_handle->parallel_defrag<Candidate>(1);
+  allocator_handle->parallel_defrag<Alive>();
+  allocator_handle->parallel_defrag<Candidate>();
 #endif  // OPTION_DEFRAG
 }
 
@@ -318,14 +299,14 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(cells, &host_cells, sizeof(Cell**), 0,
                      cudaMemcpyHostToDevice);
 
-  cudaMalloc(&d_device_render_cells, sizeof(char)*dataset.x*dataset.y);
+  cudaMalloc(&d_device_render_cells, sizeof(int)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(device_render_cells, &d_device_render_cells,
-                     sizeof(char*), 0, cudaMemcpyHostToDevice);
+                     sizeof(int*), 0, cudaMemcpyHostToDevice);
 
-  host_render_cells = new char[dataset.x*dataset.y];
+  host_render_cells = new int[dataset.x*dataset.y];
 
   // Initialize cells.
-  create_cells<<<128, 128>>>();
+  create_cells<<<1024, 1024>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
   transfer_dataset();
@@ -335,17 +316,19 @@ int main(int /*argc*/, char** /*argv*/) {
   // Run simulation.
   for (int i = 0; i < kNumIterations; ++i) {
     if (kOptionDefrag) {
-      defrag();
+      if (i % 50 == 0) {
+        defrag();
+      }
     }
 
     if (kOptionRender) {
       render();
     }
 
-    if (kOptionPrintStats) {
+    if (kOptionPrintStats && i % 100 == 0) {
       printf("%i\n", i);
-      //allocator_handle->DBG_print_state_stats();
-      allocator_handle->DBG_collect_stats();
+      allocator_handle->DBG_print_state_stats();
+      // allocator_handle->DBG_collect_stats();
     }
 
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();

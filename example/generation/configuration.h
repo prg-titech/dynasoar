@@ -10,17 +10,17 @@ extern dataset_t dataset;
 //#define kStayAlive { false, false, true, false, false, false, false, false }
 //#define kSpawnNew  { false, true, false, true, false, false, false, false }
 
-#define kNumStates 30
+#define kNumStates 255
 #define kStayAlive { true, false, true, true, false, true, true, true, true }
 #define kSpawnNew  { false, false, false, true, true, false, true, false, true }
 
 
-static const int kNumIterations = 1000;  // 10000
-static const bool kOptionRender = false;
+static const int kNumIterations = 7500;  // 1000
+static const bool kOptionRender = true;
 static const bool kOptionPrintStats = true;
 static const bool kOptionDefrag = true;
 
-static const int kSize = 25000;
+static const int kSize = 75;  // 18000
 
 #endif  // EXAMPLE_GENERATION_CONFIGURATION_H
 

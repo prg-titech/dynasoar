@@ -14,16 +14,16 @@
 // 2 -- 66% -- Merge 2 blocks into 1 block
 // 3 -- 75% -- Merge 3 blocks into 1 block
 // leq_threshold = kDefragFactor / (kDefragFactor + 1)
-static const int kDefragFactor = 1;
+static const int kDefragFactor = 4;
 
 // Leave at least that many block, i.e., do not defragment too much.
-static const int kMinDefragRetainBlocks = 64;
+static const int kMinDefragRetainBlocks = 32;
 
 // Data section begins after 128 bytes. This leaves enough space for bitmaps
 // and other data structures in blocks.
 static const int kBlockDataSectionOffset = 64;
 
-static const int kMinDefragCandidates = 512;
+static const int kMinDefragCandidates = 128;
 
 static const int kFindActiveBlockRetries = 5;
 
