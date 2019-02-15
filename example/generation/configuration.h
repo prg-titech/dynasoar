@@ -15,12 +15,12 @@ extern dataset_t dataset;
 #define kSpawnNew  { false, false, false, true, true, false, true, false, true }
 
 
-static const int kNumIterations = 7500;  // 1000
-static const bool kOptionRender = true;
+static const int kNumIterations = 25000;  // 1000
+static const bool kOptionRender = false;
 static const bool kOptionPrintStats = true;
 static const bool kOptionDefrag = true;
 
-static const int kSize = 75;  // 18000
+static const int kSize = 2500;  // 18000
 
 #endif  // EXAMPLE_GENERATION_CONFIGURATION_H
 

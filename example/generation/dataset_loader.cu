@@ -26,7 +26,7 @@ dataset_t load_fireworks() {
 }
 */
 
-static const int kBurstLen = 12;
+static const int kBurstLen = 100;
 
 dataset_t load_burst() {
   dataset_t r(/*x=*/ kSize, /*y=*/ kSize);

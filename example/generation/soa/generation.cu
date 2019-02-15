@@ -327,7 +327,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
     if (kOptionPrintStats && i % 100 == 0) {
       printf("%i\n", i);
-      allocator_handle->DBG_print_state_stats();
+      // allocator_handle->DBG_print_state_stats();
       // allocator_handle->DBG_collect_stats();
     }
 

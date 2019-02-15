@@ -14,7 +14,7 @@
 // 2 -- 66% -- Merge 2 blocks into 1 block
 // 3 -- 75% -- Merge 3 blocks into 1 block
 // leq_threshold = kDefragFactor / (kDefragFactor + 1)
-static const int kDefragFactor = 4;
+static const int kDefragFactor = 3;
 
 // Leave at least that many block, i.e., do not defragment too much.
 static const int kMinDefragRetainBlocks = 32;
