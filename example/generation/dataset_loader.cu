@@ -28,25 +28,35 @@ dataset_t load_fireworks() {
 
 static const int kBurstLen = 100;
 
+void build_block(dataset_t& r, int dx, int dy) {
+  r.set_displacement(dx, dy);
+  for (int y = -kBurstLen; y <= -6; ++y) r.add(0, y);
+  for (int x = -1; x <= 1; ++x) r.add(x, -5);
+  for (int x = -1; x <= 1; ++x) r.add(x, -4);
+  for (int x = -3; x <= 3; ++x) r.add(x, -3);
+  for (int x = -3; x <= 3; ++x) r.add(x, -2);
+  for (int x = -5; x <= 5; ++x) r.add(x, -1);
+  for (int x = -kBurstLen; x <= kBurstLen; ++x) r.add(x, 0);
+  for (int x = -5; x <= 5; ++x) r.add(x, 1);
+  for (int x = -3; x <= 3; ++x) r.add(x, 2);
+  for (int x = -3; x <= 3; ++x) r.add(x, 3);
+  for (int x = -1; x <= 1; ++x) r.add(x, 4);
+  for (int x = -1; x <= 1; ++x) r.add(x, 5);
+  for (int y = 6; y <= kBurstLen; ++y) r.add(0, y);
+}
+
 dataset_t load_burst() {
   dataset_t r(/*x=*/ kSize, /*y=*/ kSize);
 
-  for (int dx = kBurstLen+10; dx < r.x - kBurstLen - 10; dx += 4*kBurstLen) {
-    for (int dy = kBurstLen+10; dy < r.y - kBurstLen - 10; dy += 4*kBurstLen) {
-      r.set_displacement(dx, dy);
-      for (int y = -kBurstLen; y <= -6; ++y) r.add(0, y);
-      for (int x = -1; x <= 1; ++x) r.add(x, -5);
-      for (int x = -1; x <= 1; ++x) r.add(x, -4);
-      for (int x = -3; x <= 3; ++x) r.add(x, -3);
-      for (int x = -3; x <= 3; ++x) r.add(x, -2);
-      for (int x = -5; x <= 5; ++x) r.add(x, -1);
-      for (int x = -kBurstLen; x <= kBurstLen; ++x) r.add(x, 0);
-      for (int x = -5; x <= 5; ++x) r.add(x, 1);
-      for (int x = -3; x <= 3; ++x) r.add(x, 2);
-      for (int x = -3; x <= 3; ++x) r.add(x, 3);
-      for (int x = -1; x <= 1; ++x) r.add(x, 4);
-      for (int x = -1; x <= 1; ++x) r.add(x, 5);
-      for (int y = 6; y <= kBurstLen; ++y) r.add(0, y);
+  for (int dx = kBurstLen+10; dx < r.x - kBurstLen - 10; dx += 2.05*kBurstLen) {
+    for (int dy = kBurstLen+10; dy < r.y - kBurstLen - 10; dy += 2.05*kBurstLen) {
+      build_block(r, dx, dy);
+    }
+  }
+
+  for (int dx = kBurstLen+10 + 1.0125*kBurstLen; dx < r.x - kBurstLen - 10; dx += 2.05*kBurstLen) {
+    for (int dy = kBurstLen+10 + 1.0125*kBurstLen; dy < r.y - kBurstLen - 10; dy += 2.05*kBurstLen) {
+      build_block(r, dx, dy);
     }
   }
 
