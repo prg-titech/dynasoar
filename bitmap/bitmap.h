@@ -279,9 +279,21 @@ class Bitmap {
     return data_.scan_data.enumeration_result_size;
   }
 
+  __DEV__ void set_scan_num_bits(SizeT value) {
+    data_.scan_data.enumeration_result_size = value;
+  }
+
+  __DEV__ SizeT atomic_inc_scan_num_bits() {
+    return atomicAdd(&data_.scan_data.enumeration_result_size, 1);
+  }
+
   // Returns the index of the pos-th set bit.
   __DEV__ SizeT scan_get_index(SizeT pos) const {
     return data_.scan_data.enumeration_result_buffer[pos];
+  }
+
+  __DEV__ void scan_set_index(SizeT pos, SizeT value) {
+    data_.scan_data.enumeration_result_buffer[pos] = value;
   }
 
   // Nested bitmap data structure.

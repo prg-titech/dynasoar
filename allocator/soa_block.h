@@ -6,6 +6,10 @@
 #include "allocator/util.h"
 
 
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+static const char kInvalidTypeId = 127;
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
+
 enum DeallocationState : int8_t {
   kBlockNowEmpty,      // Deallocate block.
 #ifdef OPTION_DEFRAG

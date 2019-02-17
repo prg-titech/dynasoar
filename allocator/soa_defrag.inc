@@ -585,6 +585,10 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
     // Delete source block.
     // Invalidate block.
     get_block<T>(source_block_idx)->free_bitmap = 0ULL;
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+    get_block<T>(source_block_idx)->type_id = kInvalidTypeId;
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
+
     // Precond.: Block is active and allocated. Block was already
     // removed from leq_50_ above.
     deallocate_block<T>(source_block_idx, /*dealloc_leq_50=*/ false);
@@ -693,6 +697,49 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_update_block_state() {
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
 
 
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+template<BlockIndexT N_Objects, class... Types>
+template<typename T>
+__DEV__ void SoaAllocator<N_Objects, Types...>::defrag_init_heap_scan() {
+  leq_50_[BlockHelper<T>::kIndex].set_scan_num_bits(0);
+}
+
+template<BlockIndexT N_Objects, class... Types>
+template<typename T>
+__DEV__ void SoaAllocator<N_Objects, Types...>::defrag_atomic_heap_scan() {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < N; i += gridDim.x * blockDim.x) {
+    auto* abstr_blk = get_block(i);
+    if (abstr_blk->type_id == BlockHelper<T>::kIndex) {
+      auto* blk =
+          reinterpret_cast<typename BlockHelper<T>::BlockType*>(abstr_blk);
+      if (__popcll(blk->allocation_bitmap()) <= BlockHelper<T>::kLeq50Threshold) {
+        // This is a defragmentation candidate.
+        auto idx = leq_50_[BlockHelper<T>::kIndex].atomic_inc_scan_num_bits();
+        leq_50_[BlockHelper<T>::kIndex].scan_set_index(idx, i);
+      }
+    }
+  }
+}
+
+template<BlockIndexT N_Objects, class... Types>
+template<typename T>
+void SoaAllocator<N_Objects, Types...>::defrag_heap_scan() {
+  member_func_kernel<
+      ThisAllocator,
+      &ThisAllocator::defrag_init_heap_scan<T>>
+      <<<1, 1>>>(this);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  member_func_kernel<
+      ThisAllocator,
+      &ThisAllocator::defrag_atomic_heap_scan<T>>
+      <<<256, 256>>>(this);
+  gpuErrchk(cudaDeviceSynchronize());
+}
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
+
+
 template<BlockIndexT N_Objects, class... Types>
 template<int NumRecords>
 __DEV__ void SoaAllocator<N_Objects, Types...>
@@ -739,7 +786,11 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     auto time_1 = std::chrono::system_clock::now();
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+    defrag_heap_scan<T>();
+#else
     leq_50_[BlockHelper<T>::kIndex].scan();
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
 #else
     const int min_remaining_records = num_leq_blocks - max_num_source_blocks;
     assert(min_remaining_records >= (num_leq_blocks - min_remaining_records)

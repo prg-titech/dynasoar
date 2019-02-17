@@ -65,6 +65,17 @@ class SoaAllocator {
 
   template<typename T>
   __DEV__ void defrag_store_forwarding_ptr();
+
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+  template<typename T>
+  __DEV__ void defrag_init_heap_scan();
+
+  template<typename T>
+  __DEV__ void defrag_atomic_heap_scan();
+
+  template<typename T>
+  void defrag_heap_scan();
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
 #else
   template<typename T, int NumRecords>
   __DEV__ void defrag_move();
@@ -175,6 +186,15 @@ class SoaAllocator {
       assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
     }
   }
+
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+  __DEV__ void initialize_blocks() {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+         i < N; i += gridDim.x * blockDim.x) {
+      get_block(i)->type_id = kInvalidTypeId;
+    }
+  }
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
 
   __DEV__ SoaAllocator(const ThisAllocator&) = delete;
 
@@ -534,6 +554,15 @@ class SoaAllocator {
     return result;
   }
 
+  __DEV__ AbstractBlock* get_block(BlockIndexT block_idx)
+      const {
+    assert(block_idx < N && block_idx >= 0);
+    uintptr_t increment = static_cast<uintptr_t>(block_idx)*kBlockSizeBytes;
+    auto* result = reinterpret_cast<AbstractBlock*>(data_ + increment);
+    assert(reinterpret_cast<char*>(result) >= data_);
+    return result;
+  }
+
   template<class T>
   __DEV__ BlockIndexT find_active_block() {
     BlockIndexT block_idx;
@@ -607,6 +636,10 @@ class SoaAllocator {
     while (true) {
       auto old_free_bitmap = atomicExch(&block->free_bitmap, 0ULL);
       if (old_free_bitmap == BlockHelper<T>::BlockType::kBitmapInitState) {
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+        block->type_id = kInvalidTypeId;
+        __threadfence();
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
         return true;
       } else if (old_free_bitmap != 0ULL) {
         // TODO: Check correctness of this code path. It is rarely executed.

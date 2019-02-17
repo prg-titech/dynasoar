@@ -9,6 +9,9 @@
 
 #define OPTION_DEFRAG_FORWARDING_POINTER
 
+// Do not utilize the leq_50 bitmap.
+#define OPTION_DEFARG_FORWARDING_BASELINE
+
 // Defragmentation factor.
 // 1 -- 50% -- Merge 1 block into 1 block
 // 2 -- 66% -- Merge 2 blocks into 1 block

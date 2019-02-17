@@ -71,6 +71,12 @@ class AllocatorHandle {
 
     init_allocator_kernel<<<256, 256>>>(allocator_, data_buffer_);
     gpuErrchk(cudaDeviceSynchronize());
+
+#ifdef OPTION_DEFARG_FORWARDING_BASELINE
+    member_func_kernel<AllocatorT, &AllocatorT::initialize_blocks>
+        <<<256, 256>>>(allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
+#endif  // OPTION_DEFARG_FORWARDING_BASELINE
   }
 
   // Delete the allocator: Free all associated CUDA memory.
