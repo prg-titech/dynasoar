@@ -48,14 +48,14 @@ void build_block(dataset_t& r, int dx, int dy) {
 dataset_t load_burst() {
   dataset_t r(/*x=*/ kSize, /*y=*/ kSize);
 
-  for (int dx = kBurstLen+10; dx < r.x - kBurstLen - 10; dx += 2.05*kBurstLen) {
-    for (int dy = kBurstLen+10; dy < r.y - kBurstLen - 10; dy += 2.05*kBurstLen) {
+  for (int dx = kBurstLen+10; dx < r.x - kBurstLen - 10; dx += 2.1*kBurstLen) {
+    for (int dy = kBurstLen+10; dy < r.y - kBurstLen - 10; dy += 2.1*kBurstLen) {
       build_block(r, dx, dy);
     }
   }
 
-  for (int dx = kBurstLen+10 + 1.0125*kBurstLen; dx < r.x - kBurstLen - 10; dx += 2.05*kBurstLen) {
-    for (int dy = kBurstLen+10 + 1.0125*kBurstLen; dy < r.y - kBurstLen - 10; dy += 2.05*kBurstLen) {
+  for (int dx = kBurstLen+10 + 1.05*kBurstLen; dx < r.x - kBurstLen - 10; dx += 2.1*kBurstLen) {
+    for (int dy = kBurstLen+10 + 1.05*kBurstLen; dy < r.y - kBurstLen - 10; dy += 2.1*kBurstLen) {
       build_block(r, dx, dy);
     }
   }
