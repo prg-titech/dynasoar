@@ -57,6 +57,26 @@ __global__ static void member_func_kernel(C* ptr) {
   (ptr->*func)();
 }
 
+template<typename C, typename R, R (C::*func)()>
+__global__ static void member_func_kernel_return(C* ptr, R* result) {
+  *result = (ptr->*func)();
+}
+
+template<typename C, typename R, R (C::*func)()>
+R call_return_member_func(C* ptr) {
+  R h_result;
+  R* d_result;
+  cudaMalloc(&d_result, sizeof(R));
+
+  member_func_kernel_return<C, R, func><<<1, 1>>>(ptr, d_result);
+  gpuErrchk(cudaDeviceSynchronize());
+
+  cudaMemcpy(&h_result, d_result, sizeof(R), cudaMemcpyDeviceToHost);
+  cudaFree(d_result);
+
+  return h_result;
+}
+
 template<typename C, typename T1, void (C::*func)(T1)>
 __global__ static void member_func_kernel(C* ptr, T1 t1) {
   (ptr->*func)(t1);

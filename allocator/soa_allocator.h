@@ -104,6 +104,8 @@ class SoaAllocator {
 
   __DEV__ void DBG_print_collected_stats();
 
+  float DBG_host_calculate_fragmentation();
+
   // TODO: Consider moving out of soa_debug.inc.
   template<class T>
   __DEV__ static bool is_type(const T* ptr);

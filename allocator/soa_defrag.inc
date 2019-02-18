@@ -714,6 +714,7 @@ long unsigned int bench_init_leq_time = 0;
 long unsigned int bench_defrag_move_time = 0;
 long unsigned int bench_rewrite_time = 0;
 long unsigned int bench_total_defrag_time = 0;
+long unsigned int bench_num_passes = 0;
 
 // Should be invoked from host side. Perform defragmentation only if there are
 // enough blocks so that at least min_num_compactions many defragmentation
@@ -731,10 +732,16 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
       copy_from_device(&num_leq_50_[BlockHelper<T>::kIndex]);
 
   for (bool first_iteration = true; ; first_iteration = false) {
+#ifdef OPTION_DEFRAG_BENCH
+    printf("%i, %f\n", (int) num_leq_blocks, DBG_host_calculate_fragmentation());
+#endif  // OPTION_DEFRAG_BENCH
+
     // E.g.: n = 3: Retain 3/4 = 75% of blocks. Round up.
     const int max_num_source_blocks =
         (num_leq_blocks - kMinDefragRetainBlocks) / (kDefragFactor + 1);
     if (max_num_source_blocks <= min_num_compactions) break;
+
+    ++bench_num_passes;
 
     auto time_1 = std::chrono::system_clock::now();
 

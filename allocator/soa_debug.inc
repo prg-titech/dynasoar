@@ -214,6 +214,13 @@ __DEV__ float SoaAllocator<N_Objects, Types...>::DBG_calculate_fragmentation() {
 }
 
 template<BlockIndexT N_Objects, class... Types>
+float SoaAllocator<N_Objects, Types...>::DBG_host_calculate_fragmentation() {
+  return call_return_member_func<
+      ThisAllocator, float,
+      &ThisAllocator::DBG_calculate_fragmentation>(this);
+}
+
+template<BlockIndexT N_Objects, class... Types>
 __DEV__ void SoaAllocator<N_Objects, Types...>::DBG_collect_stats() {
   // Accumulators for statistics.
   int total_num_obj_alloc = 0;
