@@ -11,8 +11,8 @@ As an example, an nbody simulation consists of `n` body objects, for each of whi
 ## Documentation/Papers
 We renamed SoaAlloc to DynaSOAr recently.
 
+* Matthias Springer, Hidehiko Masuhara. [DynaSOAr: A Parallel Memory Allocator for Object-oriented Programming on GPUs with Efficient Memory Access](https://arxiv.org/pdf/1810.11765). ArXiv Preprint, 2019.
 * Matthias Springer. [SoaAlloc: Accelerating Single-Method Multiple-Objects Applications on GPUs](https://arxiv.org/pdf/1809.07444). ACM Student Research Competition (SPLASH 2018).
-* Matthias Springer, Hidehiko Masuhara. [SoaAlloc: A Lock-free Hierarchical Bitmap-based Object Allocator for GPUs](https://arxiv.org/pdf/1810.11765). ArXiv Preprint, 2018.
 * Matthias Springer, Yaozhu Sun, Hidehiko Masuhara. [Inner Array Inlining for Structure of Arrays Layout](http://m-sp.org/downloads/array2018.pdf). ARRAY 2018.
 * Matthias Springer, Hidehiko Masuhara. [Ikra-Cpp: A C++/CUDA DSL for Object-oriented Programming with Structure-of-Arrays Data Layout](http://m-sp.org/downloads/wpmvp2018.pdf). WPMVP 2018.
 * Matthias Springer. [A C++/CUDA DSL for Object-oriented Programming with Structure-of-Arrays Data Layout](http://m-sp.org/downloads/cgo2018-src-abstract.pdf). ACM Student Research Competition (CGO 2018).
