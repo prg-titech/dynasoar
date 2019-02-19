@@ -94,6 +94,12 @@ class SoaAllocator {
   template<class T>
   __DEV__ BlockIndexT DBG_used_slots();
 
+  template<class T>
+  BlockIndexT DBG_host_allocated_slots();
+
+  template<class T>
+  BlockIndexT DBG_host_used_slots();
+
   static void DBG_print_stats();
 
   __DEV__ float DBG_calculate_fragmentation();

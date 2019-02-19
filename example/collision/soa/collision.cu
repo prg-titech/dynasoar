@@ -265,25 +265,30 @@ int main(int /*argc*/, char** /*argv*/) {
                      cudaMemcpyHostToDevice);
 
   // Allocate and create Body objects.
-  kernel_initialize_bodies<<<128, 128>>>();
+  kernel_initialize_bodies<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+#ifdef OPTION_DEFRAG
   allocator_handle->parallel_defrag<Body>();
+#endif  // OPTION_DEFRAG
 
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
+//    printf("%i\n", i);
+    if (kOptionPrintStats) {
+      int allocated = dev_ptr->DBG_host_allocated_slots<Body>();
+      int used = dev_ptr->DBG_host_used_slots<Body>();
+      printf("%i, %i, %i\n", i, used, allocated);
+//      allocator_handle->DBG_print_state_stats();
+//      allocator_handle->DBG_collect_stats();
+    }
+
 #ifdef OPTION_DEFRAG
     if (i % 10 == 0) {
       allocator_handle->parallel_defrag<Body>();
     }
 #endif  // OPTION_DEFRAG
-
-    if (kOptionPrintStats) {
-      printf("%i\n", i);
-      allocator_handle->DBG_print_state_stats();
-      allocator_handle->DBG_collect_stats();
-    }
 
     allocator_handle->parallel_do<Body, &Body::compute_force>();
     allocator_handle->parallel_do<Body, &Body::update>();
@@ -317,7 +322,7 @@ int main(int /*argc*/, char** /*argv*/) {
 #endif  // OPTION_DEFRAG
 
   if (kOptionPrintStats) {
-    allocator_handle->DBG_print_collected_stats();
+    //allocator_handle->DBG_print_collected_stats();
   }
 
   if (kOptionRender) {

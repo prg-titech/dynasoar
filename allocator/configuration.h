@@ -10,17 +10,17 @@
 #define OPTION_DEFRAG_FORWARDING_POINTER
 
 // Print additional stats about defragmentation.
-#define OPTION_DEFRAG_BENCH
+//#define OPTION_DEFRAG_BENCH
 
 // Defragmentation factor.
 // 1 -- 50% -- Merge 1 block into 1 block
 // 2 -- 66% -- Merge 2 blocks into 1 block
 // 3 -- 75% -- Merge 3 blocks into 1 block
 // leq_threshold = kDefragFactor / (kDefragFactor + 1)
-static const int kDefragFactor = 1;
+static const int kDefragFactor = 5;
 
 // Leave at least that many block, i.e., do not defragment too much.
-static const int kMinDefragRetainBlocks = 0;
+static const int kMinDefragRetainBlocks = 16;
 
 // Data section begins after 128 bytes. This leaves enough space for bitmaps
 // and other data structures in blocks.
