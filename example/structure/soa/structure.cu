@@ -32,7 +32,7 @@ __device__ Spring::Spring(NodeBase* p1, NodeBase* p2, float spring_factor,
                           float max_force)
     : p1_(p1), p2_(p2), spring_factor_(spring_factor), force_(0.0f),
       max_force_(max_force), initial_length_(p1->distance_to(p2)),
-      delete_flag_(false) {
+      delete_flag_(0) {
   assert(initial_length_ > 0.0f);
   p1_->add_spring(this);
   p2_->add_spring(this);
@@ -95,9 +95,9 @@ __device__ void Spring::self_destruct() {
 }
 
 
-__device__ void Node::move() {
-  float force_x = 0.0f;
-  float force_y = 0.0f;
+__device__ void Node::compute_force() {
+  force_x_ = 0.0f;
+  force_y_ = 0.0f;
 
   for (int i = 0; i < kMaxDegree; ++i) {
     Spring* s = springs_[i];
@@ -122,14 +122,17 @@ __device__ void Node::move() {
       float unit_y = dy/dist;
 
       // Apply force.
-      force_x += unit_x*s->force();
-      force_y += unit_y*s->force();
+      force_x_ += unit_x*s->force();
+      force_y_ += unit_y*s->force();
     }
   }
+}
 
-  // Calculate new velocity and position.
-  vel_x_ += force_x*kDt / mass_;
-  vel_y_ += force_y*kDt / mass_;
+
+__device__ void Node::move() {
+  // Calculate new velocity and posFition.
+  vel_x_ += force_x_*kDt / mass_;
+  vel_y_ += force_y_*kDt / mass_;
   vel_x_ *= 1.0f - kVelocityDampening;
   vel_y_ *= 1.0f - kVelocityDampening;
   pos_x_ += vel_x_*kDt;
@@ -188,7 +191,7 @@ __device__ void NodeBase::bfs_set_delete_flags() {
 
 
 __device__ void Spring::bfs_delete() {
-  if (delete_flag_) { self_destruct(); }
+  if (delete_flag_ == 1) { self_destruct(); }
 }
 
 
@@ -244,6 +247,7 @@ float checksum() {
 
 void compute() {
   allocator_handle->parallel_do<Spring, &Spring::compute_force>();
+  allocator_handle->parallel_do<Node, &Node::compute_force>();
   allocator_handle->parallel_do<Node, &Node::move>();
 }
 
@@ -271,6 +275,7 @@ void bfs_and_delete() {
 
 #ifdef OPTION_DEFRAG
 void defrag() {
+  allocator_handle->parallel_defrag<AnchorNode>(1);
   allocator_handle->parallel_defrag<AnchorPullNode>(1);
   allocator_handle->parallel_defrag<Node>(1);
   allocator_handle->parallel_defrag<Spring>(1);
@@ -410,16 +415,33 @@ int main(int /*argc*/, char** /*argv*/) {
   random_dataset(dataset);
   load_dataset(dataset);
 
+//  allocator_handle->DBG_print_state_stats();
+
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumSteps; ++i) {
-    printf("%i\n", i);
+   // printf("%i\n", i);
 
 #ifdef OPTION_DEFRAG
-    if (kOptionDefrag && i % 500 == 0) {
+    if (kOptionDefrag && i % 20 == 0) {
+      // allocator_handle->DBG_print_state_stats();
       defrag();
     }
 #endif  // OPTION_DEFRAG
+
+/*
+    int a_anchornode = dev_ptr->DBG_host_allocated_slots<AnchorNode>();
+    int u_anchornode = dev_ptr->DBG_host_used_slots<AnchorNode>();
+    int a_anchorpullnode = dev_ptr->DBG_host_allocated_slots<AnchorPullNode>();
+    int u_anchorpullnode = dev_ptr->DBG_host_used_slots<AnchorPullNode>();
+    int a_node = dev_ptr->DBG_host_allocated_slots<Node>();
+    int u_node = dev_ptr->DBG_host_used_slots<Node>();
+    int a_spring = dev_ptr->DBG_host_allocated_slots<Spring>();
+    int u_spring = dev_ptr->DBG_host_used_slots<Spring>();
+    printf("%i, %i, %i, %i, %i, %i, %i, %i, %i\n",
+           i, a_anchornode, u_anchornode, a_anchorpullnode, u_anchorpullnode,
+           a_node, u_node, a_spring, u_spring);
+*/
 
     step();
   }
@@ -431,8 +453,10 @@ int main(int /*argc*/, char** /*argv*/) {
 
   printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
 
+  allocator_handle->DBG_print_defrag_time();
+
   if (kOptionPrintStats) {
-    allocator_handle->DBG_print_state_stats();
+    //allocator_handle->DBG_print_state_stats();
   }
 
 #ifndef NDEBUG

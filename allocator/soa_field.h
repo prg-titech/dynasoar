@@ -56,7 +56,7 @@ class SoaField {
   // Calculate data pointer from address.
   __DEV__ T* data_ptr() const {
     // All SoaField<> have size 0. Offset of all fields is 1.
-    auto ptr_base = reinterpret_cast<uintptr_t>(this) - 1;
+    auto ptr_base = reinterpret_cast<uintptr_t>(this) - sizeof(C); //- 1;
     return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
   }
 

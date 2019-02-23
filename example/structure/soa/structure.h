@@ -98,6 +98,8 @@ class Node : public NodeBase {
       Node,
       float,          // vel_x_
       float,          // vel_y_
+      float,          // force_x_
+      float,          // force_y_
       float)          // mass_
 
   static const bool kIsAbstract = false;
@@ -106,10 +108,14 @@ class Node : public NodeBase {
  private:
   SoaField<Node, 0> vel_x_;
   SoaField<Node, 1> vel_y_;
-  SoaField<Node, 2> mass_;
+  SoaField<Node, 2> force_x_;
+  SoaField<Node, 3> force_y_;
+  SoaField<Node, 4> mass_;
 
  public:
   __device__ Node(float pos_x, float pos_y, float mass);
+
+  __device__ void compute_force();
 
   __device__ void move();
 };
@@ -125,7 +131,7 @@ class Spring : public SoaBase<AllocatorT> {
       float,          // initial_length_
       float,          // force_
       float,          // max_force_
-      bool)           // delete_flag_
+      int)            // delete_flag_
 
  private:
   SoaField<Spring, 0> p1_;
@@ -154,7 +160,7 @@ class Spring : public SoaBase<AllocatorT> {
 
   __device__ void bfs_delete();
 
-  __device__ void set_delete_flag() { delete_flag_ = true; }
+  __device__ void set_delete_flag() { delete_flag_ = 1; }
 
   // For rendering purposes.
   __device__ void add_to_rendering_array();

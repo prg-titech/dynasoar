@@ -715,6 +715,7 @@ long unsigned int bench_defrag_move_time = 0;
 long unsigned int bench_rewrite_time = 0;
 long unsigned int bench_total_defrag_time = 0;
 long unsigned int bench_num_passes = 0;
+int DBG_flag_defrag = 0;
 
 // Should be invoked from host side. Perform defragmentation only if there are
 // enough blocks so that at least min_num_compactions many defragmentation
@@ -739,7 +740,13 @@ void SoaAllocator<N_Objects, Types...>::parallel_defrag(int min_num_compactions)
     // E.g.: n = 3: Retain 3/4 = 75% of blocks. Round up.
     const int max_num_source_blocks =
         (num_leq_blocks - kMinDefragRetainBlocks) / (kDefragFactor + 1);
-    if (max_num_source_blocks <= min_num_compactions) break;
+    if (max_num_source_blocks <= min_num_compactions) {
+      //printf("No defrag: %i <= %i\n", max_num_source_blocks, min_num_compactions);
+      break;
+    }
+
+    DBG_flag_defrag = 1;
+    //printf("DEFRAG: %i\n", max_num_source_blocks);
 
     ++bench_num_passes;
 
@@ -871,6 +878,8 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_defrag_time() {
          bench_total_defrag_time / 1000);
 }
 
+__device__ int DBG_rewrite;
+
 template<BlockIndexT N_Objects, class... Types>
 template<typename DefragT, int NumRecords, typename ScanClassT,
          typename FieldT>
@@ -914,6 +923,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::maybe_rewrite_pointer(
       assert(forwarding_ptr->get_type() == scan_value->get_type());
 
       *scan_location = forwarding_ptr;
+      atomicAdd(&DBG_rewrite, 1);
     }
   }
 #else

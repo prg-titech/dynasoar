@@ -321,6 +321,8 @@ int main(int /*argc*/, char** /*argv*/) {
   allocator_handle->DBG_print_defrag_time();
 #endif  // OPTION_DEFRAG
 
+  printf("passes: %i\n", (int) bench_num_passes);
+
   if (kOptionPrintStats) {
     //allocator_handle->DBG_print_collected_stats();
   }

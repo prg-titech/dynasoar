@@ -17,10 +17,10 @@ extern dataset_t dataset;
 
 static const int kNumIterations = 25000;  // 1000
 static const bool kOptionRender = false;
-static const bool kOptionPrintStats = true;
+static const bool kOptionPrintStats = false;
 static const bool kOptionDefrag = true;
 
-static const int kSize = 5000;  // 18000
+static const int kSize = 1500;  // 18000
 
 #endif  // EXAMPLE_GENERATION_CONFIGURATION_H
 

@@ -440,9 +440,7 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
   auto time_before = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
-#ifndef NDEBUG
     printf("%i\n", i);
-#endif  // NDEBUG
 
     if (kOptionRender) {
       update_gui_map();

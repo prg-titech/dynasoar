@@ -125,8 +125,8 @@ class SoaAllocator {
 
   template<typename T>
   struct BlockHelper {
-    // SoaBase<> has size 1, everything else size 0.
-    static_assert(sizeof(T) == 1,
+    // SoaBase<> has size 1, every next class adds 1.
+    static_assert(sizeof(T) > 1,
                   "Unexpected superclass size.");
 
     static const int kIndex = TYPE_INDEX(Types..., T);
@@ -452,6 +452,10 @@ class SoaAllocator {
     const auto obj_id = get_object_id<T>(obj);
     const auto dealloc_state = get_block<T>(block_idx)->deallocate(obj_id);
 
+    // TODO: Not sure why this is necessary, but BlockHelper<T>::kIndex
+    // has the wrong value without this in optimized mode!
+    if (block_idx == -1) printf("%i\n", BlockHelper<T>::kIndex);
+
     // Note: Different ordering of branches can lead to deadlock!
     if (dealloc_state == kBlockNowActive) {
       ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
@@ -481,7 +485,7 @@ class SoaAllocator {
       template<bool Check, int Dummy>
       struct ClassSelector {
         __DEV__ static bool call(ThisAllocator* allocator, BaseClass* obj) {
-          if (obj->get_type() == BlockHelper<T>::kIndex) {
+          if (!T::kIsAbstract && obj->get_type() == BlockHelper<T>::kIndex) {
             allocator->free_typed(static_cast<T*>(obj));
             return false;  // No need to check other types.
           } else {

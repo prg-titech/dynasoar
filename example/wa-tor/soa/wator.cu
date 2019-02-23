@@ -285,9 +285,9 @@ __global__ void print_checksum() {
 }
 
 #ifdef OPTION_DEFRAG
-void defrag() {
-  allocator_handle->parallel_defrag<Fish>();
-  allocator_handle->parallel_defrag<Shark>();
+void defrag(int min_blk = 1) {
+  allocator_handle->parallel_defrag<Fish>(min_blk);
+  allocator_handle->parallel_defrag<Shark>(min_blk);
 }
 #endif  // OPTION_DEFRAG
 
@@ -303,19 +303,6 @@ void step() {
   allocator_handle->parallel_do<Shark, &Shark::prepare>();
   allocator_handle->parallel_do<Cell, &Cell::decide>();
   allocator_handle->parallel_do<Shark, &Shark::update>();
-}
-
-void initialize() {
-  // Create new allocator.
-  allocator_handle = new AllocatorHandle<AllocatorT>();
-  AllocatorT* dev_ptr = allocator_handle->device_pointer();
-  cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
-                     cudaMemcpyHostToDevice);
-
-  create_cells<<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  setup_cells<<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
 }
 
 __device__ uint32_t d_gui_map[kSizeY * kSizeX];
@@ -354,23 +341,47 @@ void print_stats() {
 }
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
-  initialize();
+  // Create new allocator.
+  allocator_handle = new AllocatorHandle<AllocatorT>();
+  AllocatorT* dev_ptr = allocator_handle->device_pointer();
+  cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
+                     cudaMemcpyHostToDevice);
+
+  create_cells<<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  setup_cells<<<128, 128>>>();
+  gpuErrchk(cudaDeviceSynchronize());
 
   int total_time = 0;
   for (int i = 0; i < kNumIterations; ++i) {
+    if(false) {
+    int a_fish = dev_ptr->DBG_host_allocated_slots<Fish>();
+    int u_fish = dev_ptr->DBG_host_used_slots<Fish>();
+    int a_shark = dev_ptr->DBG_host_allocated_slots<Shark>();
+    int u_shark = dev_ptr->DBG_host_used_slots<Shark>();
+    printf("%i, %i, %i, %i, %i, %i\n",
+           i, 9, a_fish, u_fish, a_shark, u_shark);
+      }else {
+        //printf("%i\n", i);
+      }
     if (kOptionPrintStats) {
-      printf("%i\n", i);
       //allocator_handle->DBG_print_state_stats();
-      allocator_handle->DBG_collect_stats();
+      //allocator_handle->DBG_collect_stats();
     }
 
     auto time_before = std::chrono::system_clock::now();
     step();
 
 #ifdef OPTION_DEFRAG
-    if (kOptionDefrag && i % 1 == 0) {
+    /*
+    if (kOptionDefrag && i % 10 == 0) {
       defrag();
-    }
+    } else {
+      defrag((1536 / 0.5 * kDefragFactor / (kDefragFactor + 1)));
+    }*/
+    //allocator_handle->DBG_print_state_stats();
+    DBG_flag_defrag=0;
+    defrag(16384*kDefragFactor/((kDefragFactor + 1))/(kDefragFactor + 1));
 #endif  // OPTION_DEFRAG
 
     auto time_after = std::chrono::system_clock::now();
@@ -384,6 +395,8 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #endif  // NDEBUG
 
   printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
+
+  printf("%i\n", (int) bench_num_passes);
 
 #ifdef OPTION_DEFRAG
   allocator_handle->DBG_print_defrag_time();

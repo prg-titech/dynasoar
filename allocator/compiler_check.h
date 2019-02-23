@@ -38,11 +38,11 @@ namespace _compiler_check {
   static_assert(sizeof(SoaField<DummyClass3, 0>) == 0,
                 "Compiler not supported. Need zero-size alternative impl.");
 
-  static_assert(sizeof(DummyClass) == 1, "Internal error");
+  static_assert(sizeof(DummyClass) == 2, "Internal error");
 
-  static_assert(sizeof(DummyClass2) == 1, "Internal error");
+  static_assert(sizeof(DummyClass2) == 3, "Internal error");
 
-  static_assert(sizeof(DummyClass3) == 1, "Internal error");
+  static_assert(sizeof(DummyClass3) == 3, "Internal error");
 }  // _compiler_check
 
 #endif  // ALLOCATOR_COMPILER_CHECK_H

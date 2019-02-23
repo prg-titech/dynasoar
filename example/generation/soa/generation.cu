@@ -325,8 +325,12 @@ int main(int /*argc*/, char** /*argv*/) {
       render();
     }
 
-    if (kOptionPrintStats && i % 1 == 0) {
-      printf("%i\n", i);
+    if (false && kOptionPrintStats && i % 1 == 0) {
+      int a_alive = dev_ptr->DBG_host_allocated_slots<Alive>();
+      int u_alive = dev_ptr->DBG_host_used_slots<Alive>();
+      int a_candidate = dev_ptr->DBG_host_allocated_slots<Candidate>();
+      int u_candidate = dev_ptr->DBG_host_used_slots<Candidate>();
+      printf("%i, %i, %i, %i, %i\n", i, a_alive, u_alive, a_candidate, u_candidate);
       // allocator_handle->DBG_print_state_stats();
       // allocator_handle->DBG_collect_stats();
     }

@@ -13,10 +13,10 @@ void random_dataset(Dataset& result) {
   float mass_min = 500.0f;
   float mass_max = 500.0f;
 
-  int num_nodes = 0.65*kMaxNodes;
-  int num_pull_nodes = 0.25*kMaxNodes;
+  int num_nodes = 0.55*kMaxNodes;
+  int num_pull_nodes = 0.35*kMaxNodes;
   int num_anchor_nodes = 0.1*kMaxNodes;
-  int num_springs = 0.7*kMaxSprings;
+  int num_springs = 0.8*kMaxSprings;
   int num_total_nodes = num_nodes + num_pull_nodes + num_anchor_nodes;
 
   float border_margin = 0.35f;
@@ -66,6 +66,12 @@ void random_dataset(Dataset& result) {
     }
 
     float spring_factor = random_float(spring_min, spring_max);
+    if (result.nodes[p1].type == kTypeAnchorPullNode ||
+        result.nodes[p2].type == kTypeAnchorPullNode) {
+      // Springs connected to pull nodes are stronger.
+      spring_factor /= 3.0;
+    }
+
     result.springs.push_back(DsSpring(p1, p2, spring_factor, max_force));
     ++result.nodes[p1].num_springs;
     ++result.nodes[p2].num_springs;

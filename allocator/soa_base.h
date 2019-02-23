@@ -19,7 +19,8 @@
   __DEV__ void operator delete(void*, classname*) { \
     assert(false);  /* Construct must not throw exceptions. */ \
   } \
-  using FieldTypes = std::tuple<__VA_ARGS__>;
+  using FieldTypes = std::tuple<__VA_ARGS__>; \
+  char _ ## classname;
 
 // TODO: Is it safe to make these static?
 template<typename AllocatorT, typename T>

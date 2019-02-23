@@ -137,6 +137,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
   int total_time = 0;
 
+    int ctr = 0;
+    cudaMemcpyToSymbol(DBG_rewrite, &ctr, sizeof(int), 0, cudaMemcpyHostToDevice);
   for (int i = 0; i < kNumIterations; ++i) {
     // Create objects.
     kernel_create_objects<<<512, 512>>>(d_ptr_c1, d_ptr_c2);
@@ -149,6 +151,7 @@ int main(int /*argc*/, char** /*argv*/) {
     // Destroy some objects.
     allocator_handle->parallel_do<C2, &C2::maybe_destroy_object>();
     gpuErrchk(cudaDeviceSynchronize());
+
 
     auto time_before = std::chrono::system_clock::now();
 
@@ -189,4 +192,8 @@ int main(int /*argc*/, char** /*argv*/) {
 
     printf("%i\n", total_time);
   }
+
+  cudaMemcpyFromSymbol(&ctr, DBG_rewrite, sizeof(int), 0, cudaMemcpyHostToDevice);
+  printf("rewrite: %i\n", ctr);
+  allocator_handle->DBG_print_defrag_time();
 }
