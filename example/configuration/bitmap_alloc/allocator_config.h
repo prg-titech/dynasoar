@@ -37,6 +37,21 @@ __global__ void kernel_bitmap_parallel_do_single_type(
 }
 
 
+template<class T, class BaseClass, typename P1, void(BaseClass::*func)(P1),
+         typename AllocatorStateT, typename BitmapT>
+__global__ void kernel_bitmap_parallel_do_single_type1(
+    AllocatorStateT* state, BitmapT* bitmap, P1 p1) {
+  const int num_objs = bitmap->scan_num_bits();
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < num_objs; i += blockDim.x * gridDim.x) {
+    auto pos = bitmap->scan_get_index(i);
+    T* obj = reinterpret_cast<T*>(
+        state->data_storage + pos*AllocatorStateT::kObjectSize);
+    (obj->*func)(p1);
+  }
+}
+
+
 template<typename T, typename F, typename AllocatorStateT, typename... Args>
 struct BitmapSequentialExecutor {
   __device__ static void device_do(uint32_t pos, F func,
@@ -91,6 +106,31 @@ struct AllocatorState {
       kernel_bitmap_parallel_do_single_type<T, BaseClass, func><<<
           (num_obj + 256 - 1)/256, 256>>>(
               this, &allocated[AllocatorT::template TypeHelper<T>::kIndex]);
+      gpuErrchk(cudaDeviceSynchronize());
+    }
+  }
+
+  template<class T, class BaseClass, typename P1, void(BaseClass::*func)(P1)>
+  void parallel_do_single_type(P1 p1) {
+    auto time_start = std::chrono::system_clock::now();
+
+    const auto type_index = AllocatorT::template TypeHelper<T>::kIndex;
+    allocated[type_index].scan();
+
+    // Determine number of CUDA threads.
+    uint32_t* d_num_obj_ptr = allocated[type_index].scan_num_bits_ptr();
+    uint32_t num_obj = copy_from_device(d_num_obj_ptr);
+
+    auto time_end = std::chrono::system_clock::now();
+    auto elapsed = time_end - time_start;
+    auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+        .count();
+    bench_prefix_sum_time += micros;
+
+    if (num_obj > 0) {
+      kernel_bitmap_parallel_do_single_type1<T, BaseClass, P1, func><<<
+          (num_obj + 256 - 1)/256, 256>>>(
+              this, &allocated[AllocatorT::template TypeHelper<T>::kIndex], p1);
       gpuErrchk(cudaDeviceSynchronize());
     }
   }

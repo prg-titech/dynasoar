@@ -8,8 +8,8 @@
 static const int kNumComputeIterations = 40;
 static const int kMaxDegree = 5;
 static const float kDt = 0.01f;
-static const int kNumSteps = 7500;
-static const int kMaxNodes = 500000;
+static const int kNumSteps = 100;  // 7500
+static const int kMaxNodes = 50000;  // 500000
 static const int kMaxSprings = kMaxNodes*kMaxDegree / 2;
 static const bool kOptionRender = false;
 static const float kVelocityDampening = 0.0f; //0.00005; // Percentage value
