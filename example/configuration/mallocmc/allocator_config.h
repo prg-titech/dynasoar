@@ -29,18 +29,17 @@ struct AllocatorState {
 #endif  // NDEBUG
   }
 
-  template<class T, typename... Args>
-  __device__ T* make_new(Args... args) {
+  template<class T>
+  __device__ T* allocate_new() {
     // Use malloc and placement-new so that we can catch OOM errors.
-    void* ptr = allocator_handle->malloc(sizeof(T));
+    T* ptr = (T*) allocator_handle->malloc(sizeof(T));
     assert(ptr != nullptr);
-    return new(ptr) T(args...); 
+    return ptr;
   }
 
   template<class T>
   __device__ void free(T* obj) {
     assert(obj != nullptr);
-    obj->~T();
     void* ptr = obj;
     allocator_handle->free(ptr);
   }

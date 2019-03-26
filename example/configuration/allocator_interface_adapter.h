@@ -7,6 +7,21 @@
 
 #include "allocator/tuple_helper.h"
 
+#define declare_field_types(classname, ...) \
+  __DEV__ void* operator new(size_t sz, typename classname::Allocator* allocator) { \
+    return allocator->allocate_new<classname>(); \
+  } \
+  __DEV__ void* operator new(size_t sz, classname* ptr) { \
+    return ptr; \
+  } \
+  __DEV__ void operator delete(void* ptr, typename classname::Allocator* allocator) { \
+    allocator->free<classname>(reinterpret_cast<classname*>(ptr)); \
+  } \
+  __DEV__ void operator delete(void*, classname*) { \
+    assert(false);  /* Construct must not throw exceptions. */ \
+  } \
+  using FieldTypes = std::tuple<__VA_ARGS__>;
+
 static const size_t kMallocHeapSize = 8ULL*1024*1024*1024;
 
 // For benchmarks: Measure time spent outside of parallel sections.
@@ -22,6 +37,12 @@ __global__ void kernel_init_stream_compaction(AllocatorT* allocator) {
 template<typename AllocatorT, typename T>
 __global__ void kernel_compact_object_array(AllocatorT* allocator) {
   allocator->template compact_object_array<T>();
+}
+
+
+template<typename AllocatorT>
+__global__ void kernel_print_state_stats(AllocatorT* allocator) {
+  allocator->DBG_print_state_stats();
 }
 
 
@@ -192,10 +213,10 @@ class SoaAllocatorAdapter {
     allocator_state_.device_do<T, F, Args...>(func, args...);
   }
 
-  template<class T, typename... Args>
-  __DEV__ T* make_new(Args... args) {
+  template<class T>
+  __DEV__ T* allocate_new() {
     // Add object to pointer array.
-    T* result = allocator_state_.make_new<T>(args...);
+    T* result = allocator_state_.template allocate_new<T>();
     result->set_type(TypeHelper<T>::kIndex);
 
     if (!AllocatorStateT<ThisAllocator>::kHasParallelDo) {
@@ -465,6 +486,11 @@ class AllocatorHandle {
   template<class T>
   void parallel_defrag(int /*max_records*/, int /*min_records = 1*/) {}
 
+  void DBG_print_state_stats() {
+    kernel_print_state_stats<<<1, 1>>>(allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
+  }
+
   // Returns a device pointer to the allocator.
   AllocatorT* device_pointer() { return allocator_; }
 
@@ -560,5 +586,19 @@ class SoaBase {
 
   __DEV__ void set_type(uint8_t type_id) { dynamic_type_ = type_id; }
 };
+
+
+// TODO: Is it safe to make these static?
+template<typename AllocatorT, typename T>
+__DEV__ __forceinline__ static void destroy(AllocatorT* allocator, T* ptr) {
+  allocator->template free<T>(ptr);
+}
+
+
+template<typename AllocatorT, typename C, int Field>
+__DEV__ __forceinline__ static void destroy(AllocatorT* allocator,
+                                            const SoaField<C, Field>& value) {
+  allocator->template free(value.get());
+}
 
 #endif  // EXAMPLE_CONFIGURATION_CUDA_ALLOCATOR_H
