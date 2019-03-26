@@ -279,6 +279,10 @@ class Bitmap {
     return data_.scan_data.enumeration_result_size;
   }
 
+  __host__ __device__ SizeT* scan_num_bits_ptr() {
+    return &data_.scan_data.enumeration_result_size;
+  }
+
   // Returns the index of the pos-th set bit.
   __DEV__ SizeT scan_get_index(SizeT pos) const {
     return data_.scan_data.enumeration_result_buffer[pos];

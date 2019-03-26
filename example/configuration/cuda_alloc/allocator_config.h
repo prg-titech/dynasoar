@@ -22,18 +22,17 @@ struct AllocatorState {
     cudaDeviceSetLimit(cudaLimitMallocHeapSize, allocator_heap_size);
   }
 
-  template<class T, typename... Args>
-  __device__ T* make_new(Args... args) {
+  template<class T>
+  __device__ T* allocate_new() {
     // Use malloc and placement-new so that we can catch OOM errors.
     void* ptr = malloc(sizeof(T));
     assert(ptr != nullptr);
-    return new(ptr) T(args...);
+    return (T*) ptr;
   }
 
   template<class T>
   __device__ void free(T* obj) {
     assert(obj != nullptr);
-    obj->~T();
     void* ptr = obj;
     cuda_free(ptr);
   }

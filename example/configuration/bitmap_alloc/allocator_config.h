@@ -26,7 +26,7 @@ template<class T, class BaseClass, void(BaseClass::*func)(),
          typename AllocatorStateT, typename BitmapT>
 __global__ void kernel_bitmap_parallel_do_single_type(
     AllocatorStateT* state, BitmapT* bitmap) {
-  const int num_objs = bitmap->data_.enumeration_result_size;
+  const int num_objs = bitmap->scan_num_bits();
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < num_objs; i += blockDim.x * gridDim.x) {
     auto pos = bitmap->scan_get_index(i);
@@ -78,8 +78,7 @@ struct AllocatorState {
     allocated[type_index].scan();
 
     // Determine number of CUDA threads.
-    uint32_t* d_num_obj_ptr =
-        &allocated[type_index].data_.enumeration_result_size;
+    uint32_t* d_num_obj_ptr = allocated[type_index].scan_num_bits_ptr();
     uint32_t num_obj = copy_from_device(d_num_obj_ptr);
 
     auto time_end = std::chrono::system_clock::now();
@@ -96,14 +95,14 @@ struct AllocatorState {
     }
   }
 
-  template<class T, typename... Args>
-  __device__ T* make_new(Args... args) {
+  template<class T>
+  __device__ T* allocate_new() {
     // Use malloc and placement-new so that we can catch OOM errors.
     auto slot = global_free.deallocate();
     allocated[AllocatorT::template TypeHelper<T>::kIndex].allocate<true>(slot);
     void* ptr = data_storage + slot*kObjectSize;
     assert(ptr != nullptr);
-    return new(ptr) T(args...); 
+    return (T*) ptr; 
   }
 
   template<class T>
@@ -111,7 +110,6 @@ struct AllocatorState {
     assert(obj != nullptr);
     assert(reinterpret_cast<uint64_t>(obj)
         >= reinterpret_cast<uint64_t>(data_storage));
-    obj->~T();
     uint32_t slot = (reinterpret_cast<uint64_t>(obj)
         - reinterpret_cast<uint64_t>(data_storage)) / kObjectSize;
     assert((reinterpret_cast<uint64_t>(obj)

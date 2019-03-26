@@ -277,6 +277,8 @@ class SoaAllocatorAdapter {
 
   template<class T>
   __DEV__ void free_typed(T* obj) {
+    obj->~T();
+
     if (!AllocatorStateT<ThisAllocator>::kHasParallelDo) {
       auto pos = atomicAdd(&num_deleted_objects_[TypeHelper<T>::kIndex], 1);
       deleted_objects_[TypeHelper<T>::kIndex][pos] = obj;
