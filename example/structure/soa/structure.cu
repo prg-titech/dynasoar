@@ -12,7 +12,11 @@ AllocatorHandle<AllocatorT>* allocator_handle;
 
 
 __device__ NodeBase::NodeBase(float pos_x, float pos_y)
-    : pos_x_(pos_x), pos_y_(pos_y), num_springs_(0) {}
+    : pos_x_(pos_x), pos_y_(pos_y), num_springs_(0) {
+  for (int i = 0; i < kMaxDegree; ++i) {
+    springs_[i] = nullptr;
+  }
+}
 
 
 __device__ AnchorNode::AnchorNode(float pos_x, float pos_y)
