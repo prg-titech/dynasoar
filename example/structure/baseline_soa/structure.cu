@@ -22,6 +22,7 @@ __device__ int* dev_Node_num_springs;
 __device__ float* dev_Node_vel_x;
 __device__ float* dev_Node_vel_y;
 __device__ float* dev_Node_mass;
+__device__ int* dev_Node_distance;
 __device__ char* dev_Node_type;
 __device__ IndexT* dev_Spring_p1;
 __device__ IndexT* dev_Spring_p2;
@@ -30,6 +31,7 @@ __device__ float* dev_Spring_initial_length;
 __device__ float* dev_Spring_force;
 __device__ float* dev_Spring_max_force;
 __device__ bool* dev_Spring_is_active;
+__device__ bool* dev_Spring_delete_flag;
 
 
 __device__ void new_NodeBase(IndexT id, float pos_x, float pos_y) {
@@ -37,6 +39,10 @@ __device__ void new_NodeBase(IndexT id, float pos_x, float pos_y) {
   dev_Node_pos_y[id] = pos_y;
   dev_Node_num_springs[id] = 0;
   dev_Node_type[id] = kTypeNodeBase;
+
+  for (int i = 0; i < kMaxDegree; ++i) {
+     dev_Node_springs[id][i] = kNullptr;
+   }
 }
 
 
@@ -90,6 +96,7 @@ __device__ void new_Spring(IndexT id, IndexT p1, IndexT p2,
   dev_Spring_force[id] = 0.0f;
   dev_Spring_max_force[id] = max_force;
   dev_Spring_initial_length[id] = NodeBase_distance_to(p1, p2);
+  dev_Spring_delete_flag[id] = false;
   assert(dev_Spring_initial_length[id] > 0.0f);
 
   NodeBase_add_spring(p1, id);
@@ -98,27 +105,26 @@ __device__ void new_Spring(IndexT id, IndexT p1, IndexT p2,
 
 
 __device__ void NodeBase_remove_spring(IndexT id, IndexT spring) {
-  // TODO: This won't work if two springs break at the same time.
-
-  int i = 0;
-  IndexT s = kNullptr;
-
-  do {
-    assert(i < kMaxDegree);
-    s = dev_Node_springs[id][i];
-    ++i;
-  } while(s != spring);
-
-  for (; i < dev_Node_num_springs[id]; ++i) {
-    dev_Node_springs[id][i - 1] = dev_Node_springs[id][i];
+  for (int i = 0; i < kMaxDegree; ++i) {
+    if (dev_Node_springs[id][i] == spring) {
+      dev_Node_springs[id][i] = kNullptr;
+      if (atomicSub(&dev_Node_num_springs[id], 1) == 1){
+        // Deleted last spring.
+        dev_Node_type[id] = 0;
+      }
+      return;
+    }
   }
 
-  --dev_Node_num_springs[id];
-
-  if (dev_Node_num_springs[id] == 0) {
-    dev_Node_type[id] = 0;
-  }
+  assert(false);
 }
+
+
+__device__ void Spring_self_destruct(IndexT id) {
+   NodeBase_remove_spring(dev_Spring_p1[id], id);
+   NodeBase_remove_spring(dev_Spring_p2[id], id);
+   dev_Spring_is_active[id] = false;
+ }
 
 
 __device__ void AnchorPullNode_pull(IndexT id) {
@@ -133,9 +139,7 @@ __device__ void Spring_compute_force(IndexT id) {
   dev_Spring_force[id] = dev_Spring_factor[id] * displacement;
 
   if (dev_Spring_force[id] > dev_Spring_max_force[id]) {
-    NodeBase_remove_spring(dev_Spring_p1[id], id);
-    NodeBase_remove_spring(dev_Spring_p2[id], id);
-    dev_Spring_is_active[id] = false;
+    Spring_self_destruct(id);
   }
 }
 
@@ -144,30 +148,33 @@ __device__ void Node_move(IndexT id) {
   float force_x = 0.0f;
   float force_y = 0.0f;
 
-  for (int i = 0; i < dev_Node_num_springs[id]; ++i) {
+  for (int i = 0; i < kMaxDegree; ++i) {
     IndexT s = dev_Node_springs[id][i];
-    IndexT from;
-    IndexT to;
 
-    if (dev_Spring_p1[s] == id) {
-      from = id;
-      to = dev_Spring_p2[s];
-    } else {
-      assert(dev_Spring_p2[s] == id);
-      from = id;
-      to = dev_Spring_p1[s];
+    if (s != kNullptr) {
+      IndexT from;
+      IndexT to;
+
+      if (dev_Spring_p1[s] == id) {
+        from = id;
+        to = dev_Spring_p2[s];
+      } else {
+        assert(dev_Spring_p2[s] == id);
+        from = id;
+        to = dev_Spring_p1[s];
+      }
+
+      // Calculate unit vector.
+      float dx = dev_Node_pos_x[to] - dev_Node_pos_x[from];
+      float dy = dev_Node_pos_y[to] - dev_Node_pos_y[from];
+      float dist = sqrt(dx*dx + dy*dy);
+      float unit_x = dx/dist;
+      float unit_y = dy/dist;
+
+      // Apply force.
+      force_x += unit_x*dev_Spring_force[s];
+      force_y += unit_y*dev_Spring_force[s];
     }
-
-    // Calculate unit vector.
-    float dx = dev_Node_pos_x[to] - dev_Node_pos_x[from];
-    float dy = dev_Node_pos_y[to] - dev_Node_pos_y[from];
-    float dist = sqrt(dx*dx + dy*dy);
-    float unit_x = dx/dist;
-    float unit_y = dy/dist;
-
-    // Apply force.
-    force_x += unit_x*dev_Spring_force[s];
-    force_y += unit_y*dev_Spring_force[s];
   }
 
   // Calculate new velocity and position.
@@ -177,6 +184,61 @@ __device__ void Node_move(IndexT id) {
   dev_Node_vel_y[id] *= 1.0f - kVelocityDampening;
   dev_Node_pos_x[id] += dev_Node_vel_x[id]*kDt;
   dev_Node_pos_y[id] += dev_Node_vel_y[id]*kDt;
+}
+
+
+__device__ void NodeBase_initialize_bfs(IndexT id) {
+  if (dev_Node_type[id] == kTypeAnchorNode) {
+    dev_Node_distance[id] = 0;
+  } else {
+    dev_Node_distance[id] = kMaxDistance;
+  }
+}
+
+
+__device__ bool dev_bfs_continue;
+
+__device__ void NodeBase_bfs_visit(IndexT id, int distance) {
+  if (distance == dev_Node_distance[id]) {
+    // Continue until all vertices were visited.
+    dev_bfs_continue = true;
+ 
+     for (int i = 0; i < kMaxDegree; ++i) {
+      IndexT spring = dev_Node_springs[id][i];
+
+      if (spring != kNullptr) {
+        // Find neighboring vertices.
+        IndexT n;
+        if (id == dev_Spring_p1[spring]) {
+          n = dev_Spring_p2[spring];
+        } else {
+          n = dev_Spring_p1[spring];
+        }
+
+        if (dev_Node_distance[n] == kMaxDistance) {
+          // Set distance on neighboring vertex if unvisited.
+          dev_Node_distance[n] = distance + 1;
+        }
+      }
+    }
+  }
+}
+
+
+__device__ void NodeBase_bfs_set_delete_flags(IndexT id) {
+  if (dev_Node_distance[id] == kMaxDistance) {  // should be int_max
+    for (int i = 0; i < kMaxDegree; ++i) {
+      IndexT spring = dev_Node_springs[id][i];
+      if (spring != kNullptr) {
+        dev_Spring_delete_flag[spring] = true;
+      }
+    }
+  }
+}
+
+
+__device__ void Spring_bfs_delete(IndexT id) {
+  if (dev_Spring_delete_flag[id]) { Spring_self_destruct(id); }
 }
 
 
@@ -217,11 +279,51 @@ __global__ void kernel_Node_move() {
 }
 
 
+__global__ void kernel_NodeBase_initialize_bfs() {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < kMaxNodes; i += blockDim.x * gridDim.x) {
+    if (dev_Node_type[i] != 0) {
+      NodeBase_initialize_bfs(i);
+    }
+  }
+}
+
+ 
+__global__ void kernel_NodeBase_bfs_visit(int dist) {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < kMaxNodes; i += blockDim.x * gridDim.x) {
+    if (dev_Node_type[i] != 0) {
+      NodeBase_bfs_visit(i, dist);
+    }
+  }
+}
+
+ 
+__global__ void kernel_NodeBase_bfs_set_delete_flags() {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < kMaxNodes; i += blockDim.x * gridDim.x) {
+    if (dev_Node_type[i] != 0) {
+      NodeBase_bfs_set_delete_flags(i);
+    }
+  }
+}
+
+
 __global__ void kernel_Spring_compute_force() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < kMaxSprings; i += blockDim.x * gridDim.x) {
     if (dev_Spring_is_active[i]) {
       Spring_compute_force(i);
+    }
+  }
+}
+
+
+__global__ void kernel_Spring_bfs_delete() {
+  for (int i = threadIdx.x + blockDim.x * blockIdx.x;
+       i < kMaxSprings; i += blockDim.x * gridDim.x) {
+    if (dev_Spring_is_active[i]) {
+      Spring_bfs_delete(i);
     }
   }
 }
@@ -297,6 +399,38 @@ void compute() {
 }
 
 
+void bfs_and_delete() {
+  // Perform BFS to check reachability.
+  kernel_NodeBase_initialize_bfs<<<(kMaxNodes + kThreads - 1) / kThreads,
+                                    kThreads>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  for (int i = 0; i < kMaxDistance; ++i) {
+    bool continue_flag = false;
+    cudaMemcpyToSymbol(dev_bfs_continue, &continue_flag, sizeof(bool), 0,
+                       cudaMemcpyHostToDevice);
+
+    kernel_NodeBase_bfs_visit<<<(kMaxNodes + kThreads - 1) / kThreads,
+                                kThreads>>>(i);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    cudaMemcpyFromSymbol(&continue_flag, dev_bfs_continue, sizeof(bool), 0,
+                         cudaMemcpyDeviceToHost);
+
+    if (!continue_flag) break;
+  }
+
+  // Delete springs (and nodes).
+  kernel_NodeBase_bfs_set_delete_flags<<<(kMaxNodes + kThreads - 1) / kThreads,
+                                         kThreads>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  kernel_Spring_bfs_delete<<<(kMaxSprings + kThreads - 1) / kThreads,
+                             kThreads>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+}
+
+
 void step() {
   kernel_AnchorPullNode_pull<<<(kMaxNodes + kThreads - 1) / kThreads,
                                kThreads>>>();
@@ -305,6 +439,8 @@ void step() {
   for (int i = 0; i < kNumComputeIterations; ++i) {
     compute();
   }
+
+  bfs_and_delete();
 }
 
 
@@ -410,6 +546,11 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(dev_Node_num_springs, &host_Node_num_springs,
                      sizeof(int*), 0, cudaMemcpyHostToDevice);
 
+  int* host_Node_distance;
+  cudaMalloc(&host_Node_distance, sizeof(int)*kMaxNodes);
+  cudaMemcpyToSymbol(dev_Node_distance, &host_Node_distance,
+                     sizeof(int*), 0, cudaMemcpyHostToDevice);
+
   float* host_Node_mass;
   cudaMalloc(&host_Node_mass, sizeof(float)*kMaxNodes);
   cudaMemcpyToSymbol(dev_Node_mass, &host_Node_mass, sizeof(float*), 0,
@@ -453,6 +594,11 @@ int main(int /*argc*/, char** /*argv*/) {
   bool* host_Spring_is_active;
   cudaMalloc(&host_Spring_is_active, sizeof(bool)*kMaxSprings);
   cudaMemcpyToSymbol(dev_Spring_is_active, &host_Spring_is_active,
+                     sizeof(bool*), 0, cudaMemcpyHostToDevice);
+
+  bool* host_Spring_delete_flag;
+  cudaMalloc(&host_Spring_delete_flag, sizeof(bool)*kMaxSprings);
+  cudaMemcpyToSymbol(dev_Spring_delete_flag, &host_Spring_delete_flag,
                      sizeof(bool*), 0, cudaMemcpyHostToDevice);
 
   initialize_memory();

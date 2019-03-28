@@ -148,10 +148,7 @@ __device__ void Spring_compute_force(IndexT id) {
   dev_springs[id].force = dev_springs[id].factor * displacement;
 
   if (dev_springs[id].force > dev_springs[id].max_force) {
-    NodeBase_remove_spring(dev_springs[id].p1, id);
-    NodeBase_remove_spring(dev_springs[id].p2, id);
-    dev_springs[id].is_active = false;
-
+    Spring_self_destruct(id);
   }
 }
 
@@ -160,7 +157,7 @@ __device__ void Node_move(IndexT id) {
   float force_x = 0.0f;
   float force_y = 0.0f;
 
-  for (int i = 0; i < dev_nodes[id].num_springs; ++i) {
+  for (int i = 0; i < kMaxDegree; ++i) {
     IndexT s = dev_nodes[id].springs[i];
 
     if (s != kNullptr) {
