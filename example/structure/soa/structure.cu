@@ -439,9 +439,7 @@ int main(int /*argc*/, char** /*argv*/) {
     allocator_handle->DBG_print_state_stats();
   }
 
-#ifndef NDEBUG
   printf("Checksum: %f\n", checksum());
-#endif  // NDEBUG
 
   if (kOptionRender) {
     close_renderer();
