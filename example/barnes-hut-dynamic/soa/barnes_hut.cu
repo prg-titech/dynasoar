@@ -32,19 +32,19 @@ __DEV__ T* pointerExch(T** addr, T* value) {
 }
 
 
-__DEV__ NodeBase::NodeBase(TreeNode* parent, float pos_x, float pos_y,
-                           float mass)
+__DEV__ NodeBase::NodeBase(TreeNode* parent, double pos_x, double pos_y,
+                           double mass)
     : parent_(parent), pos_x_(pos_x), pos_y_(pos_y), mass_(mass) {}
 
 
-__DEV__ BodyNode::BodyNode(float pos_x, float pos_y, float vel_x, float vel_y,
-                           float mass)
+__DEV__ BodyNode::BodyNode(double pos_x, double pos_y, double vel_x, double vel_y,
+                           double mass)
     : NodeBase(/*parent=*/ nullptr, pos_x, pos_y, mass),
       vel_x_(vel_x), vel_y_(vel_y) {}
 
 
-__DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
-                           float p2_x, float p2_y)
+__DEV__ TreeNode::TreeNode(TreeNode* parent, double p1_x, double p1_y,
+                           double p2_x, double p2_y)
     : NodeBase(parent, 0.0f, 0.0f, 0.0f),
       p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {
   assert(p1_x < p2_x);
@@ -58,9 +58,9 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
 }
 
 
-__DEV__ float NodeBase::distance_to(NodeBase* other) {
-  float dx = other->pos_x() - pos_x_;
-  float dy = other->pos_y() - pos_y_;
+__DEV__ double NodeBase::distance_to(NodeBase* other) {
+  double dx = other->pos_x() - pos_x_;
+  double dy = other->pos_y() - pos_y_;
   return sqrt(dx*dx + dy*dy);
 }
 
@@ -68,10 +68,10 @@ __DEV__ float NodeBase::distance_to(NodeBase* other) {
 __DEV__ void NodeBase::apply_force(BodyNode* body) {
   // Update `body`.
   if (body != this) {
-    float dx = body->pos_x() - pos_x_;
-    float dy = body->pos_y() - pos_y_;
-    float dist = sqrt(dx*dx + dy*dy);
-    float F = kGravityConstant * mass_ * body->mass()
+    double dx = body->pos_x() - pos_x_;
+    double dy = body->pos_y() - pos_y_;
+    double dist = sqrt(dx*dx + dy*dy);
+    double F = kGravityConstant * mass_ * body->mass()
         / (dist * dist + kDampeningFactor);
     body->add_force(F*dx / dist, F*dy / dist);
   }
@@ -133,17 +133,17 @@ __DEV__ void BodyNode::update() {
   if (pos_x_ < -1) {
     vel_x_ = -vel_x_;
     pos_x_ = -1.0f;
-  } else if (pos_x_ > 0.9999999) {
+  } else if (pos_x_ > 0.99999999) {
     vel_x_ = -vel_x_;
-    pos_x_ = 0.9999999f;
+    pos_x_ = 0.99999999;
   }
 
   if (pos_y_ < -1) {
     vel_y_ = -vel_y_;
     pos_y_ = -1.0f;
-  } else if (pos_y_ > 0.9999999) {
+  } else if (pos_y_ > 0.99999999) {
     vel_y_ = -vel_y_;
-    pos_y_ = 0.9999999f;
+    pos_y_ = 0.99999999;
   }
 }
 
@@ -156,7 +156,6 @@ __DEV__ void BodyNode::clear_node() {
   // (b) Moved to another segment in the same tree node.
   if (!parent_->contains(this)
       || parent_->children_[parent_->child_index(this)] != this) {
-    printf("Node out of bounds: %p\n", this);
     parent_->remove(this);
     parent_ = nullptr;
   }
@@ -202,10 +201,10 @@ __DEV__ int TreeNode::child_index(BodyNode* body) {
 
 
 __DEV__ TreeNode* TreeNode::make_child_tree_node(int c_idx) {
-  float new_p1_x = (c_idx == 0 || c_idx == 2) ? p1_x_ : (p1_x_ + p2_x_) / 2;
-  float new_p2_x = (c_idx == 0 || c_idx == 2) ? (p1_x_ + p2_x_) / 2 : p2_x_;
-  float new_p1_y = (c_idx == 0 || c_idx == 1) ? p1_y_ : (p1_y_ + p2_y_) / 2;
-  float new_p2_y = (c_idx == 0 || c_idx == 1) ? (p1_y_ + p2_y_) / 2 : p2_y_;
+  double new_p1_x = (c_idx == 0 || c_idx == 2) ? p1_x_ : (p1_x_ + p2_x_) / 2;
+  double new_p2_x = (c_idx == 0 || c_idx == 2) ? (p1_x_ + p2_x_) / 2 : p2_x_;
+  double new_p1_y = (c_idx == 0 || c_idx == 1) ? p1_y_ : (p1_y_ + p2_y_) / 2;
+  double new_p2_y = (c_idx == 0 || c_idx == 1) ? (p1_y_ + p2_y_) / 2 : p2_y_;
   auto* result = new(device_allocator) TreeNode(
       /*parent=*/ this, new_p1_x, new_p1_y, new_p2_x, new_p2_y);
 
@@ -214,9 +213,7 @@ __DEV__ TreeNode* TreeNode::make_child_tree_node(int c_idx) {
 
 
 __DEV__ void TreeNode::insert(BodyNode* body) {
-  if (!contains(body)) {
-    printf("Coords: %f, %f\n", (float) body->pos_x_, (float) body->pos_y_);
-  }
+  assert(contains(body));
   TreeNode* current = this;
   bool is_done = false;
 
@@ -229,8 +226,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     auto** child_ptr = &current->children_[c_idx];
 
     // Read volatile.
-    //NodeBase* volatile* vol_child_ptr = &current->children_[c_idx];
-    NodeBase* child = pointerCAS<NodeBase>(child_ptr, nullptr, nullptr); // *vol_child_ptr;
+    NodeBase* child = pointerCAS<NodeBase>(child_ptr, nullptr, nullptr);
 
     if (child == nullptr) {
       // Slot not in use.
@@ -243,7 +239,6 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
         assert(current->contains(body));
 
-        printf("Insert %p in %p\n", body, current);
         // Note: while(true) with break deadlocks due to unfortunate divergent
         // warp branch scheduling.
         is_done = true;
@@ -258,11 +253,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
       assert(other != nullptr);
 
       assert(current->contains(other));
-      //assert(current->child_index(other) == c_idx);
-      if (current->child_index(other) != c_idx) {
-        printf("WRONG CHILD INDEX: %p, is %i, expected %i\n",
-            other, current->child_index(other), c_idx);
-      }
+      assert(current->child_index(other) == c_idx);
+
       // Replace BodyNode with TreeNode.
       auto* new_node = current->make_child_tree_node(c_idx);
       assert(new_node->contains(other));
@@ -290,10 +282,6 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
             //assert(--retries > 0);
             if (--retries < 0) {
               assert(false);
-            }
-            else if (--retries < 10) {
-              printf("other [%p] ->parent CAS (-> %p) failed. Expected %p, found %p.\n",
-                     other, new_node, current, parent_before);
             }
 #endif  // NDEBUG
           } while (parent_before != current);
@@ -342,8 +330,6 @@ __DEV__ void TreeNode::collapse_tree() {
             if (parent_->children_[c_idx] == this) { break; }
           }
           assert(c_idx < 4);
-
-          printf("MOVE BODY UP: %p ---> %p (from %p)\n", single_child, (TreeNode*) parent_, (TreeNode*) single_child->parent_);
 
           single_child->parent_ = parent_;
           parent_->children_[c_idx] = single_child;
@@ -406,8 +392,8 @@ __DEV__ void TreeNode::check_consistency() {
 
 
 __DEV__ bool TreeNode::contains(BodyNode* body) {
-  float x = body->pos_x();
-  float y = body->pos_y();
+  double x = body->pos_x();
+  double y = body->pos_y();
   return x >= p1_x_ && x < p2_x_ && y >= p1_y_ && y < p2_y_;
 }
 
@@ -457,9 +443,9 @@ __DEV__ void TreeNode::bfs_step() {
     bfs_frontier_ = false;
 
     // Update pos_x and pos_y: gravitational center
-    float total_mass = 0.0f;
-    float sum_pos_x = 0.0f;
-    float sum_pos_y = 0.0f;
+    double total_mass = 0.0f;
+    double sum_pos_x = 0.0f;
+    double sum_pos_y = 0.0f;
 
     for (int i = 0; i < 4; ++i) {
       if (children_[i] != nullptr) {

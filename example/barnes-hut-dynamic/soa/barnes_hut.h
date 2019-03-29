@@ -21,9 +21,9 @@ class NodeBase : public SoaBase<AllocatorT> {
   declare_field_types(
       NodeBase,
       TreeNode*,      // parent_
-      float,          // pos_x_
-      float,          // pos_y_
-      float)          // mass_
+      double,         // pos_x_
+      double,         // pos_y_
+      double)         // mass_
 
 // TODO: Fix visibility.
 // protected:
@@ -33,23 +33,23 @@ class NodeBase : public SoaBase<AllocatorT> {
   SoaField<NodeBase, 3> mass_;
 
 // public:
-  __DEV__ NodeBase(TreeNode* parent, float pos_x, float pos_y, float mass);
+  __DEV__ NodeBase(TreeNode* parent, double pos_x, double pos_y, double mass);
 
   __DEV__ TreeNode* parent() const { return parent_; }
 
   __DEV__ void set_parent(TreeNode* parent) { parent_ = parent; }
 
-  __DEV__ float pos_x() const { return pos_x_; }
+  __DEV__ double pos_x() const { return pos_x_; }
 
-  __DEV__ float pos_y() const { return pos_y_; }
+  __DEV__ double pos_y() const { return pos_y_; }
 
-  __DEV__ float mass() const { return mass_; }
+  __DEV__ double mass() const { return mass_; }
 
   __DEV__ void apply_force(BodyNode* body);
 
   __DEV__ void check_apply_force(BodyNode* body);
 
-  __DEV__ float distance_to(NodeBase* other);
+  __DEV__ double distance_to(NodeBase* other);
 };
 
 
@@ -60,10 +60,10 @@ class BodyNode : public NodeBase {
 
   declare_field_types(
       BodyNode,
-      float,          // vel_x_
-      float,          // vel_y_
-      float,          // force_x_
-      float)          // force_y_
+      double,          // vel_x_
+      double,          // vel_y_
+      double,          // force_x_
+      double)          // force_y_
 
  protected:
   SoaField<BodyNode, 0> vel_x_;
@@ -72,10 +72,10 @@ class BodyNode : public NodeBase {
   SoaField<BodyNode, 3> force_y_;
 
  public:
-  __DEV__ BodyNode(float pos_x, float pos_y, float vel_x, float vel_y,
-                   float mass);
+  __DEV__ BodyNode(double pos_x, double pos_y, double vel_x, double vel_y,
+                   double mass);
 
-  __DEV__ void add_force(float x, float y) { force_x_ += x; force_y_ += y; }
+  __DEV__ void add_force(double x, double y) { force_x_ += x; force_y_ += y; }
 
   __DEV__ void add_to_tree();
 
@@ -101,10 +101,10 @@ class TreeNode : public NodeBase {
   declare_field_types(
       TreeNode,
       DeviceArray<NodeBase*, 4>,                  // children_
-      float,                                      // p1_x_
-      float,                                      // p1_y_
-      float,                                      // p2_x_
-      float,                                      // p2_y_
+      double,                                     // p1_x_
+      double,                                     // p1_y_
+      double,                                     // p2_x_
+      double,                                     // p2_y_
       bool,                                       // bfs_frontier_
       bool)                                       // bfs_done_
 
@@ -118,8 +118,8 @@ class TreeNode : public NodeBase {
   SoaField<TreeNode, 6> bfs_done_;
 
  public:
-  __DEV__ TreeNode(TreeNode* parent, float p1_x, float p1_y, float p2_x,
-                   float p2_y);
+  __DEV__ TreeNode(TreeNode* parent, double p1_x, double p1_y, double p2_x,
+                   double p2_y);
 
   __DEV__ void check_apply_force(BodyNode* body);
 
