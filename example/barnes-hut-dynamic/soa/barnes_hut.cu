@@ -12,6 +12,7 @@ __device__ AllocatorT* device_allocator;
 
 // Root of the quad tree.
 __DEV__ TreeNode* tree;
+__DEV__ bool bfs_root_done;
 
 
 template<typename T>
@@ -20,6 +21,14 @@ __DEV__ T* pointerCAS(T** addr, T* assumed, T* value) {
   auto i_assumed = reinterpret_cast<unsigned long long int>(assumed);
   auto i_value = reinterpret_cast<unsigned long long int>(value);
   return reinterpret_cast<T*>(atomicCAS(i_addr, i_assumed, i_value));
+}
+
+
+template<typename T>
+__DEV__ T* pointerExch(T** addr, T* value) {
+  auto* i_addr = reinterpret_cast<unsigned long long int*>(addr);
+  auto i_value = reinterpret_cast<unsigned long long int>(value);
+  return reinterpret_cast<T*>(atomicExch(i_addr, i_value));
 }
 
 
@@ -40,6 +49,12 @@ __DEV__ TreeNode::TreeNode(TreeNode* parent, float p1_x, float p1_y,
       p1_x_(p1_x), p1_y_(p1_y), p2_x_(p2_x), p2_y_(p2_y) {
   assert(p1_x < p2_x);
   assert(p1_y < p2_y);
+
+  for (int i = 0; i < 4; ++i) {
+    children_[i] = nullptr;
+  }
+
+  if (parent != nullptr) { assert(parent->contains(this)); }
 }
 
 
@@ -115,12 +130,20 @@ __DEV__ void BodyNode::update() {
   pos_x_ += vel_x_*kDt;
   pos_y_ += vel_y_*kDt;
 
-  if (pos_x_ < -1 || pos_x_ > 1) {
+  if (pos_x_ < -1) {
     vel_x_ = -vel_x_;
+    pos_x_ = -1.0f;
+  } else if (pos_x_ > 0.9999999) {
+    vel_x_ = -vel_x_;
+    pos_x_ = 0.9999999f;
   }
 
-  if (pos_y_ < -1 || pos_y_ > 1) {
+  if (pos_y_ < -1) {
     vel_y_ = -vel_y_;
+    pos_y_ = -1.0f;
+  } else if (pos_y_ > 0.9999999) {
+    vel_y_ = -vel_y_;
+    pos_y_ = 0.9999999f;
   }
 }
 
@@ -128,22 +151,27 @@ __DEV__ void BodyNode::update() {
 __DEV__ void BodyNode::clear_node() {
   assert(parent_ != nullptr);
 
-  if (!parent_->contains(this)) {
+  // Remove node if:
+  // (a) Moved to another parent.
+  // (b) Moved to another segment in the same tree node.
+  if (!parent_->contains(this)
+      || parent_->children_[parent_->child_index(this)] != this) {
+    printf("Node out of bounds: %p\n", this);
     parent_->remove(this);
     parent_ = nullptr;
   }
 }
 
 
-__DEV__ void TreeNode::remove(BodyNode* body) {
+__DEV__ void TreeNode::remove(NodeBase* node) {
   for (int i = 0; i < 4; ++i) {
-    if (children_[i] == body) {
+    if (children_[i] == node) {
       children_[i] = nullptr;
       return;
     }
   }
 
-  // BodyNode not found.
+  // Node not found.
   assert(false);
 }
 
@@ -158,11 +186,13 @@ __DEV__ void BodyNode::add_to_tree() {
 __DEV__ int TreeNode::child_index(BodyNode* body) {
   assert(contains(body));
 
-  // |-----------|
-  // |  0  |  1  |
-  // |-----|-----|
-  // |  2  |  3  |
-  // |-----------|
+  //                            p2
+  // (-1, 1)   |-----------|  (1, 1)
+  //           |  2  |  3  |
+  // (-1, 0)   |-----|-----|  (1, 0)
+  //           |  0  |  1  |
+  // (-1, -1)  |-----------|  (1, -1)
+  //    p1
 
   int c_idx = 0;
   if (body->pos_x() > (p1_x_ + p2_x_) / 2) c_idx = 1;
@@ -171,137 +201,170 @@ __DEV__ int TreeNode::child_index(BodyNode* body) {
 }
 
 
+__DEV__ TreeNode* TreeNode::make_child_tree_node(int c_idx) {
+  float new_p1_x = (c_idx == 0 || c_idx == 2) ? p1_x_ : (p1_x_ + p2_x_) / 2;
+  float new_p2_x = (c_idx == 0 || c_idx == 2) ? (p1_x_ + p2_x_) / 2 : p2_x_;
+  float new_p1_y = (c_idx == 0 || c_idx == 1) ? p1_y_ : (p1_y_ + p2_y_) / 2;
+  float new_p2_y = (c_idx == 0 || c_idx == 1) ? (p1_y_ + p2_y_) / 2 : p2_y_;
+  auto* result = new(device_allocator) TreeNode(
+      /*parent=*/ this, new_p1_x, new_p1_y, new_p2_x, new_p2_y);
+
+  return result;
+}
+
+
 __DEV__ void TreeNode::insert(BodyNode* body) {
-  assert(contains(body));
+  if (!contains(body)) {
+    printf("Coords: %f, %f\n", (float) body->pos_x_, (float) body->pos_y_);
+  }
   TreeNode* current = this;
+  bool is_done = false;
 
-  while (true) {
+  while (!is_done) {
     assert(current->contains(body));
-
-    // TODO: Need a threadfence here to see updates of current?
-    // Probably not because atomic operation should update cache.
+    assert(current->cast<TreeNode>() != nullptr);
 
     // Check where to insert in this node.
     int c_idx = current->child_index(body);
     auto** child_ptr = &current->children_[c_idx];
-    auto* child = *child_ptr;
+
+    // Read volatile.
+    //NodeBase* volatile* vol_child_ptr = &current->children_[c_idx];
+    NodeBase* child = pointerCAS<NodeBase>(child_ptr, nullptr, nullptr); // *vol_child_ptr;
 
     if (child == nullptr) {
+      // Slot not in use.
       if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
-        body->set_parent(current);
-        return;
+        // Ensure that parent pointer updates are sequentially consistent.
+        // body->set_parent(current);
+        auto* parent_before = pointerCAS<TreeNode>(
+            &body->parent_, nullptr, current);
+        assert(parent_before == nullptr);
+
+        assert(current->contains(body));
+
+        printf("Insert %p in %p\n", body, current);
+        // Note: while(true) with break deadlocks due to unfortunate divergent
+        // warp branch scheduling.
+        is_done = true;
       }
     } else if (child->cast<TreeNode>() != nullptr) {
+      // There is a subtree here.
+      assert(current->contains(child->cast<TreeNode>()));
       current = child->cast<TreeNode>();
     } else {
-      // TODO: Maybe threadfence here or atomic read to avoid false reads?
+      // There is a Body here.
       BodyNode* other = child->cast<BodyNode>();
       assert(other != nullptr);
+
       assert(current->contains(other));
-      assert(current->child_index(other) == current->child_index(body));
-
+      //assert(current->child_index(other) == c_idx);
+      if (current->child_index(other) != c_idx) {
+        printf("WRONG CHILD INDEX: %p, is %i, expected %i\n",
+            other, current->child_index(other), c_idx);
+      }
       // Replace BodyNode with TreeNode.
-      float new_p1_x = c_idx == 0 || c_idx == 2
-          ? current->p1_x_ : (current->p1_x_ + current->p2_x_) / 2;
-      float new_p2_x = c_idx == 0 || c_idx == 2
-          ? (current->p1_x_ + current->p2_x_) / 2 : current->p2_x_;
-      float new_p1_y = c_idx == 0 || c_idx == 1
-          ? current->p1_y_ : (current->p1_y_ + current->p2_y_) / 2;
-      float new_p2_y = c_idx == 0 || c_idx == 1
-          ? (current->p1_y_ + current->p2_y_) / 2 : current->p2_y_;
-
-      auto* new_node = device_allocator->make_new<TreeNode>(
-          /*parent=*/ current, new_p1_x, new_p1_y, new_p2_x, new_p2_y);
+      auto* new_node = current->make_child_tree_node(c_idx);
       assert(new_node->contains(other));
       assert(new_node->contains(body));
 
       // Insert other into new node.
       new_node->children_[new_node->child_index(other)] = other;
+      __threadfence();
 
-      // Try to install this node.
+      // Try to install this node. (Retry.)
       if (pointerCAS<NodeBase>(child_ptr, other, new_node) == other) {
-        other->set_parent(new_node);
+        // other->set_parent(new_node);
+        // It may take a while until we see the correct parent, because
+        // another may not be done inserting this node yet.
+        TreeNode* parent_before = nullptr;
+
+        {
+#ifndef NDEBUG
+          int retries = 10000;
+#endif  // NDEBUG
+          do {
+            parent_before = pointerCAS<TreeNode>(
+                &other->parent_, current, new_node);
+#ifndef NDEBUG
+            //assert(--retries > 0);
+            if (--retries < 0) {
+              assert(false);
+            }
+            else if (--retries < 10) {
+              printf("other [%p] ->parent CAS (-> %p) failed. Expected %p, found %p.\n",
+                     other, new_node, current, parent_before);
+            }
+#endif  // NDEBUG
+          } while (parent_before != current);
+        }
 
         // Now insert body.
         current = new_node;
       } else {
-        device_allocator->free(new_node);
+        // Another thread installed a node here. Rollback.
+        destroy(device_allocator, new_node);
       }
     }
   }
-}
-
-
-__DEV__ bool TreeNode::remove_child(int c_idx, TreeNode* node) {
-  return pointerCAS<NodeBase>(&children_[c_idx], node, nullptr) == node;
 }
 
 
 __DEV__ void TreeNode::collapse_tree() {
-  // Collapse bottom-up.
-  // Leaf = Only BodyNode objects as children. Or no children at all.
-  // No threadfence needed between kernel launches because of cudaDeviceSync.
+  if (bfs_frontier_) {
+    bfs_frontier_ = false;
 
-  if (is_leaf()) {
-    TreeNode* current = this;
+    // Count children.
+    int num_children = 0;
+    NodeBase* single_child = nullptr;
 
-    while (current != tree) {
-      TreeNode* parent = current->parent_;
-      assert(parent != nullptr);
-
-      int num_children = 0;
-      NodeBase* single_child = nullptr;
-
-      for (int i = 0; i < 4; ++i) {
-        // TODO: There could be cases where we do not see a concurrent delete
-        // due to missing threadfence.
-        // Dangerous: Multiple threads may be deleting stuff at the same time.
-        if (current->children_[i] != nullptr) {
-          ++num_children;
-          single_child = current->children_[i];
-        }
+    for (int i = 0; i < 4; ++i) {
+      if (children_[i] != nullptr) {
+        ++num_children;
+        single_child = children_[i];
       }
+    }
 
-      if (num_children < 2) {
-        // Find index of current node in parent.
-        int c_idx = -1;
-        for (int i = 0; i < 4; ++i) {
-          if (parent->children_[i] == current) {
-            c_idx = i;
-            break;
+    if (num_children == 0) {
+      // Remove node without children.
+      if (parent_ != nullptr) {
+        parent_->remove(this);
+        destroy(device_allocator, this);
+        return;
+      } else { assert(parent_ == tree); }
+    } else if (num_children == 1) {
+      // Store child in parent.
+      if (parent_ != nullptr) {
+        if (single_child->cast<BodyNode>() != nullptr) {
+          // This is a Body, store in parent.
+          int c_idx = 0;
+          for (; c_idx < 4; ++c_idx) {
+            if (parent_->children_[c_idx] == this) { break; }
           }
-        }
+          assert(c_idx < 4);
 
-        if (c_idx != -1) {
-          if (num_children == 0) {
-            // Node is empty. Remove.
-            if (parent->remove_child(c_idx, current)) {
-              current = parent;
-            }
-          } else if (num_children == 1) {
-            assert(single_child != nullptr);
-            // Node has only one child. Merge with parent.
-            if (pointerCAS<NodeBase>(&parent->children_[c_idx], current,
-                                     single_child) == current) {
-              assert(single_child->parent() == this);
-              // TODO: Use pointerCAS here?
-              single_child->set_parent(parent);
-              device_allocator->free(current);
-              current = parent;
-            }
-          }
-        } else {
-          // Node not found in parent.
-          break;
-        }
-      } else {
-         // Retain node.
-        break;
-      }
+          printf("MOVE BODY UP: %p ---> %p (from %p)\n", single_child, (TreeNode*) parent_, (TreeNode*) single_child->parent_);
+
+          single_child->parent_ = parent_;
+          parent_->children_[c_idx] = single_child;
+          assert(parent_->contains(single_child));
+
+          destroy(device_allocator, this);
+          return;
+        }  // else: TreeNode child cannot be collapsed.
+      } else { assert(parent_ == tree); }
+    }
+
+    // Ready propagate result to parent.
+    bfs_done_ = true;
+
+    if (this == tree) {
+      // Terminate algorithm loop.
+      assert(parent_ == nullptr);
+      bfs_root_done = true;
     }
   }
 }
-
 
 __DEV__ bool TreeNode::is_leaf() {
   for (int i = 0; i < 4; ++i) {
@@ -314,6 +377,34 @@ __DEV__ bool TreeNode::is_leaf() {
 }
 
 
+__DEV__ int TreeNode::num_direct_children() {
+  int counter = 0;
+
+  for (int i = 0; i < 4; ++i) {
+    if (children_[i] != nullptr) { ++counter; }
+  }
+
+  return counter;
+}
+
+
+__DEV__ void TreeNode::check_consistency() {
+  // There should be no empty nodes.
+  assert(num_direct_children() > 0);
+
+  for (int i = 0; i < 4; ++i) {
+    NodeBase* node = children_[i];
+    if (node != nullptr) {
+      assert(node->parent_ == this);
+
+      if (node->cast<BodyNode>() != nullptr) {
+        assert(child_index(node->cast<BodyNode>()) == i);
+      }
+    }
+  }
+}
+
+
 __DEV__ bool TreeNode::contains(BodyNode* body) {
   float x = body->pos_x();
   float y = body->pos_y();
@@ -321,20 +412,49 @@ __DEV__ bool TreeNode::contains(BodyNode* body) {
 }
 
 
+__DEV__ bool TreeNode::contains(TreeNode* node) {
+  return node->p1_x_ >= p1_x_ && node->p2_x_ <= p2_x_
+      && node->p1_y_ >= p1_y_ && node->p2_y_ <= p2_y_;
+}
+
+
+__DEV__ bool TreeNode::contains(NodeBase* node) {
+  if (node->cast<BodyNode>() != nullptr) {
+    return contains(node->cast<BodyNode>());
+  }
+  else if (node->cast<TreeNode>() != nullptr) {
+    return contains(node->cast<TreeNode>());
+  } else {
+    assert(false);
+  }
+
+  return false;
+}
+
+
 __DEV__ void TreeNode::initialize_frontier() {
-  frontier_ = is_leaf();
+  bfs_frontier_ = is_leaf();
+  bfs_done_ = false;
+  bfs_root_done = false;
 }
 
 
 __DEV__ void TreeNode::update_frontier() {
-  frontier_ = next_frontier_;
-  next_frontier_ = false;
+  if (!bfs_done_) {
+    for (int i = 0; i < 4; ++i) {
+      TreeNode* child = children_[i]->cast<TreeNode>();
+      if (child != nullptr && !child->bfs_done_) { return; }
+    }
+
+    // All child nodes are done. Put in frontier.
+    bfs_frontier_ = true;
+  }
 }
 
 
 __DEV__ void TreeNode::bfs_step() {
-  if (frontier_) {
-    frontier_ = false;
+  if (bfs_frontier_) {
+    bfs_frontier_ = false;
 
     // Update pos_x and pos_y: gravitational center
     float total_mass = 0.0f;
@@ -353,32 +473,58 @@ __DEV__ void TreeNode::bfs_step() {
     pos_x_ = sum_pos_x/total_mass;
     pos_y_ = sum_pos_y/total_mass;
 
-    // Add parent to printier.
-    if (parent_ != nullptr) {
-      parent_->next_frontier_ = true;
+    // Ready propagate result to parent.
+    bfs_done_ = true;
+
+    if (this == tree) {
+      // Terminate algorithm loop.
+      bfs_root_done = true;
     }
   }
 }
 
 
 void step() {
+  // Generate tree summaries.
+  allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
+  bool root_done = false;
+
+  while (!root_done) {
+    allocator_handle->parallel_do<TreeNode, &TreeNode::bfs_step>();
+    allocator_handle->parallel_do<TreeNode, &TreeNode::update_frontier>();
+
+    cudaMemcpyFromSymbol(&root_done, bfs_root_done, sizeof(bool), 0,
+                         cudaMemcpyDeviceToHost);
+  }
+
+  // N-Body simulation.
   allocator_handle->parallel_do<BodyNode, &BodyNode::compute_force>();
   allocator_handle->parallel_do<BodyNode, &BodyNode::update>();
   allocator_handle->parallel_do<BodyNode, &BodyNode::clear_node>();
-  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
-  allocator_handle->parallel_do<TreeNode, &TreeNode::collapse_tree>();
 
-  // BFS steps to update tree.
+  // Collapse the tree (remove empty TreeNodes).
   allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
-  for (int i = 0; i < 10; ++i) {
-    allocator_handle->parallel_do<TreeNode, &TreeNode::bfs_step>();
+  root_done = false;
+
+  while (!root_done) {
+    allocator_handle->parallel_do<TreeNode, &TreeNode::collapse_tree>();
     allocator_handle->parallel_do<TreeNode, &TreeNode::update_frontier>();
+
+    cudaMemcpyFromSymbol(&root_done, bfs_root_done, sizeof(bool), 0,
+                         cudaMemcpyDeviceToHost);
   }
+
+#ifndef NDEBUG
+  allocator_handle->parallel_do<TreeNode, &TreeNode::check_consistency>();
+#endif  // NDEBUG
+
+  // Re-insert nodes into the tree.
+  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
 }
 
 
 __global__ void kernel_init_tree() {
-  tree = device_allocator->make_new<TreeNode>(
+  tree = new(device_allocator) TreeNode(
       /*parent=*/ nullptr,
       /*p1_x=*/ -1.0f,
       /*p1_y=*/ -1.0f,
@@ -393,9 +539,9 @@ __global__ void kernel_init_bodies() {
   curand_init(kSeed, tid, 0, &rand_state);
 
   for (int i = tid; i < kNumBodies; i += blockDim.x * gridDim.x) {
-    device_allocator->make_new<BodyNode>(
-        /*pos_x=*/ 2 * curand_uniform(&rand_state) - 1,
-        /*pos_y=*/ 2 * curand_uniform(&rand_state) - 1,
+    new(device_allocator) BodyNode(
+        /*pos_x=*/ 1.98 * curand_uniform(&rand_state) - 0.99,
+        /*pos_y=*/ 1.98 * curand_uniform(&rand_state) - 0.99,
         /*vel_x=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
         /*vel_y=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
         /*mass=*/ (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
@@ -411,6 +557,10 @@ void initialize_simulation() {
   gpuErrchk(cudaDeviceSynchronize());
 
   allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
+
+#ifndef NDEBUG
+  allocator_handle->parallel_do<TreeNode, &TreeNode::check_consistency>();
+#endif  // NDEBUG
 }
 
 
@@ -424,6 +574,7 @@ int main(int /*argc*/, char** /*argv*/) {
   initialize_simulation();
 
   for (int i = 0; i < kIterations; ++i) {
+    printf("%i\n", i);
     step();
   }
 }

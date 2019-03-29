@@ -60,6 +60,10 @@ class SoaField {
     return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
   }
 
+  __DEV__ volatile T* volatile_data_ptr() const {
+    return data_ptr();
+  }
+
  public:
   __DEV__ static T* data_ptr_from_obj_ptr(C* obj) {
     auto& ptr_base = reinterpret_cast<uintptr_t&>(obj);
@@ -120,6 +124,11 @@ class SoaField {
   __DEV__ T& get() { return *data_ptr(); }
   __DEV__ const T& get() const { return *data_ptr(); }
 
+  __DEV__ volatile T& volatile_get() { return *volatile_data_ptr(); }
+  __DEV__ const volatile T& volatile_get() const {
+    return *volatile_data_ptr();
+  }
+
   // Custom address-of operator.
   __DEV__ T* operator&() { return data_ptr(); }
   __DEV__ const T* operator&() const { return data_ptr(); }
@@ -154,6 +163,11 @@ class SoaField {
   // Assignment operator.
   __DEV__ T& operator=(const T& value) {
     *data_ptr() = value;
+    return *data_ptr();
+  }
+
+  __DEV__ T& operator=(const SoaField<C, Field>& field) {
+    *data_ptr() = field.get();
     return *data_ptr();
   }
 };

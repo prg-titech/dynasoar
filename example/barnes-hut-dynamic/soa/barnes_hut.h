@@ -11,25 +11,28 @@ class NodeBase;
 class BodyNode;
 class TreeNode;
 
-using AllocatorT = SoaAllocator<64*64*64*64, NodeBase, BodyNode, TreeNode>;
+using AllocatorT = SoaAllocator<64*64*64, NodeBase, BodyNode, TreeNode>;
 
 
 class NodeBase : public SoaBase<AllocatorT> {
  public:
   static const bool kIsAbstract = true;
-  using FieldTypes = std::tuple<
+
+  declare_field_types(
+      NodeBase,
       TreeNode*,      // parent_
       float,          // pos_x_
       float,          // pos_y_
-      float>;         // mass_
+      float)          // mass_
 
- protected:
+// TODO: Fix visibility.
+// protected:
   SoaField<NodeBase, 0> parent_;
   SoaField<NodeBase, 1> pos_x_;
   SoaField<NodeBase, 2> pos_y_;
   SoaField<NodeBase, 3> mass_;
 
- public:
+// public:
   __DEV__ NodeBase(TreeNode* parent, float pos_x, float pos_y, float mass);
 
   __DEV__ TreeNode* parent() const { return parent_; }
@@ -55,11 +58,12 @@ class BodyNode : public NodeBase {
   static const bool kIsAbstract = false;
   using BaseClass = NodeBase;
 
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      BodyNode,
       float,          // vel_x_
       float,          // vel_y_
       float,          // force_x_
-      float>;         // force_y_
+      float)          // force_y_
 
  protected:
   SoaField<BodyNode, 0> vel_x_;
@@ -94,23 +98,24 @@ class TreeNode : public NodeBase {
   static const bool kIsAbstract = false;
   using BaseClass = NodeBase;
 
-  using FieldTypes = std::tuple<
+  declare_field_types(
+      TreeNode,
       DeviceArray<NodeBase*, 4>,                  // children_
       float,                                      // p1_x_
       float,                                      // p1_y_
       float,                                      // p2_x_
       float,                                      // p2_y_
-      bool,                                       // frontier_
-      bool>;                                      // next_frontier_
+      bool,                                       // bfs_frontier_
+      bool)                                       // bfs_done_
 
- private:
+// private:
   SoaField<TreeNode, 0> children_;
   SoaField<TreeNode, 1> p1_x_;
   SoaField<TreeNode, 2> p1_y_;
   SoaField<TreeNode, 3> p2_x_;
   SoaField<TreeNode, 4> p2_y_;
-  SoaField<TreeNode, 5> frontier_;
-  SoaField<TreeNode, 6> next_frontier_;
+  SoaField<TreeNode, 5> bfs_frontier_;
+  SoaField<TreeNode, 6> bfs_done_;
 
  public:
   __DEV__ TreeNode(TreeNode* parent, float p1_x, float p1_y, float p2_x,
@@ -124,21 +129,31 @@ class TreeNode : public NodeBase {
 
   __DEV__ void insert(BodyNode* body);
 
+  __DEV__ bool contains(NodeBase* node);
+
   __DEV__ bool contains(BodyNode* body);
 
-  __DEV__ void remove(BodyNode* body);
+  __DEV__ bool contains(TreeNode* node);
 
-  __DEV__ bool remove_child(int c_idx, TreeNode* node);
+  __DEV__ TreeNode* make_child_tree_node(int c_idx);
+
+  __DEV__ void remove(NodeBase* body);
 
   __DEV__ bool is_leaf();
 
+  __DEV__ int num_direct_children();
+
   __DEV__ void initialize_frontier();
 
-  // TODO: Use iteration counter argument instead of second kernel when
-  // supported by API.
   __DEV__ void bfs_step();
 
   __DEV__ void update_frontier();
+
+  __DEV__ void update_frontier_delete();
+
+  __DEV__ void bfs_delete();
+
+  __DEV__ void check_consistency();
 };
 
 #endif  // EXAMPLE_BARNES_HUT_DYNAMIC_SOA_BARNES_HUT_H
