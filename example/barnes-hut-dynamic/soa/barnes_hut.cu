@@ -24,14 +24,6 @@ __DEV__ T* pointerCAS(T** addr, T* assumed, T* value) {
 }
 
 
-template<typename T>
-__DEV__ T* pointerExch(T** addr, T* value) {
-  auto* i_addr = reinterpret_cast<unsigned long long int*>(addr);
-  auto i_value = reinterpret_cast<unsigned long long int>(value);
-  return reinterpret_cast<T*>(atomicExch(i_addr, i_value));
-}
-
-
 __DEV__ NodeBase::NodeBase(TreeNode* parent, double pos_x, double pos_y,
                            double mass)
     : parent_(parent), pos_x_(pos_x), pos_y_(pos_y), mass_(mass) {}
@@ -226,7 +218,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
     auto** child_ptr = &current->children_[c_idx];
 
     // Read volatile.
-    NodeBase* child = pointerCAS<NodeBase>(child_ptr, nullptr, nullptr);
+    NodeBase* child = *child_ptr;
 
     if (child == nullptr) {
       // Slot not in use.
