@@ -147,7 +147,7 @@ __DEV__ void BodyNode::clear_node() {
   // (a) Moved to another parent.
   // (b) Moved to another segment in the same tree node.
   if (!parent_->contains(this)
-      || parent_->children_[parent_->child_index(this)] != this) {
+      || parent_->child_index(this) != child_index_) {
     parent_->remove(this);
     parent_ = nullptr;
   }
@@ -155,15 +155,8 @@ __DEV__ void BodyNode::clear_node() {
 
 
 __DEV__ void TreeNode::remove(NodeBase* node) {
-  for (int i = 0; i < 4; ++i) {
-    if (children_[i] == node) {
-      children_[i] = nullptr;
-      return;
-    }
-  }
-
-  // Node not found.
-  assert(false);
+  assert(children_[node->child_index_] == node);
+  children_[node->child_index_] = nullptr;
 }
 
 
@@ -229,7 +222,7 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
             &body->parent_, nullptr, current);
         assert(parent_before == nullptr);
 
-        assert(current->contains(body));
+        body->child_index_ = c_idx;
 
         // Note: while(true) with break deadlocks due to unfortunate divergent
         // warp branch scheduling.
@@ -249,11 +242,13 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
 
       // Replace BodyNode with TreeNode.
       auto* new_node = current->make_child_tree_node(c_idx);
+      new_node->child_index_ = c_idx;
       assert(new_node->contains(other));
       assert(new_node->contains(body));
 
       // Insert other into new node.
-      new_node->children_[new_node->child_index(other)] = other;
+      int other_c_idx = new_node->child_index(other);
+      new_node->children_[other_c_idx] = other;
       __threadfence();
 
       // Try to install this node. (Retry.)
@@ -277,6 +272,8 @@ __DEV__ void TreeNode::insert(BodyNode* body) {
             }
 #endif  // NDEBUG
           } while (parent_before != current);
+
+          other->child_index_ = other_c_idx;
         }
 
         // Now insert body.
@@ -317,14 +314,10 @@ __DEV__ void TreeNode::collapse_tree() {
       if (parent_ != nullptr) {
         if (single_child->cast<BodyNode>() != nullptr) {
           // This is a Body, store in parent.
-          int c_idx = 0;
-          for (; c_idx < 4; ++c_idx) {
-            if (parent_->children_[c_idx] == this) { break; }
-          }
-          assert(c_idx < 4);
-
+          assert(parent_->children_[child_index_] == this);
           single_child->parent_ = parent_;
-          parent_->children_[c_idx] = single_child;
+          single_child->child_index_ = child_index_;
+          parent_->children_[child_index_] = single_child;
           assert(parent_->contains(single_child));
 
           destroy(device_allocator, this);

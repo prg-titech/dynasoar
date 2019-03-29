@@ -23,7 +23,8 @@ class NodeBase : public SoaBase<AllocatorT> {
       TreeNode*,      // parent_
       double,         // pos_x_
       double,         // pos_y_
-      double)         // mass_
+      double,         // mass_
+      int)            // child_index_
 
 // TODO: Fix visibility.
 // protected:
@@ -31,6 +32,7 @@ class NodeBase : public SoaBase<AllocatorT> {
   SoaField<NodeBase, 1> pos_x_;
   SoaField<NodeBase, 2> pos_y_;
   SoaField<NodeBase, 3> mass_;
+  SoaField<NodeBase, 4> child_index_;
 
 // public:
   __DEV__ NodeBase(TreeNode* parent, double pos_x, double pos_y, double mass);
