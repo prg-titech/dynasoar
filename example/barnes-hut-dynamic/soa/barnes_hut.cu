@@ -559,8 +559,17 @@ int main(int /*argc*/, char** /*argv*/) {
 
   initialize_simulation();
 
+  auto time_start = std::chrono::system_clock::now();
+
   for (int i = 0; i < kIterations; ++i) {
     printf("%i\n", i);
     step();
   }
+
+  auto time_end = std::chrono::system_clock::now();
+  auto elapsed = time_end - time_start;
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+      .count();
+
+  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
 }
