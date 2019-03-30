@@ -11,7 +11,7 @@ class NodeBase;
 class BodyNode;
 class TreeNode;
 
-using AllocatorT = SoaAllocator<64*64*64, NodeBase, BodyNode, TreeNode>;
+using AllocatorT = SoaAllocator<64*64*64*64, NodeBase, BodyNode, TreeNode>;
 
 
 class NodeBase : public SoaBase<AllocatorT> {
