@@ -461,8 +461,8 @@ void step() {
   bool root_done = false;
 
   while (!root_done) {
-    allocator_handle->parallel_do<TreeNode, &TreeNode::bfs_step>();
-    allocator_handle->parallel_do<TreeNode, &TreeNode::update_frontier>();
+    allocator_handle->fast_parallel_do<TreeNode, &TreeNode::bfs_step>();
+    allocator_handle->fast_parallel_do<TreeNode, &TreeNode::update_frontier>();
 
     cudaMemcpyFromSymbol(&root_done, bfs_root_done, sizeof(bool), 0,
                          cudaMemcpyDeviceToHost);
@@ -470,18 +470,18 @@ void step() {
 
   // N-Body simulation.
   allocator_handle->parallel_do<BodyNode, &BodyNode::compute_force>();
-  allocator_handle->parallel_do<BodyNode, &BodyNode::update>();
-  allocator_handle->parallel_do<BodyNode, &BodyNode::clear_node>();
+  allocator_handle->fast_parallel_do<BodyNode, &BodyNode::update>();
+  allocator_handle->fast_parallel_do<BodyNode, &BodyNode::clear_node>();
 
   // Re-insert nodes into the tree.
-  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
+  allocator_handle->fast_parallel_do<BodyNode, &BodyNode::add_to_tree>();
 
   // Collapse the tree (remove empty TreeNodes).
   allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
   root_done = false;
 
   while (!root_done) {
-    allocator_handle->parallel_do<TreeNode, &TreeNode::collapse_tree>();
+    allocator_handle->fast_parallel_do<TreeNode, &TreeNode::collapse_tree>();
     allocator_handle->parallel_do<TreeNode, &TreeNode::update_frontier>();
 
     cudaMemcpyFromSymbol(&root_done, bfs_root_done, sizeof(bool), 0,

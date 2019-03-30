@@ -85,12 +85,14 @@ struct AllocatorState {
     gpuErrchk(cudaDeviceSynchronize());
   }
 
-  template<class T, class BaseClass, void(BaseClass::*func)()>
+  template<class T, class BaseClass, void(BaseClass::*func)(), bool Scan>
   void parallel_do_single_type() {
     auto time_start = std::chrono::system_clock::now();
 
     const auto type_index = AllocatorT::template TypeHelper<T>::kIndex;
-    allocated[type_index].scan();
+    if (Scan) {
+      allocated[type_index].scan();
+    }
 
     // Determine number of CUDA threads.
     uint32_t* d_num_obj_ptr = allocated[type_index].scan_num_bits_ptr();
@@ -110,12 +112,15 @@ struct AllocatorState {
     }
   }
 
-  template<class T, class BaseClass, typename P1, void(BaseClass::*func)(P1)>
+  template<class T, class BaseClass, typename P1, void(BaseClass::*func)(P1),
+           bool Scan>
   void parallel_do_single_type(P1 p1) {
     auto time_start = std::chrono::system_clock::now();
 
     const auto type_index = AllocatorT::template TypeHelper<T>::kIndex;
-    allocated[type_index].scan();
+    if (Scan) {
+      allocated[type_index].scan();
+    }
 
     // Determine number of CUDA threads.
     uint32_t* d_num_obj_ptr = allocated[type_index].scan_num_bits_ptr();

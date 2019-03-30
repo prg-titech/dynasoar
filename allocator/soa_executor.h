@@ -29,7 +29,8 @@ __global__ static void kernel_parallel_do_with_pre(AllocatorT* allocator,
 }
 
 // Helper data structure for running parallel_do on all subtypes.
-template<typename AllocatorT, class BaseClass, void(BaseClass::*func)()>
+template<typename AllocatorT, class BaseClass, void(BaseClass::*func)(),
+         bool Scan>
 struct ParallelDoTypeHelper {
   // Iterating over all types T in the allocator.
   template<typename IterT>
@@ -38,7 +39,7 @@ struct ParallelDoTypeHelper {
     template<bool Check, int Dummy>
     struct ClassSelector {
       static bool call(AllocatorT* allocator) {
-        allocator->template parallel_do_single_type<IterT, BaseClass, func>();
+        allocator->template parallel_do_single_type<IterT, BaseClass, func, Scan>();
         return true;  // true means "continue processing".
       }
     };
@@ -59,7 +60,7 @@ struct ParallelDoTypeHelper {
 };
 
 template<typename AllocatorT, class BaseClass, typename P1,
-         void(BaseClass::*func)(P1)>
+         void(BaseClass::*func)(P1), bool Scan>
 struct ParallelDoTypeHelperP1 {
   // Iterating over all types T in the allocator.
   template<typename IterT>
@@ -68,7 +69,8 @@ struct ParallelDoTypeHelperP1 {
     template<bool Check, int Dummy>
     struct ClassSelector {
       static bool call(AllocatorT* allocator, P1 p1) {
-        allocator->template parallel_do_single_type<IterT, BaseClass, P1, func>(p1);
+        allocator->template parallel_do_single_type<IterT, BaseClass, P1, func,
+                                                    Scan>(p1);
         return true;  // true means "continue processing".
       }
     };
@@ -88,8 +90,8 @@ struct ParallelDoTypeHelperP1 {
   };
 };
 
-template<typename AllocatorT, typename IterT, typename T, typename R,
-         typename Base, typename... Args>
+template<bool Scan, typename AllocatorT, typename IterT, typename T,
+         typename R, typename Base, typename... Args>
 struct ParallelExecutor {
   using BlockHelperIterT = typename AllocatorT::template BlockHelper<IterT>;
   static const int kTypeIndex = BlockHelperIterT::kIndex;
@@ -105,8 +107,10 @@ struct ParallelExecutor {
       auto time_start = std::chrono::system_clock::now();
       auto time_end = time_start;
 
-      // Initialize iteration: Perform scan operation on bitmap.
-      allocator->allocated_[kTypeIndex].scan();
+      if (Scan) {
+        // Initialize iteration: Perform scan operation on bitmap.
+        allocator->allocated_[kTypeIndex].scan();
+      }
 
       // Determine number of CUDA threads.
       auto* d_num_soa_blocks_ptr =
@@ -148,7 +152,9 @@ struct ParallelExecutor {
         auto time_start = std::chrono::system_clock::now();
         auto time_end = time_start;
 
-        allocator->allocated_[kTypeIndex].scan();
+        if (Scan) {
+          allocator->allocated_[kTypeIndex].scan();
+        }
 
         // Determine number of CUDA threads.
         auto* d_num_soa_blocks_ptr =

@@ -70,7 +70,7 @@ __global__ void kernel_parallel_do_single_type1(AllocatorT* allocator,
 
 
 // Helper data structure for running parallel_do on all subtypes.
-template<typename AllocatorT, class BaseClass, void(BaseClass::*func)()>
+template<typename AllocatorT, class BaseClass, void(BaseClass::*func)(), bool Scan>
 struct ParallelDoTypeHelper {
   // Iterating over all types T in the allocator.
   template<typename IterT>
@@ -79,7 +79,7 @@ struct ParallelDoTypeHelper {
     template<bool Check, int Dummy>
     struct ClassSelector {
       static bool call(AllocatorT* allocator) {
-        allocator->template parallel_do_single_type<IterT, BaseClass, func>();
+        allocator->template parallel_do_single_type<IterT, BaseClass, func, Scan>();
         return true;  // true means "continue processing".
       }
     };
@@ -100,7 +100,7 @@ struct ParallelDoTypeHelper {
 };
 
 
-template<typename AllocatorT, class BaseClass, typename P1, void(BaseClass::*func)(P1)>
+template<typename AllocatorT, class BaseClass, typename P1, void(BaseClass::*func)(P1), bool Scan>
 struct ParallelDoTypeHelper1 {
   // Iterating over all types T in the allocator.
   template<typename IterT>
@@ -109,7 +109,7 @@ struct ParallelDoTypeHelper1 {
     template<bool Check, int Dummy>
     struct ClassSelector {
       static bool call(AllocatorT* allocator, P1 p1) {
-        allocator->template parallel_do_single_type<IterT, BaseClass, P1, func>(p1);
+        allocator->template parallel_do_single_type<IterT, BaseClass, P1, func, Scan>(p1);
         return true;  // true means "continue processing".
       }
     };
@@ -156,75 +156,77 @@ class SoaAllocatorAdapter {
     static const uint8_t value = TypeHelper<T>::kIndex;
   };
 
-  template<class T, void(T::*func)()>
+  template<bool Scan, class T, void(T::*func)()>
   void parallel_do() {
     TupleHelper<Types...>
-        ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func>
+        ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func, Scan>
         ::template InnerHelper>(this);
   }
 
-  template<class T, typename P1, void(T::*func)(P1)>
+  template<bool Scan, class T, typename P1, void(T::*func)(P1)>
   void parallel_do(P1 p1) {
     TupleHelper<Types...>
-        ::template for_all<ParallelDoTypeHelper1<ThisAllocator, T, P1, func>
+        ::template for_all<ParallelDoTypeHelper1<ThisAllocator, T, P1, func, Scan>
         ::template InnerHelper>(this, p1);
   }
 
-  template<class T, class BaseClass, void(BaseClass::*func)(),
+  template<class T, class BaseClass, void(BaseClass::*func)(), bool Scan,
            typename U = AllocatorStateT<ThisAllocator>>
   typename std::enable_if<U::kHasParallelDo, void>::type
   parallel_do_single_type() {
-    allocator_state_.parallel_do_single_type<T, BaseClass, func>();
+    allocator_state_.parallel_do_single_type<T, BaseClass, func, Scan>();
   }
 
   template<class T, class BaseClass, typename P1, void(BaseClass::*func)(P1),
-           typename U = AllocatorStateT<ThisAllocator>>
+           bool Scan, typename U = AllocatorStateT<ThisAllocator>>
   typename std::enable_if<U::kHasParallelDo, void>::type
   parallel_do_single_type(P1 p1) {
-    allocator_state_.parallel_do_single_type<T, BaseClass, P1, func>(p1);
+    allocator_state_.parallel_do_single_type<T, BaseClass, P1, func, Scan>(p1);
   }
 
   template<class T, class BaseClass, void(BaseClass::*func)(),
-           typename U = AllocatorStateT<ThisAllocator>>
+           bool Scan, typename U = AllocatorStateT<ThisAllocator>>
   typename std::enable_if<!U::kHasParallelDo, void>::type
   parallel_do_single_type() {
     // Get total number of objects.
     unsigned int num_objects = this->template num_objects<T>();
 
     if (num_objects > 0) {
-      auto time_start = std::chrono::system_clock::now();
+      if (Scan) {
+        auto time_start = std::chrono::system_clock::now();
 
-      kernel_init_stream_compaction<ThisAllocator, T><<<
-          (num_objects + 256 - 1)/256, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+        kernel_init_stream_compaction<ThisAllocator, T><<<
+            (num_objects + 256 - 1)/256, 256>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
 
-      // Run prefix sum algorithm.
-      // TODO: Prefix sum broken for num_objects < 256.
-      auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
-      size_t temp_size = 3*prefix_sum_size;
-      cub::DeviceScan::ExclusiveSum(stream_compaction_temp_,
-                                    temp_size,
-                                    stream_compaction_array_,
-                                    stream_compaction_output_,
-                                    prefix_sum_size);
-      gpuErrchk(cudaDeviceSynchronize());
+        // Run prefix sum algorithm.
+        // TODO: Prefix sum broken for num_objects < 256.
+        auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
+        size_t temp_size = 3*prefix_sum_size;
+        cub::DeviceScan::ExclusiveSum(stream_compaction_temp_,
+                                      temp_size,
+                                      stream_compaction_array_,
+                                      stream_compaction_output_,
+                                      prefix_sum_size);
+        gpuErrchk(cudaDeviceSynchronize());
 
-      // Compact array.
-      kernel_compact_object_array<ThisAllocator, T><<<
-          (num_objects + 256 - 1)/256, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+        // Compact array.
+        kernel_compact_object_array<ThisAllocator, T><<<
+            (num_objects + 256 - 1)/256, 256>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
 
-      // Update arrays and counts.
-      kernel_update_object_count<ThisAllocator, T><<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+        // Update arrays and counts.
+        kernel_update_object_count<ThisAllocator, T><<<1, 1>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
+
+        auto time_end = std::chrono::system_clock::now();
+        auto elapsed = time_end - time_start;
+        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+            .count();
+        bench_prefix_sum_time += micros;
+      }
 
       num_objects = this->template num_objects<T>();
-
-      auto time_end = std::chrono::system_clock::now();
-      auto elapsed = time_end - time_start;
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
-          .count();
-      bench_prefix_sum_time += micros;
 
       kernel_parallel_do_single_type<ThisAllocator, T, BaseClass, func><<<
           (num_objects + kCudaBlockSize - 1)/kCudaBlockSize,
@@ -234,46 +236,48 @@ class SoaAllocatorAdapter {
   }
 
   template<class T, class BaseClass, typename P1, void(BaseClass::*func)(P1),
-           typename U = AllocatorStateT<ThisAllocator>>
+           bool Scan, typename U = AllocatorStateT<ThisAllocator>>
   typename std::enable_if<!U::kHasParallelDo, void>::type
   parallel_do_single_type(P1 p1) {
     // Get total number of objects.
     unsigned int num_objects = this->template num_objects<T>();
 
     if (num_objects > 0) {
-      auto time_start = std::chrono::system_clock::now();
+      if (Scan) {
+        auto time_start = std::chrono::system_clock::now();
 
-      kernel_init_stream_compaction<ThisAllocator, T><<<
-          (num_objects + 256 - 1)/256, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+        kernel_init_stream_compaction<ThisAllocator, T><<<
+            (num_objects + 256 - 1)/256, 256>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
 
-      // Run prefix sum algorithm.
-      // TODO: Prefix sum broken for num_objects < 256.
-      auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
-      size_t temp_size = 3*prefix_sum_size;
-      cub::DeviceScan::ExclusiveSum(stream_compaction_temp_,
-                                    temp_size,
-                                    stream_compaction_array_,
-                                    stream_compaction_output_,
-                                    prefix_sum_size);
-      gpuErrchk(cudaDeviceSynchronize());
+        // Run prefix sum algorithm.
+        // TODO: Prefix sum broken for num_objects < 256.
+        auto prefix_sum_size = num_objects < 256 ? 256 : num_objects;
+        size_t temp_size = 3*prefix_sum_size;
+        cub::DeviceScan::ExclusiveSum(stream_compaction_temp_,
+                                      temp_size,
+                                      stream_compaction_array_,
+                                      stream_compaction_output_,
+                                      prefix_sum_size);
+        gpuErrchk(cudaDeviceSynchronize());
 
-      // Compact array.
-      kernel_compact_object_array<ThisAllocator, T><<<
-          (num_objects + 256 - 1)/256, 256>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+        // Compact array.
+        kernel_compact_object_array<ThisAllocator, T><<<
+            (num_objects + 256 - 1)/256, 256>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
 
-      // Update arrays and counts.
-      kernel_update_object_count<ThisAllocator, T><<<1, 1>>>(this);
-      gpuErrchk(cudaDeviceSynchronize());
+        // Update arrays and counts.
+        kernel_update_object_count<ThisAllocator, T><<<1, 1>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
+
+        auto time_end = std::chrono::system_clock::now();
+        auto elapsed = time_end - time_start;
+        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+            .count();
+        bench_prefix_sum_time += micros;
+      }
 
       num_objects = this->template num_objects<T>();
-
-      auto time_end = std::chrono::system_clock::now();
-      auto elapsed = time_end - time_start;
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
-          .count();
-      bench_prefix_sum_time += micros;
 
       kernel_parallel_do_single_type1<ThisAllocator, T, BaseClass, P1, func><<<
           (num_objects + kCudaBlockSize - 1)/kCudaBlockSize,
@@ -598,12 +602,22 @@ class AllocatorHandle {
 
   template<class T, void(T::*func)()>
   void parallel_do() {
-    allocator_->parallel_do<T, func>();
+    allocator_->parallel_do<true, T, func>();
   }
 
   template<class T, typename P1, void(T::*func)(P1)>
   void parallel_do(P1 p1) {
-    allocator_->parallel_do<T, P1, func>(p1);
+    allocator_->parallel_do<true, T, P1, func>(p1);
+  }
+
+  template<class T, void(T::*func)()>
+  void fast_parallel_do() {
+    allocator_->parallel_do<false, T, func>();
+  }
+
+  template<class T, typename P1, void(T::*func)(P1)>
+  void fast_parallel_do(P1 p1) {
+    allocator_->parallel_do<false, T, P1, func>(p1);
   }
 
   // This is a no-op.

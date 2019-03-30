@@ -299,32 +299,32 @@ class SoaAllocator {
   }
 
   // Call a member functions on all objects of type IterT.
-  template<class IterT, class T, void(T::*func)()>
+  template<class IterT, class T, void(T::*func)(), bool Scan>
   void parallel_do_single_type() {
-    ParallelExecutor<ThisAllocator, IterT, T, void, T>
+    ParallelExecutor<Scan, ThisAllocator, IterT, T, void, T>
         ::template FunctionWrapper<func>
         ::parallel_do(this, /*shared_mem_size=*/ 0);
   }
 
-  template<class IterT, class T, typename P1, void(T::*func)(P1)>
+  template<class IterT, class T, typename P1, void(T::*func)(P1), bool Scan>
   void parallel_do_single_type(P1 p1) {
-    ParallelExecutor<ThisAllocator, IterT, T, void, T, P1>
+    ParallelExecutor<Scan, ThisAllocator, IterT, T, void, T, P1>
         ::template FunctionWrapper<func>
         ::parallel_do(this, /*shared_mem_size=*/ 0, p1);
   }
 
   // Call a member function on all objects of type T and its subclasses.
-  template<class T, void(T::*func)()>
+  template<bool Scan, class T, void(T::*func)()>
   void parallel_do() {
     TupleHelper<Types...>
-        ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func>
+        ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func, Scan>
         ::template InnerHelper>(this);
   }
 
-  template<class T, typename P1, void(T::*func)(P1)>
+  template<bool Scan, class T, typename P1, void(T::*func)(P1)>
   void parallel_do(P1 p1) {
     TupleHelper<Types...>
-        ::template for_all<ParallelDoTypeHelperP1<ThisAllocator, T, P1, func>
+        ::template for_all<ParallelDoTypeHelperP1<ThisAllocator, T, P1, func, Scan>
         ::template InnerHelper>(this, p1);
   }
 

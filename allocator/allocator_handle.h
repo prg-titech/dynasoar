@@ -101,12 +101,22 @@ class AllocatorHandle {
   // Runs a member function T::func for all objects of a type on device.
   template<class T, void(T::*func)()>
   void parallel_do() {
-    allocator_->parallel_do<T, func>();
+    allocator_->parallel_do<true, T, func>();
   }
 
   template<class T, typename P1, void(T::*func)(P1)>
   void parallel_do(P1 p1) {
-    allocator_->parallel_do<T, P1, func>(p1);
+    allocator_->parallel_do<true, T, P1, func>(p1);
+  }
+
+  template<class T, void(T::*func)()>
+  void fast_parallel_do() {
+    allocator_->parallel_do<false, T, func>();
+  }
+
+  template<class T, typename P1, void(T::*func)(P1)>
+  void fast_parallel_do(P1 p1) {
+    allocator_->parallel_do<false, T, P1, func>(p1);
   }
 
 #ifdef OPTION_DEFRAG
