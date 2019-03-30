@@ -146,8 +146,7 @@ __DEV__ void BodyNode::clear_node() {
   // Remove node if:
   // (a) Moved to another parent.
   // (b) Moved to another segment in the same tree node.
-  if (!parent_->contains(this)
-      || parent_->child_index(this) != child_index_) {
+  if (parent_->child_index(this) != child_index_) {
     parent_->remove(this);
     parent_ = nullptr;
   }
@@ -250,8 +249,6 @@ __DEV__ void BodyNode::add_to_tree() {
 
 
 __DEV__ int TreeNode::child_index(BodyNode* body) {
-  assert(contains(body));
-
   //                            p2
   // (-1, 1)   |-----------|  (1, 1)
   //           |  2  |  3  |
@@ -260,10 +257,20 @@ __DEV__ int TreeNode::child_index(BodyNode* body) {
   // (-1, -1)  |-----------|  (1, -1)
   //    p1
 
-  int c_idx = 0;
-  if (body->pos_x() > (p1_x_ + p2_x_) / 2) c_idx = 1;
-  if (body->pos_y() > (p1_y_ + p2_y_) / 2) c_idx += 2;
-  return c_idx;
+  float p1x = p1_x_;  float p1y = p1_y_;
+  float p2x = p2_x_;  float p2y = p2_y_;
+
+  if (body->pos_x() < p1x || body->pos_x() >= p2x
+      || body->pos_y() < p1y || body->pos_y() >= p2y) {
+    // Out of bounds.
+    return -1;
+  } else {
+    assert(contains(body));
+    int c_idx = 0;
+    if (body->pos_x() > (p1x + p2x) / 2) c_idx = 1;
+    if (body->pos_y() > (p1y + p2y) / 2) c_idx += 2;
+    return c_idx;
+  }
 }
 
 
