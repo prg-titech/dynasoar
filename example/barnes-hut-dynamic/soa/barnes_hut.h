@@ -129,8 +129,6 @@ class TreeNode : public NodeBase {
 
   __DEV__ void collapse_tree();
 
-  __DEV__ void insert(BodyNode* body);
-
   __DEV__ bool contains(NodeBase* node);
 
   __DEV__ bool contains(BodyNode* body);

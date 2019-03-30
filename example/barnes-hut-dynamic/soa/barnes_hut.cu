@@ -162,7 +162,89 @@ __DEV__ void TreeNode::remove(NodeBase* node) {
 
 __DEV__ void BodyNode::add_to_tree() {
   if (parent_ == nullptr) {
-    tree->insert(this);
+    TreeNode* current = tree;
+    bool is_done = false;
+
+    while (!is_done) {
+      assert(current->contains(this));
+      assert(current->cast<TreeNode>() != nullptr);
+
+      // Check where to insert in this node.
+      int c_idx = current->child_index(this);
+      auto** child_ptr = &current->children_[c_idx];
+
+      // TODO: Read volatile?
+      NodeBase* child = *child_ptr;
+
+      if (child == nullptr) {
+        // Slot not in use.
+        if (pointerCAS<NodeBase>(child_ptr, nullptr, this) == nullptr) {
+          // Ensure that parent pointer updates are sequentially consistent.
+          // this->set_parent(current);
+          auto* p_before = pointerCAS<TreeNode>(&parent_, nullptr, current);
+          assert(p_before == nullptr);
+          child_index_ = c_idx;
+
+          // Note: while(true) with break deadlocks due to unfortunate divergent
+          // warp branch scheduling.
+          is_done = true;
+        }
+      } else if (child->cast<TreeNode>() != nullptr) {
+        // There is a subtree here.
+        assert(current->contains(child->cast<TreeNode>()));
+        current = child->cast<TreeNode>();
+      } else {
+        // There is a Body here.
+        BodyNode* other = child->cast<BodyNode>();
+        assert(other != nullptr);
+
+        assert(current->contains(other));
+        assert(current->child_index(other) == c_idx);
+
+        // Replace BodyNode with TreeNode.
+        auto* new_node = current->make_child_tree_node(c_idx);
+        new_node->child_index_ = c_idx;
+        assert(new_node->contains(other));
+        assert(new_node->contains(this));
+
+        // Insert other into new node.
+        int other_c_idx = new_node->child_index(other);
+        new_node->children_[other_c_idx] = other;
+        __threadfence();
+
+        // Try to install this node. (Retry.)
+        if (pointerCAS<NodeBase>(child_ptr, other, new_node) == other) {
+          // other->set_parent(new_node);
+          // It may take a while until we see the correct parent, because
+          // another may not be done inserting this node yet.
+          TreeNode* parent_before = nullptr;
+
+          {
+#ifndef NDEBUG
+            int retries = 10000;
+#endif  // NDEBUG
+            do {
+              parent_before = pointerCAS<TreeNode>(
+                  &other->parent_, current, new_node);
+#ifndef NDEBUG
+              //assert(--retries > 0);
+              if (--retries < 0) {
+                assert(false);
+              }
+#endif  // NDEBUG
+            } while (parent_before != current);
+
+            other->child_index_ = other_c_idx;
+          }
+
+          // Now insert body.
+          current = new_node;
+        } else {
+          // Another thread installed a node here. Rollback.
+          destroy(device_allocator, new_node);
+        }
+      }
+    }
   }
 }
 
@@ -194,96 +276,6 @@ __DEV__ TreeNode* TreeNode::make_child_tree_node(int c_idx) {
       /*parent=*/ this, new_p1_x, new_p1_y, new_p2_x, new_p2_y);
 
   return result;
-}
-
-
-__DEV__ void TreeNode::insert(BodyNode* body) {
-  assert(contains(body));
-  TreeNode* current = this;
-  bool is_done = false;
-
-  while (!is_done) {
-    assert(current->contains(body));
-    assert(current->cast<TreeNode>() != nullptr);
-
-    // Check where to insert in this node.
-    int c_idx = current->child_index(body);
-    auto** child_ptr = &current->children_[c_idx];
-
-    // Read volatile.
-    NodeBase* child = *child_ptr;
-
-    if (child == nullptr) {
-      // Slot not in use.
-      if (pointerCAS<NodeBase>(child_ptr, nullptr, body) == nullptr) {
-        // Ensure that parent pointer updates are sequentially consistent.
-        // body->set_parent(current);
-        auto* parent_before = pointerCAS<TreeNode>(
-            &body->parent_, nullptr, current);
-        assert(parent_before == nullptr);
-
-        body->child_index_ = c_idx;
-
-        // Note: while(true) with break deadlocks due to unfortunate divergent
-        // warp branch scheduling.
-        is_done = true;
-      }
-    } else if (child->cast<TreeNode>() != nullptr) {
-      // There is a subtree here.
-      assert(current->contains(child->cast<TreeNode>()));
-      current = child->cast<TreeNode>();
-    } else {
-      // There is a Body here.
-      BodyNode* other = child->cast<BodyNode>();
-      assert(other != nullptr);
-
-      assert(current->contains(other));
-      assert(current->child_index(other) == c_idx);
-
-      // Replace BodyNode with TreeNode.
-      auto* new_node = current->make_child_tree_node(c_idx);
-      new_node->child_index_ = c_idx;
-      assert(new_node->contains(other));
-      assert(new_node->contains(body));
-
-      // Insert other into new node.
-      int other_c_idx = new_node->child_index(other);
-      new_node->children_[other_c_idx] = other;
-      __threadfence();
-
-      // Try to install this node. (Retry.)
-      if (pointerCAS<NodeBase>(child_ptr, other, new_node) == other) {
-        // other->set_parent(new_node);
-        // It may take a while until we see the correct parent, because
-        // another may not be done inserting this node yet.
-        TreeNode* parent_before = nullptr;
-
-        {
-#ifndef NDEBUG
-          int retries = 10000;
-#endif  // NDEBUG
-          do {
-            parent_before = pointerCAS<TreeNode>(
-                &other->parent_, current, new_node);
-#ifndef NDEBUG
-            //assert(--retries > 0);
-            if (--retries < 0) {
-              assert(false);
-            }
-#endif  // NDEBUG
-          } while (parent_before != current);
-
-          other->child_index_ = other_c_idx;
-        }
-
-        // Now insert body.
-        current = new_node;
-      } else {
-        // Another thread installed a node here. Rollback.
-        destroy(device_allocator, new_node);
-      }
-    }
-  }
 }
 
 
@@ -336,6 +328,7 @@ __DEV__ void TreeNode::collapse_tree() {
     }
   }
 }
+
 
 __DEV__ bool TreeNode::is_leaf() {
   for (int i = 0; i < 4; ++i) {
@@ -473,6 +466,9 @@ void step() {
   allocator_handle->parallel_do<BodyNode, &BodyNode::update>();
   allocator_handle->parallel_do<BodyNode, &BodyNode::clear_node>();
 
+  // Re-insert nodes into the tree.
+  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
+
   // Collapse the tree (remove empty TreeNodes).
   allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
   root_done = false;
@@ -488,9 +484,6 @@ void step() {
 #ifndef NDEBUG
   allocator_handle->parallel_do<TreeNode, &TreeNode::check_consistency>();
 #endif  // NDEBUG
-
-  // Re-insert nodes into the tree.
-  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_tree>();
 }
 
 
