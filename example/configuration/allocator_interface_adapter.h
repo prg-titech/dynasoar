@@ -29,8 +29,14 @@ long unsigned int bench_prefix_sum_time = 0;
 
 
 template<typename AllocatorT, typename T>
-__global__ void kernel_init_stream_compaction(AllocatorT* allocator) {
-  allocator->template initialize_stream_compaction_array<T>();
+__global__ void kernel_init_stream_compaction_1(AllocatorT* allocator) {
+  allocator->template initialize_stream_compaction_array_1<T>();
+}
+
+
+template<typename AllocatorT, typename T>
+__global__ void kernel_init_stream_compaction_2(AllocatorT* allocator) {
+  allocator->template initialize_stream_compaction_array_2<T>();
 }
 
 
@@ -195,7 +201,11 @@ class SoaAllocatorAdapter {
       if (Scan) {
         auto time_start = std::chrono::system_clock::now();
 
-        kernel_init_stream_compaction<ThisAllocator, T><<<
+        kernel_init_stream_compaction_1<ThisAllocator, T><<<
+            (num_objects + 256 - 1)/256, 256>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
+
+        kernel_init_stream_compaction_2<ThisAllocator, T><<<
             (num_objects + 256 - 1)/256, 256>>>(this);
         gpuErrchk(cudaDeviceSynchronize());
 
@@ -246,7 +256,11 @@ class SoaAllocatorAdapter {
       if (Scan) {
         auto time_start = std::chrono::system_clock::now();
 
-        kernel_init_stream_compaction<ThisAllocator, T><<<
+        kernel_init_stream_compaction_1<ThisAllocator, T><<<
+            (num_objects + 256 - 1)/256, 256>>>(this);
+        gpuErrchk(cudaDeviceSynchronize());
+
+        kernel_init_stream_compaction_2<ThisAllocator, T><<<
             (num_objects + 256 - 1)/256, 256>>>(this);
         gpuErrchk(cudaDeviceSynchronize());
 
@@ -430,6 +444,7 @@ class SoaAllocatorAdapter {
     return reinterpret_cast<void*>(atomicCAS(a_addr, a_assumed, a_value));
   }
 
+/*
   template<typename T>
   __DEV__ void initialize_stream_compaction_array() {
     auto num_obj = num_objects_[TypeHelper<T>::kIndex];
@@ -455,6 +470,40 @@ class SoaAllocatorAdapter {
 
       // TODO: Is this really the best way? Check simulation paper.
       stream_compaction_array_[i] = object_deleted ? 0 : 1;
+    }
+  }
+*/
+  template<typename T>
+  __DEV__ void initialize_stream_compaction_array_1() {
+    auto num_obj = num_objects_[TypeHelper<T>::kIndex];
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+         i < num_obj; i += blockDim.x * gridDim.x) {
+      stream_compaction_array_[i] = 1;
+    }
+  }
+
+  template<typename T>
+  __DEV__ void initialize_stream_compaction_array_2() {
+    auto num_obj = num_deleted_objects_[TypeHelper<T>::kIndex];
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+         i < num_obj; i += blockDim.x * gridDim.x) {
+      void* deleted_ptr = deleted_objects_[TypeHelper<T>::kIndex][i];
+
+      // TODO: Can use binary search?
+      for (int j = 0; j < num_objects_[TypeHelper<T>::kIndex]; ++j) {
+        void*& obj_ptr = objects_[TypeHelper<T>::kIndex][j];
+        if (obj_ptr == deleted_ptr) {
+          // Remove pointer from deleted set with CAS because new objects can
+          // be allocated in the location of deleted objects in the same
+          // iteration.
+          if (atomiCasPtr(&obj_ptr, obj_ptr, nullptr) == obj_ptr) {
+            stream_compaction_array_[i] = 0;
+            break;
+          }
+        }
+      }
     }
   }
 
