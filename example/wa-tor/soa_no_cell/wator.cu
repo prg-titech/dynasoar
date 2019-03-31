@@ -436,13 +436,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
     init_renderer();
   }
 
-  int total_time = 0;
-  auto time_before = std::chrono::system_clock::now();
-
   for (int i = 0; i < kNumIterations; ++i) {
-//#ifndef NDEBUG
+#ifndef NDEBUG
     if (i%50 == 0) printf("%i\n", i);
-//#endif  // NDEBUG
+#endif  // NDEBUG
 
     if (kOptionRender) {
       update_gui_map();
@@ -453,8 +450,13 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
       allocator_handle->DBG_print_state_stats();
     }
 
+  int total_time = 0;
+  auto time_before = std::chrono::high_resolution_clock::now();
     step();
-
+  auto time_after = std::chrono::high_resolution_clock::now();
+  int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
+      time_after - time_before).count();
+  printf("%i\n", time_running);
 #ifdef OPTION_DEFRAG
     if (kOptionDefrag) {
       for (int j = 0; j < 10; ++j) {
@@ -464,16 +466,11 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 #endif  // OPTION_DEFRAG
   }
 
-  auto time_after = std::chrono::system_clock::now();
-  int time_running = std::chrono::duration_cast<std::chrono::milliseconds>(
-      time_after - time_before).count();
-  total_time = time_running;
-
 //#ifndef NDEBUG
   print_stats();
 //#endif  // NDEBUG
 
-  printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
+//  printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
 
   if (kOptionRender) {
     close_renderer();

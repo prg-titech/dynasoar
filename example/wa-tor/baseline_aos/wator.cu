@@ -476,8 +476,6 @@ void update_gui_map() {
 int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();
 
-  int total_time = 0;
-  auto time_before = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
 #ifndef NDEBUG
@@ -488,18 +486,20 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
       print_stats();
     }
 
+  auto time_before = std::chrono::high_resolution_clock::now();
+
     step();
+  auto time_after = std::chrono::high_resolution_clock::now();
+  int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
+      time_after - time_before).count();
+  printf("%i\n", time_running);
+
   }
 
-  auto time_after = std::chrono::system_clock::now();
-  int time_running = std::chrono::duration_cast<std::chrono::milliseconds>(
-      time_after - time_before).count();
-  total_time = time_running;
 
 #ifndef NDEBUG
   print_stats();
 #endif  // NDEBUG
 
-  printf("%i\n", total_time);
   return 0;
 }
