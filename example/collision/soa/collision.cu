@@ -275,7 +275,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
-//    printf("%i\n", i);
+    if (i%50==0) printf("%i\n", i);
     if (kOptionPrintStats) {
       int allocated = dev_ptr->DBG_host_allocated_slots<Body>();
       int used = dev_ptr->DBG_host_used_slots<Body>();

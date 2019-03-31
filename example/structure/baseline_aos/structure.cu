@@ -545,6 +545,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumSteps; ++i) {
+    printf("%i\n", i);
     step();
   }
 
@@ -555,7 +556,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
   printf("%lu\n", millis);
 
-#ifndef NDEBUG
+//#ifndef NDEBUG
   printf("Checksum: %f\n", checksum());
-#endif  // NDEBUG
+//#endif  // NDEBUG
 }

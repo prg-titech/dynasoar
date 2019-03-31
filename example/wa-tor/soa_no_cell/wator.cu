@@ -440,9 +440,9 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
   auto time_before = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
-#ifndef NDEBUG
-    printf("%i\n", i);
-#endif  // NDEBUG
+//#ifndef NDEBUG
+    if (i%50 == 0) printf("%i\n", i);
+//#endif  // NDEBUG
 
     if (kOptionRender) {
       update_gui_map();
@@ -469,9 +469,9 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
       time_after - time_before).count();
   total_time = time_running;
 
-#ifndef NDEBUG
+//#ifndef NDEBUG
   print_stats();
-#endif  // NDEBUG
+//#endif  // NDEBUG
 
   printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
 

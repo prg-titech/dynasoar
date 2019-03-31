@@ -490,8 +490,9 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
+    if (i%50==0) printf("%i\n", i);
+
     if (kOptionPrintStats) {
-      printf("%i\n", i);
       //allocator_handle->DBG_print_state_stats();
       allocator_handle->DBG_collect_stats();
     }
@@ -510,9 +511,9 @@ int main(int /*argc*/, char** /*argv*/) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-#ifndef NDEBUG
+// #ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
-#endif  // NDEBUG
+// #endif  // NDEBUG
 
   printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
 

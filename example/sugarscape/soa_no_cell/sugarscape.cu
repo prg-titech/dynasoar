@@ -666,6 +666,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
+    if (i%50==0) printf("%i\n", i);
     step();
   }
 

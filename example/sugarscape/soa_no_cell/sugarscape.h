@@ -11,7 +11,7 @@ class Agent;
 class Male;
 class Female;
 
-using AllocatorT = SoaAllocator<8*64*64*64, Agent, Male, Female>;
+using AllocatorT = SoaAllocator<64*64*64*64, Agent, Male, Female>;
 
 
 class Agent : public SoaBase<AllocatorT> {

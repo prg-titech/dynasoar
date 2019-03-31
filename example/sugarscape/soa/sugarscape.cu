@@ -588,8 +588,9 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
+    if (i%50 == 0) printf("%i\n", i);
+
     if (kOptionPrintStats) {
-      printf("%i\n", i);
       //allocator_handle->DBG_print_state_stats();
       allocator_handle->DBG_collect_stats();
     }

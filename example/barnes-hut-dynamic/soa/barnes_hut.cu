@@ -547,7 +547,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
-    printf("%i\n", i);
+    if (i%100 == 0) printf("%i\n", i);
     step();
   }
 
