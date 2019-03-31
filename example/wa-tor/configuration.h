@@ -3,7 +3,7 @@
 
 // Size of simulation.
 static const int kSeed = 42;
-static const int kSizeX = 2560;
+static const int kSizeX = 2048;
 static const int kSizeY = 2560;
 
 // Simulation constants.
@@ -15,7 +15,7 @@ static const bool kOptionFishSpawn = true;
 static const bool kOptionSharkSpawn = true;
 static const bool kOptionDefrag = true;
 static const bool kOptionPrintStats = false;
-static const int kNumIterations = 300;
+static const int kNumIterations = 500;
 static const bool kOptionRender = false;
 
 #endif  // EXAMPLE_WA_TOR_SOA_CONFIGURATION_H
