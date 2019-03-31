@@ -587,8 +587,8 @@ class Bitmap {
   // Find index of *some* bit that is set to 1.
   // TODO: Make this more efficient!
   __DEV__ int find_allocated_bit_fast(ContainerT val, int seed) const {
-    unsigned int rotation_len = (seed+warp_id()) % (sizeof(val)*8);
-    const ContainerT rotated_val = rotl(val, rotation_len);
+    const unsigned int rotation_len = 0; //(seed+warp_id()) % (sizeof(val)*8);
+    const ContainerT rotated_val = val; //rotl(val, rotation_len);
 
     int first_bit_pos = __ffsll(rotated_val) - 1;
     if (first_bit_pos == -1) {

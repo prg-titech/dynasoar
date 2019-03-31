@@ -369,7 +369,7 @@ class SoaAllocator {
     do {
       // Bit set to 1 if slot is free.
       // TODO: Try different ones.
-      const auto rotation_len = warp_id() % 64;
+      const auto rotation_len = 0; //warp_id() % 64;
       // TODO: Can we use return value from atomic update in second iteration?
       BlockBitmapT updated_mask = rotl(free_bitmap, rotation_len);
 
