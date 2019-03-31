@@ -195,79 +195,43 @@ class SoaAllocator {
     T* result = nullptr;
 
     do {
-      const auto active = __activemask();
-      // Leader thread is the first thread whose mask bit is set to 1.
-      const auto leader = __ffs(active) - 1;
-      assert(leader >= 0 && leader < 32);
-      // Use lane mask to empty all bits higher than the current thread.
-      // The rank of this thread is the number of bits set to 1 in the result.
-      const auto rank = __lane_id();
-      assert(rank < 32);
+      BlockIndexT block_idx = find_active_block<T>();
+      auto* block = get_block<T>(block_idx);
+      BlockBitmapT* free_bitmap = &block->free_bitmap;
+      BlockBitmapT allocation_bitmap = allocate_in_block<T>(free_bitmap, 1, block_idx);
+      auto num_allocated = __popcll(allocation_bitmap);
 
-      // Values to be calculated by the leader.
-      BlockIndexT block_idx;
-      BlockBitmapT allocation_bitmap;
-      if (rank == leader) {
-        assert(__popc(__activemask()) == 1);    // Only one thread executing.
+      auto actual_type_id = block->type_id;
+      if (actual_type_id != BlockHelper<T>::kIndex) {
+        // TODO: Check correctness. This code is rarely executed.
 
-        block_idx = find_active_block<T>();
-        auto* block = get_block<T>(block_idx);
-        BlockBitmapT* free_bitmap = &block->free_bitmap;
-        allocation_bitmap = allocate_in_block<T>(
-            free_bitmap, __popc(active), block_idx);
-        auto num_allocated = __popcll(allocation_bitmap);
+        // Block deallocated and initialized for a new type between lookup
+        // from active bitmap and here. This is extremely unlikely!
+        // But possible.
+        // Undo allocation and update bitmaps accordingly.
 
-        auto actual_type_id = block->type_id;
-        if (actual_type_id != BlockHelper<T>::kIndex) {
-          // TODO: Check correctness. This code is rarely executed.
+        // Note: Cannot be in invalidation here, because we are certain that
+        // we allocated the bits that we are about to deallocate here.
+        auto before_undo = atomicOr(free_bitmap, allocation_bitmap);
+        auto slots_before_undo = __popcll(before_undo);
 
-          // Block deallocated and initialized for a new type between lookup
-          // from active bitmap and here. This is extremely unlikely!
-          // But possible.
-          // Undo allocation and update bitmaps accordingly.
-
-          // Note: Cannot be in invalidation here, because we are certain that
-          // we allocated the bits that we are about to deallocate here.
-          auto before_undo = atomicOr(free_bitmap, allocation_bitmap);
-          auto slots_before_undo = __popcll(before_undo);
-
-#ifdef OPTION_DEFRAG
-          if (BlockHelper<T>::kSize - slots_before_undo
-                  > BlockHelper<T>::kLeq50Threshold
-              && BlockHelper<T>::kSize - slots_before_undo - num_allocated
-                  <= BlockHelper<T>::kLeq50Threshold) {
-            ASSERT_SUCCESS(leq_50_[actual_type_id].allocate<true>(block_idx));
-            atomicAdd(&num_leq_50_[actual_type_id], 1);
-          }
-#endif  // OPTION_DEFRAG
-
-          // Cases to handle: block now active again or block empty now.
-          if (slots_before_undo == 0) {
-            // Block became active. (Was full.)
-            ASSERT_SUCCESS(active_[actual_type_id].allocate<true>(block_idx));
-          } else if (slots_before_undo == BlockHelper<T>::kSize - 1) {
-            // Block now empty.
-            if (invalidate_block<T>(block_idx)) {
-              // Block is invalidated and no new allocations can be performed.
-              ASSERT_SUCCESS(active_[actual_type_id].deallocate<true>(block_idx));
-#ifdef OPTION_DEFRAG
-              ASSERT_SUCCESS(leq_50_[actual_type_id].deallocate<true>(block_idx));
-              atomicSub(&num_leq_50_[actual_type_id], 1);
-#endif // OPTION_DEFRAG
-              ASSERT_SUCCESS(allocated_[actual_type_id].deallocate<true>(block_idx));
-              ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
-            }
+        // Cases to handle: block now active again or block empty now.
+        if (slots_before_undo == 0) {
+          // Block became active. (Was full.)
+          ASSERT_SUCCESS(active_[actual_type_id].allocate<true>(block_idx));
+        } else if (slots_before_undo == BlockHelper<T>::kSize - 1) {
+          // Block now empty.
+          if (invalidate_block<T>(block_idx)) {
+            // Block is invalidated and no new allocations can be performed.
+            ASSERT_SUCCESS(active_[actual_type_id].deallocate<true>(block_idx));
+            ASSERT_SUCCESS(allocated_[actual_type_id].deallocate<true>(block_idx));
+            ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
           }
         }
       }
 
-      assert(__activemask() == active);
-      // Get pointer from allocation (nullptr if no allocation).
-      allocation_bitmap = __shfl_sync(active, allocation_bitmap, leader);
-      block_idx = __shfl_sync(active, block_idx, leader);
       assert(block_idx < N);
-      result = get_ptr_from_allocation<T>(
-          block_idx, __popc(__lanemask_lt() & active), allocation_bitmap);
+      result = get_ptr_from_allocation<T>(block_idx, allocation_bitmap);
     } while (result == nullptr);
 
     assert(PointerHelper::obj_id_from_obj_ptr(result) < BlockHelper<T>::kSize);
@@ -585,17 +549,9 @@ class SoaAllocator {
   }
 
   template<class T>
-  __DEV__ T* get_ptr_from_allocation(BlockIndexT block_idx, int rank,
+  __DEV__ T* get_ptr_from_allocation(BlockIndexT block_idx,
                                      BlockBitmapT allocation) {
     assert(block_idx < N);
-    assert(rank < 32);
-
-    // Get index of rank-th first bit set to 1.
-    for (int i = 0; i < rank; ++i) {
-      // Clear last bit.
-      allocation &= allocation - 1;
-    }
-
     auto position = __ffsll(allocation);
 
     if (position > 0) {
