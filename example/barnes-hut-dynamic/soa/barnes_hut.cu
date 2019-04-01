@@ -2,7 +2,7 @@
 #include <curand_kernel.h>
 
 #include "barnes_hut.h"
-#include "configuration.h"
+#include "../configuration.h"
 
 
 // Allocator handles.
