@@ -12,12 +12,19 @@ using AllocatorT = SoaAllocator<kTotalNumObjects, DummyClass>;
 
 class DummyClass : public SoaBase<AllocatorT> {
  public:
-  declare_field_types(DummyClass, int, int, int, int)
+  declare_field_types(DummyClass, double, double, double, double,
+                                  double, double, double, double)
 
-  SoaField<DummyClass, 0> field1_;
-  SoaField<DummyClass, 1> field2_;
-  SoaField<DummyClass, 2> field3_;
-  SoaField<DummyClass, 3> field4_;
+  SoaField<DummyClass, 0> f0_;
+  SoaField<DummyClass, 1> f1_;
+  SoaField<DummyClass, 2> f2_;
+  SoaField<DummyClass, 3> f3_;
+  SoaField<DummyClass, 4> f4_;
+  SoaField<DummyClass, 5> f5_;
+  SoaField<DummyClass, 6> f6_;
+  SoaField<DummyClass, 7> f7_;
+
+  __device__ DummyClass() {}
 };
 
 #endif  // EXAMPLE_LINUX_SCALABILITY_SOA_LINUX_SCALABILITY_H
