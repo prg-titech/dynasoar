@@ -1,3 +1,5 @@
+add_subdirectory(bitmap_alloc)
 add_subdirectory(cuda_alloc)
-add_subdirectory(soa_alloc)
+add_subdirectory(dynasoar)
+add_subdirectory(halloc)
 add_subdirectory(mallocmc)

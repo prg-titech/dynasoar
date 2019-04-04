@@ -5,7 +5,7 @@
 #include <limits>
 
 #include "../configuration.h"
-#include "../soa_no_cell/wator.h"
+#include "../dynasoar_no_cell/wator.h"
 
 
 static const int kNumBlockSize = 256;
@@ -26,6 +26,7 @@ struct Cell {
   char agent_type;
 };
 
+// Array of structure.
 __device__ Cell* dev_cells;
 
 
@@ -34,6 +35,7 @@ __device__ void Cell_prepare(IndexT cell_id) {
     dev_cells[cell_id].neighbor_request[i] = false;
   }
 }
+
 
 __device__ IndexT Cell_neighbor(IndexT cell_id, uint8_t nid) {
   int x, y;
@@ -63,12 +65,14 @@ __device__ IndexT Cell_neighbor(IndexT cell_id, uint8_t nid) {
   return y*kSizeX + x;
 }
 
+
 __device__ void new_Cell(IndexT cell_id) {
   dev_cells[cell_id].agent_type = kAgentTypeNone;
   dev_cells[cell_id].agent_active = false;
   curand_init(kSeed, cell_id, 0, &dev_cells[cell_id].random_state);
   Cell_prepare(cell_id);
 }
+
 
 template<bool(*predicate)(IndexT)>
 __device__ bool Cell_request_random_neighbor(
@@ -97,6 +101,7 @@ __device__ bool Cell_request_random_neighbor(
   }
 }
 
+
 __device__ void Cell_decide(IndexT cell_id) {
   if (dev_cells[cell_id].neighbor_request[4]) {
     // This cell has priority.
@@ -119,6 +124,7 @@ __device__ void Cell_decide(IndexT cell_id) {
   }
 }
 
+
 __device__ void Cell_enter(IndexT cell_id, IndexT agent) {
   assert(dev_cells[cell_id].agent_type == kAgentTypeNone);
   assert(dev_cells[agent].agent_type != kAgentTypeNone);
@@ -131,29 +137,35 @@ __device__ void Cell_enter(IndexT cell_id, IndexT agent) {
   dev_cells[cell_id].agent_new_position = dev_cells[agent].agent_new_position;
 }
 
+
 __device__ void Cell_kill(IndexT cell_id) {
   assert(dev_cells[cell_id].agent_type != kAgentTypeNone);
   dev_cells[cell_id].agent_type = kAgentTypeNone;
   dev_cells[cell_id].agent_active = false;
 }
 
+
 __device__ bool Cell_has_fish(IndexT cell_id) {
   return dev_cells[cell_id].agent_type == kAgentTypeFish;
 }
+
 
 __device__ bool Cell_has_shark(IndexT cell_id) {
   return dev_cells[cell_id].agent_type == kAgentTypeShark;
 }
 
+
 __device__ bool Cell_is_free(IndexT cell_id) {
   return dev_cells[cell_id].agent_type == kAgentTypeNone;
 }
+
 
 __device__ void Cell_leave(IndexT cell_id) {
   assert(dev_cells[cell_id].agent_type != kAgentTypeNone);
   dev_cells[cell_id].agent_type = kAgentTypeNone;
   dev_cells[cell_id].agent_active = false;
 }
+
 
 __device__ void Cell_request_random_fish_neighbor(IndexT cell_id) {
   if (!Cell_request_random_neighbor<&Cell_has_fish>(
@@ -166,6 +178,7 @@ __device__ void Cell_request_random_fish_neighbor(IndexT cell_id) {
   }
 }
 
+
 __device__ void Cell_request_random_free_neighbor(IndexT cell_id) {
   if (!Cell_request_random_neighbor<&Cell_is_free>(
       cell_id, dev_cells[cell_id].agent_random_state)) {
@@ -173,16 +186,19 @@ __device__ void Cell_request_random_free_neighbor(IndexT cell_id) {
   }
 }
 
+
 __device__ void new_Agent(int cell_id, int seed) {
   curand_init(seed, 0, 0, &dev_cells[cell_id].agent_random_state);
   dev_cells[cell_id].agent_active = false;
 }
+
 
 __device__ void new_Fish(int cell_id, int seed) {
   new_Agent(cell_id, seed);
   dev_cells[cell_id].agent_type = kAgentTypeFish;
   dev_cells[cell_id].agent_egg_counter = seed % kSpawnThreshold;
 }
+
 
 __device__ void Fish_prepare(int cell_id) {
   dev_cells[cell_id].agent_egg_counter++;
@@ -192,6 +208,7 @@ __device__ void Fish_prepare(int cell_id) {
 
   Cell_request_random_free_neighbor(cell_id);
 }
+
 
 __device__ void Fish_update(int cell_id) {
   auto new_pos = dev_cells[cell_id].agent_new_position;
@@ -214,6 +231,7 @@ __device__ void new_Shark(int cell_id, int seed) {
   dev_cells[cell_id].agent_egg_counter = seed % kSpawnThreshold;
 }
 
+
 __device__ void Shark_prepare(int cell_id) {
   dev_cells[cell_id].agent_egg_counter++;
   dev_cells[cell_id].agent_energy--;
@@ -226,6 +244,7 @@ __device__ void Shark_prepare(int cell_id) {
     Cell_request_random_fish_neighbor(cell_id);
   }
 }
+
 
 __device__ void Shark_update(int cell_id) {
   auto new_pos = dev_cells[cell_id].agent_new_position;
@@ -257,6 +276,7 @@ __device__ void Shark_update(int cell_id) {
 
 __device__ int d_checksum;
 
+
 __device__ void Cell_add_to_checksum(IndexT cell_id) {
   if (Cell_has_fish(cell_id)) {
     atomicAdd(&d_checksum, 3);
@@ -265,9 +285,11 @@ __device__ void Cell_add_to_checksum(IndexT cell_id) {
   }
 }
 
+
 __global__ void reset_checksum() {
   d_checksum = 0;
 }
+
 
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -275,6 +297,7 @@ __global__ void create_cells() {
     new_Cell(i);
   }
 }
+
 
 __global__ void setup_cells() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -292,12 +315,14 @@ __global__ void setup_cells() {
   }
 }
 
+
 __global__ void kernel_Cell_add_to_checksum() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
     Cell_add_to_checksum(i);
   }
 }
+
 
 __global__ void kernel_Cell_prepare() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -306,12 +331,14 @@ __global__ void kernel_Cell_prepare() {
   }
 }
 
+
 __global__ void kernel_Cell_decide() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
     Cell_decide(i);
   }
 }
+
 
 __global__ void kernel_Agent_set_active() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -322,6 +349,7 @@ __global__ void kernel_Agent_set_active() {
   }
 }
 
+
 __global__ void kernel_Fish_prepare() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
@@ -330,6 +358,7 @@ __global__ void kernel_Fish_prepare() {
     }
   }
 }
+
 
 __global__ void kernel_Fish_update() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -340,6 +369,7 @@ __global__ void kernel_Fish_update() {
   }
 }
 
+
 __global__ void kernel_Shark_prepare() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
        i < kSizeX*kSizeY; i += blockDim.x * gridDim.x) {
@@ -348,6 +378,7 @@ __global__ void kernel_Shark_prepare() {
     }
   }
 }
+
 
 __global__ void kernel_Shark_update() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -358,10 +389,12 @@ __global__ void kernel_Shark_update() {
   }
 }
 
+
 __global__ void print_checksum() {
   printf("%i,%u,%u,%u,%u\n",
          d_checksum, 0, 0, 0, 0);
 }
+
 
 void print_stats() {
   reset_checksum<<<1, 1>>>();
@@ -375,6 +408,7 @@ void print_stats() {
   print_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 }
+
 
 void step() {
   // --- FISH ---
@@ -430,6 +464,7 @@ void step() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
+
 void initialize() {
   Cell* h_cells;
   cudaMalloc(&h_cells, sizeof(Cell)*kSizeX*kSizeY);
@@ -448,58 +483,32 @@ void initialize() {
   gpuErrchk(cudaDeviceSynchronize());
 }
 
-__device__ uint32_t d_gui_map[kSizeY * kSizeX];
-uint32_t gui_map[kSizeY * kSizeX];
-
-__global__ void fill_gui_map() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < kSizeY*kSizeX) {
-    if (dev_cells[tid].agent_type != kAgentTypeNone) {
-      d_gui_map[tid] = dev_cells[tid].agent_type;
-    } else {
-      d_gui_map[tid] = 0;
-    }
-  }
-}
-
-void update_gui_map() {
-  fill_gui_map<<<kSizeX*kSizeY/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*kSizeX*kSizeY,
-                       0, cudaMemcpyDeviceToHost);
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
   initialize();
 
+  int total_time = 0;
 
   for (int i = 0; i < kNumIterations; ++i) {
 #ifndef NDEBUG
     printf("%i\n", i);
+    print_stats();
 #endif  // NDEBUG
 
-    if (kOptionPrintStats) {
-      print_stats();
-    }
-
-  auto time_before = std::chrono::high_resolution_clock::now();
-
+    auto time_before = std::chrono::high_resolution_clock::now();
     step();
-  auto time_after = std::chrono::high_resolution_clock::now();
-  int time_running = std::chrono::duration_cast<std::chrono::microseconds>(
-      time_after - time_before).count();
-  printf("%i\n", time_running);
 
+    auto time_after = std::chrono::high_resolution_clock::now();
+    total_time += std::chrono::duration_cast<std::chrono::microseconds>(
+        time_after - time_before).count();
   }
-
 
 #ifndef NDEBUG
   print_stats();
 #endif  // NDEBUG
+
+  // Print total running time
+  printf("%i\n", total_time);
 
   return 0;
 }

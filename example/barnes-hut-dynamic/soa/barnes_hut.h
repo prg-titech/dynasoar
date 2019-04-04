@@ -14,7 +14,7 @@ class TreeNode;
 using AllocatorT = SoaAllocator<64*64*64*64, NodeBase, BodyNode, TreeNode>;
 
 
-class NodeBase : public SoaBase<AllocatorT> {
+class NodeBase : public AllocatorT::Base {
  public:
   static const bool kIsAbstract = true;
 

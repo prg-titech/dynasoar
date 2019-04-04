@@ -23,7 +23,7 @@ AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ unsigned long long int d_checksum;
 
 // 32 byte objects.
-class C1 : public SoaBase<AllocatorT> {
+class C1 : public AllocatorT::Base {
  public:
   declare_field_types(C1, C2*, int, int, int, int, int, int)
 
@@ -44,7 +44,7 @@ class C1 : public SoaBase<AllocatorT> {
 };
 
 // 32 byte objects.
-class C2 : public SoaBase<AllocatorT> {
+class C2 : public AllocatorT::Base {
  public:
   declare_field_types(C2, C1*, int, int, int, int, int, int)
 

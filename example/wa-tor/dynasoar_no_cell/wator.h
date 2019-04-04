@@ -11,11 +11,10 @@ class Agent;
 class Fish;
 class Shark;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Agent, Fish, Shark>;
+using AllocatorT = SoaAllocator<kNumObjects, Agent, Fish, Shark>;
 using IndexT = int;
 
-
-class Agent : public SoaBase<AllocatorT> {
+class Agent : public AllocatorT::Base {
  public:
   declare_field_types(
       Agent,

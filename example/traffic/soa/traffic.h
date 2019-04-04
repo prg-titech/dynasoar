@@ -15,7 +15,7 @@ class TrafficLight;
 
 using AllocatorT = SoaAllocator<32*64*64*64, Car, Cell, ProducerCell>;
 
-class Cell : public SoaBase<AllocatorT> {
+class Cell : public AllocatorT::Base {
  public:
   declare_field_types(
       Cell,
@@ -115,7 +115,7 @@ class ProducerCell : public Cell {
 };
 
 
-class Car : public SoaBase<AllocatorT> {
+class Car : public AllocatorT::Base {
  public:
   declare_field_types(
       Car,

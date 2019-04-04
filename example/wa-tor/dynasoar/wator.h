@@ -12,9 +12,9 @@ class Cell;
 class Fish;
 class Shark;
 
-using AllocatorT = SoaAllocator<4*64*64*64*64, Agent, Fish, Shark, Cell>;
+using AllocatorT = SoaAllocator<kNumObjects, Agent, Fish, Shark, Cell>;
 
-class Cell : public SoaBase<AllocatorT> {
+class Cell : public AllocatorT::Base {
  public:
   // Sanity check for DeviceArray.
   static_assert(sizeof(DeviceArray<bool, 5>) == 5, "Size mismatch.");

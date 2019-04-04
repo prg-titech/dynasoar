@@ -11,7 +11,7 @@ using AllocatorT = SoaAllocator<64*64*64*64, Bar, Foo>;
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
-class Bar : public SoaBase<AllocatorT> {
+class Bar : public AllocatorT::Base {
  public:
   declare_field_types(Bar, int, int, int)
 
@@ -24,7 +24,7 @@ class Bar : public SoaBase<AllocatorT> {
   }
 };
 
-class Foo : public SoaBase<AllocatorT> {
+class Foo : public AllocatorT::Base {
  public:
   // Pre-declare types of all fields.
   declare_field_types(Foo, float, int, char)

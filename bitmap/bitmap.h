@@ -609,13 +609,11 @@ class Bitmap {
   static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
   // The number of containers on this level.
-  static const SizeT kNumContainers = N <= kBitsize ? 1 : N / kBitsize;
+  static const SizeT kNumContainers =
+      N <= kBitsize ? 1 : (N + kBitsize - 1)/kBitsize;
 
   // Indicates if this bitmap has a higher-level (nested) bitmap.
   static const bool kHasNested = kNumContainers > 1;
-
-  static_assert(!kHasNested || N % kBitsize == 0,
-                "N must be of size (sizeof(ContainerT)*8)**D * x.");
 
   using SizeTT = SizeT;
   using ContainerTT = ContainerT;

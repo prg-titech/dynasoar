@@ -10,7 +10,7 @@ class DummyClass;
 using AllocatorT = SoaAllocator<kTotalNumObjects, DummyClass>;
 
 
-class DummyClass : public SoaBase<AllocatorT> {
+class DummyClass : public AllocatorT::Base {
  public:
   declare_field_types(DummyClass, int, int, int, int)
 

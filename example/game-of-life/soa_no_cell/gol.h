@@ -29,7 +29,7 @@ class Cell {
 };
 
 
-class Agent : public SoaBase<AllocatorT> {
+class Agent : public AllocatorT::Base {
  public:
   declare_field_types(
       Agent,

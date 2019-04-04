@@ -17,7 +17,7 @@ using AllocatorT = SoaAllocator<2*64*64*64*64, NodeBase, AnchorNode,
                                 AnchorPullNode, Node, Spring>;
 
 
-class NodeBase : public SoaBase<AllocatorT> {
+class NodeBase : public AllocatorT::Base {
  public:
   declare_field_types(
       NodeBase,
@@ -115,7 +115,7 @@ class Node : public NodeBase {
 };
 
 
-class Spring : public SoaBase<AllocatorT> {
+class Spring : public AllocatorT::Base {
  public:
   declare_field_types(
       Spring,

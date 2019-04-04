@@ -17,7 +17,9 @@ __device__ Cell::Cell(int cell_id) : agent_(nullptr) {
   prepare();
 }
 
+
 __device__ Agent* Cell::agent() const { return agent_; }
+
 
 __device__ void Cell::decide() {
   if (neighbor_request_[4]) {
@@ -40,6 +42,7 @@ __device__ void Cell::decide() {
   }
 }
 
+
 __device__ void Cell::enter(Agent* agent) {
   assert(agent_ == nullptr);
   assert(agent != nullptr);
@@ -48,26 +51,33 @@ __device__ void Cell::enter(Agent* agent) {
   agent->set_position(this);
 }
 
+
 __device__ bool Cell::has_fish() const {
   return agent_->cast<Fish>() != nullptr;
 }
+
 
 __device__ bool Cell::has_shark() const {
   return agent_->cast<Shark>() != nullptr;
 }
 
+
 __device__ bool Cell::is_free() const { return agent_ == nullptr; }
+
 
 __device__ void Cell::leave() {
   assert(agent_ != nullptr);
   agent_ = nullptr;
 }
 
+
 __device__ void Cell::prepare() {
   for (int i = 0; i < 5; ++i) { neighbor_request_[i] = false; }
 }
 
+
 __device__ curandState_t& Cell::random_state() { return random_state_; }
+
 
 __device__ void Cell::request_random_fish_neighbor() {
   if (!request_random_neighbor<&Cell::has_fish>(agent_->random_state())) {
@@ -78,11 +88,13 @@ __device__ void Cell::request_random_fish_neighbor() {
   }
 }
 
+
 __device__ void Cell::request_random_free_neighbor() {
   if (!request_random_neighbor<&Cell::is_free>(agent_->random_state())) {
     neighbor_request_[4] = true;
   }
 }
+
 
 template<bool(Cell::*predicate)() const>
 __device__ bool Cell::request_random_neighbor(curandState_t& random_state) {
@@ -110,6 +122,7 @@ __device__ bool Cell::request_random_neighbor(curandState_t& random_state) {
   }
 }
 
+
 __device__ void Cell::set_neighbors(Cell* left, Cell* top,
                                     Cell* right, Cell* bottom) {
   neighbors_[0] = left;
@@ -118,9 +131,12 @@ __device__ void Cell::set_neighbors(Cell* left, Cell* top,
   neighbors_[3] = bottom;
 }
 
+
 __device__ Agent::Agent(int seed) { curand_init(seed, 0, 0, &random_state_); }
 
+
 __device__ curandState_t& Agent::random_state() { return random_state_; }
+
 
 __device__ void Agent::set_new_position(Cell* new_pos) {
   // Check for race condition. (This is not bullet proof.)
@@ -129,12 +145,16 @@ __device__ void Agent::set_new_position(Cell* new_pos) {
   new_position_ = new_pos;
 }
 
+
 __device__ Cell* Agent::position() const { return position_; }
+
 
 __device__ void Agent::set_position(Cell* cell) { position_ = cell; }
 
+
 __device__ Fish::Fish(int seed)
     : Agent(seed), egg_timer_(seed % kSpawnThreshold) {}
+
 
 __device__ void Fish::prepare() {
   egg_timer_++;
@@ -144,6 +164,7 @@ __device__ void Fish::prepare() {
   assert(position_ != nullptr);
   position_->request_random_free_neighbor();
 }
+
 
 __device__ void Fish::update() {
   Cell* old_position = position_;
@@ -165,6 +186,7 @@ __device__ void Fish::update() {
 __device__ Shark::Shark(int seed)
     : Agent(seed), energy_(kEngeryStart), egg_timer_(seed % kSpawnThreshold) {}
 
+
 __device__ void Shark::prepare() {
   egg_timer_++;
   energy_--;
@@ -178,6 +200,7 @@ __device__ void Shark::prepare() {
     position_->request_random_fish_neighbor();
   }
 }
+
 
 __device__ void Shark::update() {
   if (kOptionSharkDie && energy_ == 0) {
@@ -205,6 +228,7 @@ __device__ void Shark::update() {
   }
 }
 
+
 __device__ void Cell::kill() {
   assert(agent_ != nullptr);
   //device_allocator->free<Agent>(agent_);
@@ -215,7 +239,7 @@ __device__ void Cell::kill() {
 
 // ----- KERNELS -----
 
-__device__ Cell* cells[kSizeX * kSizeY];
+__device__ Cell* cells[kSizeX * kSizeY];  // Only for setup.
 __device__ int d_checksum;
 
 __device__ void Cell::add_to_checksum() {
@@ -226,9 +250,11 @@ __device__ void Cell::add_to_checksum() {
   }
 }
 
+
 __global__ void reset_checksum() {
   d_checksum = 0;
 }
+
 
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -238,6 +264,7 @@ __global__ void create_cells() {
     cells[i] = new_cell;
   }
 }
+
 
 __global__ void setup_cells() {
   for (int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -274,6 +301,7 @@ __global__ void setup_cells() {
   }
 }
 
+
 __global__ void print_checksum() {
   uint32_t fish_use = device_allocator->DBG_used_slots<Fish>();
   uint32_t fish_num = device_allocator->DBG_allocated_slots<Fish>();
@@ -284,12 +312,6 @@ __global__ void print_checksum() {
          d_checksum, fish_use, fish_num, shark_use, shark_num);
 }
 
-#ifdef OPTION_DEFRAG
-void defrag() {
-  allocator_handle->parallel_defrag<Fish>();
-  allocator_handle->parallel_defrag<Shark>();
-}
-#endif  // OPTION_DEFRAG
 
 void step() {
   // --- FISH ---
@@ -305,6 +327,7 @@ void step() {
   allocator_handle->parallel_do<Shark, &Shark::update>();
 }
 
+
 void initialize() {
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -315,30 +338,6 @@ void initialize() {
   create_cells<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
   setup_cells<<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-}
-
-__device__ uint32_t d_gui_map[kSizeY * kSizeX];
-uint32_t gui_map[kSizeY * kSizeX];
-
-__global__ void fill_gui_map() {
-  int tid = threadIdx.x + blockDim.x*blockIdx.x;
-
-  if (tid < kSizeY*kSizeX) {
-    if (cells[tid]->agent() != nullptr) {
-      d_gui_map[tid] = cells[tid]->agent()->get_type();
-    } else {
-      d_gui_map[tid] = 0;
-    }
-  }
-}
-
-void update_gui_map() {
-  fill_gui_map<<<kSizeX*kSizeY/1024 + 1, 1024>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  cudaMemcpyFromSymbol(gui_map, d_gui_map, sizeof(uint32_t)*kSizeX*kSizeY,
-                       0, cudaMemcpyDeviceToHost);
   gpuErrchk(cudaDeviceSynchronize());
 }
 
@@ -354,44 +353,35 @@ void print_stats() {
 }
 
 int main(int /*argc*/, char*[] /*arvg[]*/) {
+#ifdef OPTION_RENDER
+  printf("Run wator_soa_no_cell for rendering.\n");
+#endif  // OPTION_RENDER
+
   initialize();
 
   int total_time = 0;
-  for (int i = 0; i < kNumIterations; ++i) {
-    if (kOptionPrintStats) {
-      printf("%i\n", i);
-      //allocator_handle->DBG_print_state_stats();
-      allocator_handle->DBG_collect_stats();
-    }
 
-    auto time_before = std::chrono::system_clock::now();
+  for (int i = 0; i < kNumIterations; ++i) {
+#ifndef NDEBUG
+      // Print debug information.
+      allocator_handle->DBG_print_state_stats();
+#endif  // NDEBUG
+
+    auto time_before = std::chrono::high_resolution_clock::now();
     step();
 
-#ifdef OPTION_DEFRAG
-    if (kOptionDefrag && i % 1 == 0) {
-      defrag();
-    }
-#endif  // OPTION_DEFRAG
-
-    auto time_after = std::chrono::system_clock::now();
-    int time_running = std::chrono::duration_cast<std::chrono::milliseconds>(
+    auto time_after = std::chrono::high_resolution_clock::now();
+    total_time += std::chrono::duration_cast<std::chrono::microseconds>(
         time_after - time_before).count();
-    total_time += time_running;
   }
 
 #ifndef NDEBUG
   print_stats();
 #endif  // NDEBUG
 
-  printf("%i,%lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
-
-#ifdef OPTION_DEFRAG
-  allocator_handle->DBG_print_defrag_time();
-#endif  // OPTION_DEFRAG
-
-  if (kOptionPrintStats) {
-    allocator_handle->DBG_print_collected_stats();
-  }
+  // Print total running time, enumeration time.
+  printf("%i, %lu\n", total_time, allocator_handle->DBG_get_enumeration_time());
 
   return 0;
 }
+

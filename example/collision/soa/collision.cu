@@ -11,7 +11,7 @@ class Body;
 
 using AllocatorT = SoaAllocator<64*64*64*64, Body>;
 
-class Body : public SoaBase<AllocatorT> {
+class Body : public AllocatorT::Base {
  public:
   declare_field_types(
       Body,

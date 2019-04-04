@@ -17,7 +17,7 @@ static const char kActionDie = 1;
 static const char kActionSpawnAlive = 2;
 
 
-class Cell : public SoaBase<AllocatorT> {
+class Cell : public AllocatorT::Base {
  public:
   declare_field_types(
       Cell,
@@ -36,7 +36,7 @@ class Cell : public SoaBase<AllocatorT> {
 };
 
 
-class Agent : public SoaBase<AllocatorT> {
+class Agent : public AllocatorT::Base {
  public:
   declare_field_types(
       Agent,

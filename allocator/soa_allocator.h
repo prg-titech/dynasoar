@@ -24,6 +24,7 @@ template<BlockIndexT N_Objects, class... Types>
 class SoaAllocator {
  public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
+  using Base = SoaBase<ThisAllocator>;
 
   static const ObjectIndexT kNumBlockElements = 64;
   static const uint64_t kBlockAddrBitmask = 0xFFFFFFFFFFC0;
@@ -683,6 +684,9 @@ class SoaAllocator {
   static const BlockIndexT kN = N;
 
   static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
+
+  static const size_t kTotalSize =
+      sizeof(ThisAllocator) + ThisAllocator::kDataBufferSize;
 };
 
 

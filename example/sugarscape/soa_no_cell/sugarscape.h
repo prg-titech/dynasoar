@@ -14,7 +14,7 @@ class Female;
 using AllocatorT = SoaAllocator<64*64*64*64, Agent, Male, Female>;
 
 
-class Agent : public SoaBase<AllocatorT> {
+class Agent : public AllocatorT::Base {
  public:
   static const bool kIsAbstract = true;
 
