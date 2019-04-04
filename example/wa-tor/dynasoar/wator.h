@@ -27,15 +27,15 @@ class Cell : public AllocatorT::Base {
       DeviceArray<bool, 5>)          // neighbor_request_
 
  private:
-  SoaField<Cell, 0> random_state_;
+  Field<Cell, 0> random_state_;
 
   // left, top, right, bottom
-  SoaField<Cell, 1> neighbors_;
+  Field<Cell, 1> neighbors_;
 
-  SoaField<Cell, 2> agent_;
+  Field<Cell, 2> agent_;
 
   // left, top, right, bottom, self
-  SoaField<Cell, 3> neighbor_request_;
+  Field<Cell, 3> neighbor_request_;
 
  public:
   __device__ Cell(int cell_id);
@@ -85,9 +85,9 @@ class Agent : public SoaBase<AllocatorT> {
   static const bool kIsAbstract = true;
 
  protected:
-  SoaField<Agent, 0> random_state_;
-  SoaField<Agent, 1> position_;
-  SoaField<Agent, 2> new_position_;
+  Field<Agent, 0> random_state_;
+  Field<Agent, 1> position_;
+  Field<Agent, 2> new_position_;
 
  public:
   __device__ Agent(int seed);
@@ -112,7 +112,7 @@ class Fish : public Agent {
   static const bool kIsAbstract = false;
 
  private:
-  SoaField<Fish, 0> egg_timer_;
+  Field<Fish, 0> egg_timer_;
 
  public:
   __device__ Fish(int seed);
@@ -134,8 +134,8 @@ class Shark : public Agent {
   static const bool kIsAbstract = false;
 
  private:
-  SoaField<Shark, 0> energy_;
-  SoaField<Shark, 1> egg_timer_;
+  Field<Shark, 0> energy_;
+  Field<Shark, 1> egg_timer_;
 
  public:
   __device__ Shark(int seed);

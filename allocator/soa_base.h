@@ -28,9 +28,9 @@ __DEV__ __forceinline__ static void destroy(AllocatorT* allocator, T* ptr) {
 }
 
 
-template<typename AllocatorT, typename C, int Field>
+template<typename AllocatorT, typename C, int FieldIndex>
 __DEV__ __forceinline__ static void destroy(AllocatorT* allocator,
-                                            const SoaField<C, Field>& value) {
+                                            const SoaField<C, FieldIndex>& value) {
   allocator->template free(value.get());
 }
 
