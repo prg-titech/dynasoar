@@ -6,11 +6,14 @@ OPTIND=1         # Reset in case getopts has been used previously in the shell.
 args=""
 render=0
 optimizations="-O3 -DNDEBUG"
+allocator="dynasoar"
 
-while getopts "h?x:y:rd" opt; do
+while getopts "h?x:y:rda:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"
+        echo "  -a ALLOC    Choose allocator. Possible values:"
+        echo "              bitmap, cuda, dynasoar (default), halloc, mallocmc"
         echo "  -d          Debug mode"
         echo "  -r          Render visualization"
         echo "  -x SIZE_X   Size X (#pixels)"
@@ -28,6 +31,8 @@ while getopts "h?x:y:rd" opt; do
         ;;
     d)  optimizations="-g -O3"
         ;;
+    a)  allocator="${OPTARG}"
+        ;;
     esac
 done
 
@@ -37,7 +42,7 @@ shift $((OPTIND-1))
 
 args="${args} ${optimizations} -std=c++11 -lineinfo --expt-extended-lambda"
 args="${args} -gencode arch=compute_50,code=sm_50 -gencode arch=compute_61,code=sm_61"
-args="${args} -maxrregcount=64 -Iexample/configuration/dynasoar -I. -Ilib/cub"
+args="${args} -maxrregcount=64 -Iexample/configuration/${allocator} -I. -Ilib/cub"
 
 build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar_no_cell/wator.cu -o bin/wator_dynasoar_no_cell
 build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar/wator.cu -o bin/wator_dynasoar
