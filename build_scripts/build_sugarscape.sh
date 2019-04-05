@@ -10,7 +10,7 @@ args=""
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
-while getopts "h?x:rda:s:m:" opt; do
+while getopts "h?x:y:rda:s:m:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"
@@ -20,14 +20,14 @@ while getopts "h?x:rda:s:m:" opt; do
         echo "  -m NUM      Max. #objects (of the smallest type)"
         echo "  -r          Render visualization"
         echo "  -s BYTES    Heap size (for allocators different from dynasoar)"
-        echo "  -x SIZE     Problem size (#intersections)"
+        echo "  -x SIZE     Size X/Y (#pixels)"
         echo ""
-        echo "Example: ${0} -x 7 -r"
+        echo "Example: ${0} -x 400"
         exit 0
         ;;
     x)  args="${args} -DPARAM_SIZE=${OPTARG}"
         ;;
-    r)  args="${args} -DOPTION_RENDER -lSDL2 example/traffic/rendering.cu"
+    r)  args="${args} -DOPTION_RENDER -lSDL2 example/sugarscape/rendering.cu"
         ;;
     s)  args="${args} -DPARAM_HEAP_SIZE=${OPTARG}"
         ;;
@@ -57,6 +57,7 @@ if [ "$allocator" = "halloc" ]; then
 fi;
 
 
-build_scripts/nvcc.sh ${args} example/traffic/dynasoar/traffic.cu -o bin/traffic_dynasoar
-build_scripts/nvcc.sh ${args} example/traffic/baseline_aos/traffic.cu -o bin/traffic_baseline_aos
-build_scripts/nvcc.sh ${args} example/traffic/baseline_soa/traffic.cu -o bin/traffic_baseline_soa
+build_scripts/nvcc.sh ${args} example/sugarscape/dynasoar_no_cell/sugarscape.cu -o bin/sugarscape_dynasoar_no_cell
+build_scripts/nvcc.sh ${args} example/sugarscape/dynasoar/sugarscape.cu -o bin/sugarscape_dynasoar
+build_scripts/nvcc.sh ${args} example/sugarscape/baseline_aos/sugarscape.cu -o bin/sugarscape_baseline_aos
+build_scripts/nvcc.sh ${args} example/sugarscape/baseline_soa/sugarscape.cu -o bin/sugarscape_baseline_soa

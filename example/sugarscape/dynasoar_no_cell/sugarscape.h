@@ -11,7 +11,7 @@ class Agent;
 class Male;
 class Female;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Agent, Male, Female>;
+using AllocatorT = SoaAllocator<kNumObjects, Agent, Male, Female>;
 
 
 class Agent : public AllocatorT::Base {

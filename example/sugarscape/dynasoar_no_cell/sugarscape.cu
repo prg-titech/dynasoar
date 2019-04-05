@@ -1,7 +1,11 @@
 #include <chrono>
 
 #include "../configuration.h"
+
+#ifdef OPTION_RENDER
 #include "../rendering.h"
+#endif  // OPTION_RENDER
+
 #include "sugarscape.h"
 
 static const int kThreads = 256;
@@ -459,7 +463,7 @@ __device__ void Female::decide_proposal() {
 }
 
 
-// Only for rendering purposes.
+// Only for rendering purposes and checksum computation.
 __device__ CellInfo cell_info[kSize * kSize];
 CellInfo host_cell_info[kSize * kSize];
 
@@ -564,10 +568,10 @@ void step() {
 
   allocator_handle->parallel_do<Male, &Male::mate>();
 
-  if (kOptionRender) {
-    copy_data();
-    draw(host_cell_info);
-  }
+#ifdef OPTION_RENDER
+  copy_data();
+  draw(host_cell_info);
+#endif  // OPTION_RENDER
 }
 
 
@@ -620,9 +624,9 @@ void initialize_simulation() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (kOptionRender) {
-    init_renderer();
-  }
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -666,24 +670,23 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
-    if (i%50==0) printf("%i\n", i);
     step();
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
 #ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
 #endif  // NDEBUG
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
 
-  if (kOptionRender) {
-    close_renderer();
-  }
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 
   return 0;
 }

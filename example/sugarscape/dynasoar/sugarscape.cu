@@ -1,12 +1,18 @@
 #include <chrono>
 
 #include "../configuration.h"
+
+#ifdef OPTION_RENDER
 #include "../rendering.h"
+#endif  // OPTION_RENDER
+
 #include "sugarscape.h"
+
 
 // Allocator handles.
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
+
 
 __device__ Cell* cells[kSize*kSize];
 
@@ -281,10 +287,6 @@ __device__ void Cell::take_sugar(int amount) { sugar_ -= amount; }
 
 
 __device__ void Cell::grow_sugar() {
-  // if(threadIdx.x == 0 && blockIdx.x == 0) {
-  //   device_allocator->DBG_print_state_stats();
-  // }
-
   sugar_ += min(sugar_capacity_ - sugar_, grow_rate_);
 }
 
@@ -454,7 +456,7 @@ __device__ void Female::decide_proposal() {
 }
 
 
-// Only for rendering purposes.
+// Only for rendering purposes and checksum computation.
 __device__ CellInfo cell_info[kSize * kSize];
 CellInfo host_cell_info[kSize * kSize];
 
@@ -506,19 +508,11 @@ void step() {
   allocator_handle->parallel_do<Cell, &Cell::decide_permission>();
   allocator_handle->parallel_do<Male, &Male::mate>();
 
-  if (kOptionRender) {
-    copy_data();
-    draw(host_cell_info);
-  }
+#ifdef OPTION_RENDER
+  copy_data();
+  draw(host_cell_info);
+#endif  // OPTION_RENDER
 }
-
-
-#ifdef OPTION_DEFRAG
-void defrag() {
-  allocator_handle->parallel_defrag<Male, 128>();
-  allocator_handle->parallel_defrag<Female, 128>();
-}
-#endif  // OPTION_DEFRAG
 
 
 __global__ void create_cells() {
@@ -573,9 +567,9 @@ void initialize_simulation() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (kOptionRender) {
-    init_renderer();
-  }
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -588,44 +582,27 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
-    if (i%50 == 0) printf("%i\n", i);
-
-    if (kOptionPrintStats) {
-      //allocator_handle->DBG_print_state_stats();
-      allocator_handle->DBG_collect_stats();
-    }
+#ifndef NDEBUG
+    allocator_handle->DBG_print_state_stats();
+#endif  // NDEBUG
 
     step();
-
-#ifdef OPTION_DEFRAG
-    if (i % 1 == 0) {
-      defrag();
-    }
-#endif  // OPTION_DEFRAG
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
 #ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
 #endif  // NDEBUG
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
 
-#ifdef OPTION_DEFRAG
-  allocator_handle->DBG_print_defrag_time();
-#endif  // OPTION_DEFRAG
-
-  if (kOptionPrintStats) {
-    allocator_handle->DBG_print_collected_stats();
-  }
-
-  if (kOptionRender) {
-    close_renderer();
-  }
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 
   return 0;
 }

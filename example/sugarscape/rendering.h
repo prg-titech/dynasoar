@@ -1,11 +1,6 @@
 #ifndef EXAMPLE_SUGARSCAPE_SOA_RENDERING_H
 #define EXAMPLE_SUGARSCAPE_SOA_RENDERING_H
 
-struct CellInfo {
-  int sugar;
-  char agent_type;
-};
-
 void init_renderer();
 void close_renderer();
 void draw(CellInfo* cell_info);

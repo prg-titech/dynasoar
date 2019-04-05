@@ -12,7 +12,7 @@ class Male;
 class Female;
 class Cell;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Agent, Male, Female, Cell>;
+using AllocatorT = SoaAllocator<kNumObjects, Agent, Male, Female, Cell>;
 
 class Cell : public AllocatorT::Base {
  public:
