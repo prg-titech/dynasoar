@@ -11,29 +11,19 @@ render=0
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
-while getopts "h?x:y:rda:s:" opt; do
+while getopts "h?da:s:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"
         echo "  -a ALLOC    Choose allocator. Possible values:"
         echo "              bitmap, cuda, dynasoar (default), halloc, mallocmc"
         echo "  -d          Debug mode"
-        echo "  -r          Render visualization"
         echo "  -s          Heap size"
         echo "              dynasoar: #objects of the smallest type"
         echo "              other allocators: heap size in bytes"
-        echo "  -x SIZE_X   Size X (#pixels)"
-        echo "  -y SIZE_Y   Size Y (#pixels)"
         echo ""
-        echo "Example: ${0} -x 512 -y 512"
+        echo "Example: ${0} -a mallocmc"
         exit 0
-        ;;
-    x)  args="${args} -DPARAM_SIZE_X=${OPTARG}"
-        ;;
-    y)  args="${args} -DPARAM_SIZE_Y=${OPTARG}"
-        ;;
-    r)  args="${args} -DOPTION_RENDER -lSDL2 example/wa-tor/rendering.cu"
-        render=1
         ;;
     s)  args="${args} -DPARAM_HEAP_SIZE=${OPTARG}"
         ;;
@@ -56,7 +46,4 @@ if [ "$allocator" = "mallocmc" ]; then
   args="${args} -Iexample/configuration/mallocmc/mallocMC"
 fi;
 
-build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar_no_cell/wator.cu -o bin/wator_dynasoar_no_cell
-build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar/wator.cu -o bin/wator_dynasoar
-build_scripts/nvcc.sh ${args} example/wa-tor/baseline_aos/wator.cu -o bin/wator_baseline_aos
-build_scripts/nvcc.sh ${args} example/wa-tor/baseline_soa/wator.cu -o bin/wator_baseline_soa
+build_scripts/nvcc.sh ${args} example/api-example/example.cu -o bin/api_example
