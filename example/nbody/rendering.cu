@@ -3,11 +3,9 @@
 #include "configuration.h"
 #include "rendering.h"
 
-namespace nbody {
-
 // Constants for rendering.
-static const int kWindowWidth = 1000;
-static const int kWindowHeight = 1000;
+static const int kWindowWidth = 500;
+static const int kWindowHeight = 500;
 static const int kMaxRect = 20;
 
 // SDL rendering variables.
@@ -72,4 +70,3 @@ void close_renderer() {
   SDL_Quit();
 }
 
-}  // namespace nbody

@@ -3,7 +3,10 @@
 #include <stdio.h>
 
 #include "../configuration.h"
+
+#ifdef OPTION_RENDER
 #include "../rendering.h"
+#endif  // OPTION_RENDER
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -15,8 +18,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-namespace nbody {
-
 static const int kCudaBlockSize = 256;
 
 // Arrays containing all Body objects on device.
@@ -27,7 +28,7 @@ __device__ float* dev_Body_vel_y;
 __device__ float* dev_Body_mass;
 __device__ float* dev_Body_force_x;
 __device__ float* dev_Body_force_y;
-__device__ double device_checksum;
+__device__ float device_checksum;
 
 
 __device__ void new_Body(int id, float pos_x, float pos_y,
@@ -76,8 +77,8 @@ __device__ void Body_update(int id) {
 
 
 __device__ void Body_add_checksum(int id) {
-  device_checksum += dev_Body_pos_x[id] + dev_Body_pos_y[id]*2
-      + dev_Body_vel_x[id]*3 + dev_Body_vel_y[id]*4;
+  atomicAdd(&device_checksum, dev_Body_pos_x[id] + dev_Body_pos_y[id]*2
+      + dev_Body_vel_x[id]*3 + dev_Body_vel_y[id]*4);
 }
 
 
@@ -135,9 +136,9 @@ __global__ void kernel_compute_checksum() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (kOptionRender) {
-    init_renderer();
-  }
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   float* host_Body_pos_x;
   float* host_Body_pos_y;
@@ -156,10 +157,11 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMalloc(&host_Body_force_x, sizeof(float)*kNumBodies);
   cudaMalloc(&host_Body_force_y, sizeof(float)*kNumBodies);
 
-  // Host-side variables for rendering.
+#ifdef OPTION_RENDER
   float Body_pos_x[kNumBodies];
   float Body_pos_y[kNumBodies];
   float Body_mass[kNumBodies];
+#endif  // OPTION_RENDER
 
   auto time_start = std::chrono::system_clock::now();
 
@@ -181,29 +183,29 @@ int main(int /*argc*/, char** /*argv*/) {
         kCudaBlockSize>>>();
     gpuErrchk(cudaDeviceSynchronize());
 
-    if (kOptionRender) {
-      cudaMemcpy(Body_pos_x, host_Body_pos_x, sizeof(float)*kNumBodies,
-                 cudaMemcpyDeviceToHost);
-      cudaMemcpy(Body_pos_y, host_Body_pos_y, sizeof(float)*kNumBodies,
-                 cudaMemcpyDeviceToHost);
-      cudaMemcpy(Body_mass, host_Body_mass, sizeof(float)*kNumBodies,
-                 cudaMemcpyDeviceToHost);
-      draw(Body_pos_x, Body_pos_y, Body_mass);
-    }
+#ifdef OPTION_RENDER
+    cudaMemcpy(Body_pos_x, host_Body_pos_x, sizeof(float)*kNumBodies,
+               cudaMemcpyDeviceToHost);
+    cudaMemcpy(Body_pos_y, host_Body_pos_y, sizeof(float)*kNumBodies,
+               cudaMemcpyDeviceToHost);
+    cudaMemcpy(Body_mass, host_Body_mass, sizeof(float)*kNumBodies,
+               cudaMemcpyDeviceToHost);
+    draw(Body_pos_x, Body_pos_y, Body_mass);
+#endif  // OPTION_RENDER
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
-  printf("%lu\n", millis);
+  printf("%lu\n", micros);
 
 #ifndef NDEBUG
   kernel_compute_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  double checksum;
+  float checksum;
   cudaMemcpyFromSymbol(&checksum, device_checksum, sizeof(device_checksum), 0,
                        cudaMemcpyDeviceToHost);
   printf("Checksum: %f\n", checksum);
@@ -217,16 +219,9 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaFree(host_Body_force_x);
   cudaFree(host_Body_force_y);
 
-  if (kOptionRender) {
-    close_renderer();
-  }
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 
   return 0;
-}
-
-}  // namespace nbody
-
-
-int main(int argc, char** argv) {
-  nbody::main(argc, argv);
 }

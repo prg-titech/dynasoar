@@ -14,8 +14,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
-namespace nbody {
-
 static const int kCudaBlockSize = 256;
 
 struct Body {
@@ -29,7 +27,7 @@ struct Body {
 };
 
 __device__ Body* dev_bodies;
-__device__ double device_checksum;
+__device__ float device_checksum;
 
 
 __device__ void new_Body(int id, float pos_x, float pos_y,
@@ -78,8 +76,8 @@ __device__ void Body_update(int id) {
 
 
 __device__ void Body_add_checksum(int id) {
-  device_checksum += dev_bodies[id].pos_x + dev_bodies[id].pos_y*2
-      + dev_bodies[id].vel_x*3 + dev_bodies[id].vel_y*4;
+  atomicAdd(&device_checksum, dev_bodies[id].pos_x + dev_bodies[id].pos_y*2
+      + dev_bodies[id].vel_x*3 + dev_bodies[id].vel_y*4);
 }
 
 
@@ -152,16 +150,16 @@ int main(int /*argc*/, char** /*argv*/) {
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
-  printf("%lu\n", millis);
+  printf("%lu\n", micros);
 
 #ifndef NDEBUG
   kernel_compute_checksum<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-  double checksum;
+  float checksum;
   cudaMemcpyFromSymbol(&checksum, device_checksum, sizeof(device_checksum), 0,
                        cudaMemcpyDeviceToHost);
   printf("Checksum: %f\n", checksum);
@@ -172,9 +170,3 @@ int main(int /*argc*/, char** /*argv*/) {
   return 0;
 }
 
-}  // namespace nbody
-
-
-int main(int argc, char** argv) {
-  nbody::main(argc, argv);
-}

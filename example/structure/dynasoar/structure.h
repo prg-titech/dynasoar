@@ -13,7 +13,7 @@ class AnchorPullNode;
 class Node;
 class Spring;
 
-using AllocatorT = SoaAllocator<2*64*64*64*64, NodeBase, AnchorNode,
+using AllocatorT = SoaAllocator<kNumObjects, NodeBase, AnchorNode,
                                 AnchorPullNode, Node, Spring>;
 
 

@@ -2,7 +2,11 @@
 #include <curand_kernel.h>
 
 #include "../dataset.h"
+
+#ifdef OPTION_RENDER
 #include "../rendering.h"
+#endif  // OPTION_RENDER
+
 #include "structure.h"
 
 
@@ -150,7 +154,9 @@ __device__ void NodeBase::initialize_bfs() {
 }
 
 
+// Should we continue with BFS or are we done?
 __device__ bool dev_bfs_continue;
+
 
 __device__ void NodeBase::bfs_visit(int distance) {
   if (distance == distance_) {
@@ -196,7 +202,7 @@ __device__ void Spring::bfs_delete() {
 }
 
 
-// Only for rendering.
+// Only for rendering and checksum computation.
 __device__ int dev_num_springs;
 __device__ SpringInfo dev_spring_info[kMaxSprings];
 int host_num_springs;
@@ -273,15 +279,6 @@ void bfs_and_delete() {
 }
 
 
-#ifdef OPTION_DEFRAG
-void defrag() {
-  allocator_handle->parallel_defrag<AnchorPullNode>(1);
-  allocator_handle->parallel_defrag<Node>(1);
-  allocator_handle->parallel_defrag<Spring>(1);
-}
-#endif  // OPTION_DEFRAG
-
-
 void step() {
   allocator_handle->parallel_do<AnchorPullNode, &AnchorPullNode::pull>();
 
@@ -291,14 +288,16 @@ void step() {
 
   bfs_and_delete();
 
-  if (kOptionRender) {
-    transfer_data();
-    draw(host_num_springs, host_spring_info);
-  }
+#ifdef OPTION_RENDER
+  transfer_data();
+  draw(host_num_springs, host_spring_info);
+#endif  // OPTION_RENDER
 }
 
 
+// Only used during graph construction.
 __device__ NodeBase* tmp_nodes[kMaxNodes];
+
 
 __global__ void kernel_create_nodes(DsNode* nodes, int num_nodes) {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -359,56 +358,16 @@ void load_dataset(Dataset& dataset) {
 }
 
 
-__global__ void load_example() {
-  assert(threadIdx.x == 0 && blockIdx.x == 0);
-
-  float spring_factor = 5.0f;
-  float max_force = 100.0f;
-  float mass = 500.0f;
-
-  auto* a1 = new(device_allocator) AnchorPullNode(0.1, 0.5, 0.0, -0.02);
-  auto* a2 = new(device_allocator) AnchorPullNode(0.3, 0.5, 0.0, -0.02);
-  auto* a3 = new(device_allocator) AnchorPullNode(0.5, 0.5, 0.0, -0.02);
-
-  auto* n1 = new(device_allocator) Node(0.05, 0.6, mass);
-  auto* n2 = new(device_allocator) Node(0.3, 0.6, mass);
-  auto* n3 = new(device_allocator) Node(0.7, 0.6, mass);
-
-  auto* n4 = new(device_allocator) Node(0.2, 0.7, mass);
-  auto* n5 = new(device_allocator) Node(0.4, 0.7, mass);
-  auto* n6 = new(device_allocator) Node(0.8, 0.7, mass);
-
-  auto* a4 = new(device_allocator) AnchorNode(0.1, 0.9);
-  auto* a5 = new(device_allocator) AnchorNode(0.3, 0.9);
-  auto* a6 = new(device_allocator) AnchorNode(0.6, 0.9);
-
-  new(device_allocator) Spring(a1, n1, spring_factor, max_force);
-  new(device_allocator) Spring(a2, n2, spring_factor, max_force);
-  new(device_allocator) Spring(a3, n3, spring_factor, max_force);
-
-  new(device_allocator) Spring(n1, n4, spring_factor, max_force);
-  new(device_allocator) Spring(n2, n5, spring_factor, max_force);
-  new(device_allocator) Spring(n3, n6, spring_factor, max_force);
-  new(device_allocator) Spring(n2, n6, spring_factor, max_force);
-
-  new(device_allocator) Spring(n4, a4, spring_factor, max_force);
-  new(device_allocator) Spring(n5, a5, spring_factor, max_force);
-  new(device_allocator) Spring(n6, a6, spring_factor, max_force);
-}
-
-
 int main(int /*argc*/, char** /*argv*/) {
-  if (kOptionRender) {
-    init_renderer();
-  }
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
-
-  //load_example<<<1, 1>>>();
   
   Dataset dataset;
   random_dataset(dataset);
@@ -417,31 +376,27 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumSteps; ++i) {
+#ifndef NDEBUG
     printf("%i\n", i);
-
-#ifdef OPTION_DEFRAG
-    if (kOptionDefrag && i % 500 == 0) {
-      defrag();
-    }
-#endif  // OPTION_DEFRAG
+    // Print debug information.
+    allocator_handle->DBG_print_state_stats();
+#endif  // NDEBUG
 
     step();
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
 
-  if (kOptionPrintStats) {
-    allocator_handle->DBG_print_state_stats();
-  }
-
+#ifndef NDEBUG
   printf("Checksum: %f\n", checksum());
+#endif  // NDEBUG
 
-  if (kOptionRender) {
-    close_renderer();
-  }
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 }

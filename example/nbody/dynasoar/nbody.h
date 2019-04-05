@@ -4,13 +4,13 @@
 #include <curand_kernel.h>
 
 #include "allocator_config.h"
+#include "../configuration.h"
 
-namespace nbody {
 
 // Pre-declare all classes.
 class Body;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Body>;
+using AllocatorT = SoaAllocator<kNumObjects, Body>;
 
 class Body : public AllocatorT::Base {
  public:
@@ -44,9 +44,9 @@ class Body : public AllocatorT::Base {
 
   __DEV__ void add_checksum();
 
+#ifdef OPTION_RENDER
   __DEV__ void add_to_draw_array();
+#endif  // OPTION_RENDER
 };
-
-}  // nbody
 
 #endif  // EXAMPLE_NBODY_SOA_NBODY_H

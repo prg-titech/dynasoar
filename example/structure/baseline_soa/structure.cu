@@ -7,7 +7,6 @@
 #include "../configuration.h"
 #include "../dataset.h"
 #include "util/util.h"
-#include "../rendering.h"
 
 
 static const int kThreads = 256;
@@ -242,7 +241,7 @@ __device__ void Spring_bfs_delete(IndexT id) {
 }
 
 
-// Only for rendering.
+// Only for rendering and checksum computation.
 __device__ int dev_num_springs;
 __device__ SpringInfo dev_spring_info[kMaxSprings];
 int host_num_springs;
@@ -603,8 +602,6 @@ int main(int /*argc*/, char** /*argv*/) {
 
   initialize_memory();
 
-  //load_example<<<1, 1>>>();
-  //load_random<<<1, 1>>>();
 
   Dataset dataset;
   random_dataset(dataset);
@@ -613,18 +610,20 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumSteps; ++i) {
+#ifndef NDEBUG
     printf("%i\n", i);
+#endif  // NDEBUG
     step();
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
-  printf("%lu\n", millis);
+  printf("%lu\n", micros);
 
-//#ifndef NDEBUG
+#ifndef NDEBUG
   printf("Checksum: %f\n", checksum());
-//#endif  // NDEBUG
+#endif  // NDEBUG
 }
