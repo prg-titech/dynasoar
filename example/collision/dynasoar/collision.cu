@@ -2,14 +2,17 @@
 #include <curand_kernel.h>
 
 #include "allocator_config.h"
-
 #include "../configuration.h"
+
+#ifdef OPTION_RENDER
 #include "../rendering.h"
+#endif  // OPTION_RENDER
+
 
 // Pre-declare all classes.
 class Body;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Body>;
+using AllocatorT = SoaAllocator<kNumObjects, Body>;
 
 class Body : public AllocatorT::Base {
  public:
@@ -27,16 +30,16 @@ class Body : public AllocatorT::Base {
       bool)           // successful_merge_
 
  private:
-  SoaField<Body, 0> merge_target_;
-  SoaField<Body, 1> pos_x_;
-  SoaField<Body, 2> pos_y_;
-  SoaField<Body, 3> vel_x_;
-  SoaField<Body, 4> vel_y_;
-  SoaField<Body, 5> force_x_;
-  SoaField<Body, 6> force_y_;
-  SoaField<Body, 7> mass_;
-  SoaField<Body, 8> has_incoming_merge_;
-  SoaField<Body, 9> successful_merge_;
+  Field<Body, 0> merge_target_;
+  Field<Body, 1> pos_x_;
+  Field<Body, 2> pos_y_;
+  Field<Body, 3> vel_x_;
+  Field<Body, 4> vel_y_;
+  Field<Body, 5> force_x_;
+  Field<Body, 6> force_y_;
+  Field<Body, 7> mass_;
+  Field<Body, 8> has_incoming_merge_;
+  Field<Body, 9> successful_merge_;
 
  public:
   __DEV__ Body(float pos_x, float pos_y, float vel_x, float vel_y, float mass);
@@ -61,6 +64,7 @@ class Body : public AllocatorT::Base {
   __DEV__ void add_to_draw_array();
 };
 
+
 // Allocator handles.
 AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ AllocatorT* device_allocator;
@@ -80,6 +84,7 @@ float host_Body_vel_x[kNumBodies];
 float host_Body_vel_y[kNumBodies];
 float host_Body_mass[kNumBodies];
 
+
 __DEV__ Body::Body(float pos_x, float pos_y,
                    float vel_x, float vel_y, float mass)
     : pos_x_(pos_x), pos_y_(pos_y),
@@ -87,10 +92,6 @@ __DEV__ Body::Body(float pos_x, float pos_y,
 
 
 __DEV__ void Body::compute_force() {
-  // if(threadIdx.x == 0 && blockIdx.x == 0) {
-  //   device_allocator->DBG_print_state_stats();
-  // }
-
   force_x_ = 0.0f;
   force_y_ = 0.0f;
   device_allocator->device_do<Body>(&Body::apply_force, this);
@@ -137,7 +138,7 @@ __DEV__ void Body::check_merge_into_this(Body* other) {
     if (dist_square < kMergeThreshold*kMergeThreshold) {
       // Try to merge this one.
       // There is a race condition here: Multiple threads may try to merge
-      // this body.
+      // this body. Only one can win. That's OK.
       this->merge_target_ = other;
       other->has_incoming_merge_ = true;
     }
@@ -254,9 +255,9 @@ int checksum() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (kOptionRender) {
-    init_renderer();
-  }
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -268,27 +269,13 @@ int main(int /*argc*/, char** /*argv*/) {
   kernel_initialize_bodies<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
-#ifdef OPTION_DEFRAG
-  allocator_handle->parallel_defrag<Body>();
-#endif  // OPTION_DEFRAG
-
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
-    if (i%50==0) printf("%i\n", i);
-    if (kOptionPrintStats) {
-      int allocated = dev_ptr->DBG_host_allocated_slots<Body>();
-      int used = dev_ptr->DBG_host_used_slots<Body>();
-      printf("%i, %i, %i\n", i, used, allocated);
-//      allocator_handle->DBG_print_state_stats();
-//      allocator_handle->DBG_collect_stats();
-    }
-
-#ifdef OPTION_DEFRAG
-    if (i % 10 == 0) {
-      allocator_handle->parallel_defrag<Body>();
-    }
-#endif  // OPTION_DEFRAG
+#ifndef NDEBUG
+    // Print debug information.
+    allocator_handle->DBG_print_state_stats();
+#endif  // NDEBUG
 
     allocator_handle->parallel_do<Body, &Body::compute_force>();
     allocator_handle->parallel_do<Body, &Body::update>();
@@ -297,17 +284,17 @@ int main(int /*argc*/, char** /*argv*/) {
     allocator_handle->parallel_do<Body, &Body::update_merge>();
     allocator_handle->parallel_do<Body, &Body::delete_merged>();
 
-    if (kOptionRender) {
-      // Transfer and render.
-      transfer_data();
-      draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
-           host_draw_counter);
-    }
+#ifdef OPTION_RENDER
+    // Transfer and render.
+    transfer_data();
+    draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
+         host_draw_counter);
+#endif  // OPTION_RENDER
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
 #ifndef NDEBUG
@@ -315,19 +302,11 @@ int main(int /*argc*/, char** /*argv*/) {
   printf("#bodies: %i\n", host_draw_counter);
 #endif  // NDEBUG
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
 
-#ifdef OPTION_DEFRAG
-  allocator_handle->DBG_print_defrag_time();
-#endif  // OPTION_DEFRAG
-
-  if (kOptionPrintStats) {
-    //allocator_handle->DBG_print_collected_stats();
-  }
-
-  if (kOptionRender) {
-    close_renderer();
-  }
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 
   return 0;
 }

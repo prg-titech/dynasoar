@@ -148,6 +148,11 @@ int main(int /*argc*/, char** /*argv*/) {
   gpuErrchk(cudaDeviceSynchronize());
 
   for (int i = 0; i < kNumIterations; ++i) {
+#ifndef NDEBUG
+    // Print debug information.
+    allocator_handle->DBG_print_state_stats();
+#endif  // NDEBUG
+
     allocator_handle->parallel_do<Body, &Body::compute_force>();
     allocator_handle->parallel_do<Body, &Body::update>();
 

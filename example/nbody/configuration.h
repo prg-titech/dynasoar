@@ -9,7 +9,7 @@ static const int kNumIterations = 3000;
 static const int kNumBodies = PARAM_SIZE;
 #else
 static const int kNumBodies = 20000;
-#endif  // PARAM_SIZE_X
+#endif  // PARAM_SIZE
 
 static const float kDt = 0.02f;
 static const float kGravityConstant = 6.673e-11;  // gravitational constant

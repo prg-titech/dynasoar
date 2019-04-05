@@ -3,7 +3,10 @@
 #include <limits>
 
 #include "../configuration.h"
+
+#ifdef OPTION_RENDER
 #include "../rendering.h"
+#endif  // OPTION_RENDER
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -253,9 +256,9 @@ int checksum() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (kOptionRender) {
-    init_renderer();
-  }
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   // Allocate memory.
   Body* h_bodies;
@@ -291,17 +294,17 @@ int main(int /*argc*/, char** /*argv*/) {
     parallel_do<&Body_delete_merged><<<kBlocks, kThreads>>>();
     gpuErrchk(cudaDeviceSynchronize());
 
-    if (kOptionRender) {
-      // Transfer and render.
-      transfer_data();
-      draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
-           host_draw_counter);
-    }
+#ifdef OPTION_RENDER
+    // Transfer and render.
+    transfer_data();
+    draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
+         host_draw_counter);
+#endif  // OPTION_RENDER
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
 #ifndef NDEBUG
@@ -309,14 +312,14 @@ int main(int /*argc*/, char** /*argv*/) {
   printf("#bodies: %i\n", host_draw_counter);
 #endif  // NDEBUG
 
-  printf("%lu\n", millis);
+  printf("%lu\n", micros);
 
   // Free memory
   cudaFree(h_bodies);
 
-  if (kOptionRender) {
-    close_renderer();
-  }
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 
   return 0;
 }
