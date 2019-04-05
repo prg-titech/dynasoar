@@ -684,9 +684,6 @@ class SoaAllocator {
   static const BlockIndexT kN = N;
 
   static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
-
-  static const size_t kTotalSize =
-      sizeof(ThisAllocator) + ThisAllocator::kDataBufferSize;
 };
 
 

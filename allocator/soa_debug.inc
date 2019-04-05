@@ -161,7 +161,7 @@ void SoaAllocator<N_Objects, Types...>::DBG_print_stats() {
   printf("│ Allocator overead:    %013.6f MB + block overhead               │\n",
          sizeof(ThisAllocator)/1024.0f/1024.0f);
   printf("│ Total memory usage:   %013.6f MB                                │\n",
-         kTotalSize/1024.0f/1024.0f);
+         (sizeof(ThisAllocator) + ThisAllocator::kDataBufferSize)/1024.0f/1024.0f);
   printf("└───────────────────────────────────────────────────────────────────────┘\n");
 
   TupleHelper<Types...>::template for_all<

@@ -6,6 +6,8 @@
 #include "allocator/soa_helper.h"
 #include "allocator/soa_field.h"
 
+
+#if GCC_COMPILER
 #define declare_field_types(classname, ...) \
   __DEV__ void* operator new(size_t sz, typename classname::Allocator* allocator) { \
     return allocator->allocate_new<classname>(); \
@@ -17,9 +19,38 @@
     allocator->free<classname>(reinterpret_cast<classname*>(ptr)); \
   } \
   __DEV__ void operator delete(void*, classname*) { \
+    assert(false);  \
+  } \
+  using FieldTypes = std::tuple<__VA_ARGS__>;
+#else
+#warning Using untested compiler. GCC recommended.
+template<typename T>
+__DEV__ void* __dynasoar_op_new(void* allocator) {
+  return reinterpret_cast<typename T::Allocator*>(allocator)->template allocate_new<T>();
+}
+
+template<typename T>
+__DEV__ void __dynasoar_op_delete(void* ptr, void* allocator) {
+  reinterpret_cast<typename T::Allocator*>(allocator)->template free<T>(
+      reinterpret_cast<T*>(ptr));
+}
+
+#define declare_field_types(classname, ...) \
+  __DEV__ void* operator new(size_t sz, void* allocator) { \
+    return __dynasoar_op_new<classname>(allocator); \
+  } \
+  __DEV__ void* operator new(size_t sz, classname* ptr) { \
+    return ptr; \
+  } \
+  __DEV__ void operator delete(void* ptr, void* allocator) { \
+    __dynasoar_op_delete<classname>(ptr, allocator); \
+  } \
+  __DEV__ void operator delete(void*, classname*) { \
     assert(false);  /* Construct must not throw exceptions. */ \
   } \
   using FieldTypes = std::tuple<__VA_ARGS__>;
+#endif  // GCC_COMPILER
+
 
 // TODO: Is it safe to make these static?
 template<typename AllocatorT, typename T>

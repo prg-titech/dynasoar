@@ -20,8 +20,12 @@ using AllocatorT = SoaAllocator<kHeapSize, Bar, Foo>;
 __device__ AllocatorT* device_allocator;
 AllocatorHandle<AllocatorT>* allocator_handle;
 
-
+#if GCC_COMPILER
 class Bar : public AllocatorT::Base {
+#else
+// Workaround for compiler other than GCC. Will fix this in future versions.
+class Bar : public SoaBase<AllocatorT> {
+#endif  // GCC_COMPILER
  public:
   // Pre-declare types of all fields.
   declare_field_types(Bar, Foo*, int)
@@ -42,7 +46,12 @@ class Bar : public AllocatorT::Base {
 };
 
 
+#if GCC_COMPILER
 class Foo : public AllocatorT::Base {
+#else
+// Workaround for compiler other than GCC. Will fix this in future versions.
+class Foo : public SoaBase<AllocatorT> {
+#endif  // GCC_COMPILER
  public:
   // Pre-declare types of all fields.
   declare_field_types(Foo, int, int, int)
