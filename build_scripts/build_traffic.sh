@@ -10,7 +10,7 @@ args=""
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
-while getopts "h?x:y:rda:s:m:" opt; do
+while getopts "h?x:rda:s:m:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"
@@ -20,17 +20,14 @@ while getopts "h?x:y:rda:s:m:" opt; do
         echo "  -m NUM      Max. #objects (of the smallest type)"
         echo "  -r          Render visualization"
         echo "  -s BYTES    Heap size (for allocators different from dynasoar)"
-        echo "  -x SIZE_X   Size X (#pixels)"
-        echo "  -y SIZE_Y   Size Y (#pixels)"
+        echo "  -x SIZE     Problem size (#intersections)"
         echo ""
         echo "Example: ${0} -x 512 -y 512"
         exit 0
         ;;
-    x)  args="${args} -DPARAM_SIZE_X=${OPTARG}"
+    x)  args="${args} -DPARAM_SIZE=${OPTARG}"
         ;;
-    y)  args="${args} -DPARAM_SIZE_Y=${OPTARG}"
-        ;;
-    r)  args="${args} -DOPTION_RENDER -lSDL2 example/wa-tor/rendering.cu"
+    r)  args="${args} -DOPTION_RENDER -lSDL2 example/traffic/rendering.cu"
         ;;
     s)  args="${args} -DPARAM_HEAP_SIZE=${OPTARG}"
         ;;
@@ -60,7 +57,6 @@ if [ "$allocator" = "halloc" ]; then
 fi;
 
 
-build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar_no_cell/wator.cu -o bin/wator_dynasoar_no_cell
-build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar/wator.cu -o bin/wator_dynasoar
-build_scripts/nvcc.sh ${args} example/wa-tor/baseline_aos/wator.cu -o bin/wator_baseline_aos
-build_scripts/nvcc.sh ${args} example/wa-tor/baseline_soa/wator.cu -o bin/wator_baseline_soa
+build_scripts/nvcc.sh ${args} example/traffic/dynasoar/traffic.cu -o bin/traffic_dynasoar
+build_scripts/nvcc.sh ${args} example/traffic/baseline_aos/traffic.cu -o bin/traffic_baseline_aos
+build_scripts/nvcc.sh ${args} example/traffic/baseline_soa/traffic.cu -o bin/traffic_baseline_soa

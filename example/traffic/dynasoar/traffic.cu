@@ -6,18 +6,10 @@
 using CellPointerT = Cell*;
 #include "../dataset.h"
 
+#ifdef OPTION_RENDER
 #include "../rendering.h"
 
-
-static const int kNumBlockSize = 256;
-
-// TODO: Consider migrating to SoaAlloc.
-TrafficLight* h_traffic_lights;
-__device__ TrafficLight* d_traffic_lights;
-
-
 // Only for rendering.
-__device__ int dev_num_cells;
 __device__ float* dev_Cell_pos_x;
 __device__ float* dev_Cell_pos_y;
 __device__ bool* dev_Cell_occupied;
@@ -28,6 +20,18 @@ float* host_data_Cell_pos_x;
 float* host_data_Cell_pos_y;
 bool* host_data_Cell_occupied;
 int host_num_cells;
+#endif  // OPTION_RENDER
+
+static const int kNumBlockSize = 256;
+
+
+// For initialization only.
+__device__ int dev_num_cells;
+
+
+// TODO: Migrate to DynaSOAr.
+TrafficLight* h_traffic_lights;
+__device__ TrafficLight* d_traffic_lights;
 
 
 // Allocator handles.
@@ -241,12 +245,14 @@ __device__ Cell::Cell(int max_velocity, float x, float y)
 }
 
 
+#ifdef OPTION_RENDER
 __device__ void Cell::add_to_rendering_array() {
   int idx = atomicAdd(&dev_num_cells, 1);
   dev_Cell_pos_x[idx] = x_;
   dev_Cell_pos_y[idx] = y_;
   dev_Cell_occupied[idx] = !is_free();
 }
+#endif  // OPTION_RENDER
 
 
 __device__ int d_checksum;
@@ -414,6 +420,7 @@ void create_street_network() {
       kNumBlockSize>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+#ifdef OPTION_RENDER
   // Allocate helper data structures for rendering.
   cudaMemcpyFromSymbol(&host_num_cells, dev_num_cells, sizeof(int), 0,
                        cudaMemcpyDeviceToHost);
@@ -429,6 +436,7 @@ void create_street_network() {
   host_data_Cell_pos_x = (float*) malloc(sizeof(float)*host_num_cells);
   host_data_Cell_pos_y = (float*) malloc(sizeof(float)*host_num_cells);
   host_data_Cell_occupied = (bool*) malloc(sizeof(bool)*host_num_cells);
+#endif  // OPTION_RENDER
 
 #ifndef NDEBUG
   printf("Number of cells: %i\n", host_num_cells);
@@ -445,6 +453,7 @@ void step_traffic_lights() {
 }
 
 
+#ifdef OPTION_RENDER
 void transfer_data() {
   int zero = 0;
   cudaMemcpyToSymbol(dev_num_cells, &zero, sizeof(int), 0,
@@ -461,10 +470,10 @@ void transfer_data() {
 
   gpuErrchk(cudaDeviceSynchronize());
 }
+#endif  // OPTION_RENDER
 
 
 void step() {
-  //printf("STEP!\n");
   allocator_handle->parallel_do<ProducerCell, &ProducerCell::create_car>();
   
   step_traffic_lights();
@@ -475,9 +484,9 @@ void step() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
-  if (kOptionRender) {
+#ifdef OPTION_RENDER
     init_renderer();
-  }
+#endif  // OPTION_RENDER
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -490,18 +499,15 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
-    if (i%50==0) printf("%i\n", i);
+#ifndef NDEBUG
+      allocator_handle->DBG_print_state_stats();
+#endif  // NDEBUG
 
-    if (kOptionPrintStats) {
-      //allocator_handle->DBG_print_state_stats();
-      allocator_handle->DBG_collect_stats();
-    }
-
-    if (kOptionRender) {
+#ifdef OPTION_RENDER
       transfer_data();
       draw(host_data_Cell_pos_x, host_data_Cell_pos_y, host_data_Cell_occupied,
            host_num_cells);
-    }
+#endif  // OPTION_RENDER
 
     step();
   }
@@ -511,17 +517,13 @@ int main(int /*argc*/, char** /*argv*/) {
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
       .count();
 
-// #ifndef NDEBUG
+#ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
-// #endif  // NDEBUG
+#endif  // NDEBUG
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", millis, allocator_handle->DBG_get_enumeration_time());
 
-  if (kOptionPrintStats) {
-    allocator_handle->DBG_print_collected_stats();
-  }
-
-  if (kOptionRender) {
+#ifdef OPTION_RENDER
     close_renderer();
-  }
+#endif  // OPTION_RENDER
 }

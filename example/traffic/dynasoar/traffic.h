@@ -13,7 +13,7 @@ class Cell;
 class ProducerCell;
 class TrafficLight;
 
-using AllocatorT = SoaAllocator<32*64*64*64, Car, Cell, ProducerCell>;
+using AllocatorT = SoaAllocator<kNumObjects, Car, Cell, ProducerCell>;
 
 class Cell : public AllocatorT::Base {
  public:
@@ -91,8 +91,10 @@ class Cell : public AllocatorT::Base {
 
   __device__ void release();
 
+#ifdef OPTION_RENDER
   // Only for rendering.
   __device__ void add_to_rendering_array();
+#endif  // OPTION_RENDER
 };
 
 
@@ -167,7 +169,7 @@ class Car : public AllocatorT::Base {
 };
 
 
-// TODO: Consider migrating this to SoaAlloc. Not performance critical.
+// TODO: Migrating this to DynaSOAr. Not performance critical.
 class TrafficLight {
  private:
   DeviceArray<Cell*, kMaxDegree> cells_;

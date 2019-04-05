@@ -7,7 +7,6 @@ OPTIND=1         # Reset in case getopts has been used previously in the shell.
 
 # Helper variables
 args=""
-render=0
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
@@ -45,5 +44,10 @@ args="${args} -maxrregcount=64 -Iexample/configuration/${allocator} -I. -Ilib/cu
 if [ "$allocator" = "mallocmc" ]; then
   args="${args} -Iexample/configuration/mallocmc/mallocMC"
 fi;
+
+if [ "$allocator" = "halloc" ]; then
+  args="${args} -Iexample/configuration/halloc/halloc/src"
+fi;
+
 
 build_scripts/nvcc.sh ${args} example/api-example/example.cu -o bin/api_example

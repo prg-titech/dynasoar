@@ -25,10 +25,10 @@ static const bool kOptionFishSpawn = true;
 static const bool kOptionSharkSpawn = true;
 static const int kNumIterations = 500;
 
-#ifndef PARAM_HEAP_SIZE
+#ifndef PARAM_MAX_OBJ
 static const int kNumObjects = 64*64*64*64;
 #else
-static const int kNumObjects = PARAM_HEAP_SIZE;
-#endif  // PARAM_HEAP_SIZE
+static const int kNumObjects = PARAM_MAX_OBJ;
+#endif  // PARAM_MAX_OBJ
 
 #endif  // EXAMPLE_WA_TOR_SOA_CONFIGURATION_H
