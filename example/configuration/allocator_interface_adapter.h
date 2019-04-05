@@ -12,7 +12,7 @@
 static const size_t kMallocHeapSize = 4ULL*1024*1024*1024;
 #else
 // Heap size specified by parameter.
-static const size_t kHallocheapSize = PARAM_HEAP_SIZE;
+static const size_t kMallocHeapSize = PARAM_HEAP_SIZE;
 #endif  // PARAM_HEAP_SIZE
 
 

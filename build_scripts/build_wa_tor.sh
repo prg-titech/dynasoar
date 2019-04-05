@@ -56,6 +56,13 @@ if [ "$allocator" = "mallocmc" ]; then
   args="${args} -Iexample/configuration/mallocmc/mallocMC"
 fi;
 
+if [ "$allocator" = "halloc" ]; then
+  args="${args} -Iexample/configuration/halloc/halloc/src"
+fi;
+
+
+#example/configuration/halloc/halloc/
+
 build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar_no_cell/wator.cu -o bin/wator_dynasoar_no_cell
 build_scripts/nvcc.sh ${args} example/wa-tor/dynasoar/wator.cu -o bin/wator_dynasoar
 build_scripts/nvcc.sh ${args} example/wa-tor/baseline_aos/wator.cu -o bin/wator_baseline_aos
