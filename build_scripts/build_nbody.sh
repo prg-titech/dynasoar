@@ -10,7 +10,7 @@ args=""
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
-while getopts "h?x:y:rda:s:m:" opt; do
+while getopts "h?x:rda:s:m:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"

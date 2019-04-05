@@ -10,7 +10,7 @@ args=""
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
-while getopts "h?x:rda:s:m:" opt; do
+while getopts "h?x:da:s:m:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"
@@ -20,14 +20,12 @@ while getopts "h?x:rda:s:m:" opt; do
         echo "  -m NUM      Max. #objects (of the smallest type)"
         echo "  -r          Render visualization"
         echo "  -s BYTES    Heap size (for allocators different from dynasoar)"
-        echo "  -x SIZE     Size (#bodies)"
+        echo "  -x SIZE     Size (#allocations per thread)"
         echo ""
-        echo "Example: ${0} -x 1000"
+        echo "Example: ${0} -x 8 -m 262144"
         exit 0
         ;;
     x)  args="${args} -DPARAM_SIZE=${OPTARG}"
-        ;;
-    r)  args="${args} -DOPTION_RENDER -lSDL2 example/barnes-hut-dynamic/rendering.cu"
         ;;
     s)  args="${args} -DPARAM_HEAP_SIZE=${OPTARG}"
         ;;
@@ -57,4 +55,4 @@ if [ "$allocator" = "halloc" ]; then
 fi;
 
 
-build_scripts/nvcc.sh ${args} example/barnes-hut-dynamic/dynasoar/barnes_hut.cu -o bin/barnes_hut_dynasoar
+build_scripts/nvcc.sh ${args} example/linux-scalability/dynasoar/linux_scalability.cu -o bin/linux_scalability_dynasoar
