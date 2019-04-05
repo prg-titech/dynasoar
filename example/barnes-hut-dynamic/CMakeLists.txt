@@ -1,1 +1,1 @@
-add_subdirectory(soa)
+add_subdirectory(dynasoar)

@@ -1,5 +1,5 @@
-#ifndef EXAMPLE_COLLISION_SOA_CONFIGURATION_H
-#define EXAMPLE_COLLISION_SOA_CONFIGURATION_H
+#ifndef EXAMPLE_COLLISION_CONFIGURATION_H
+#define EXAMPLE_COLLISION_CONFIGURATION_H
 
 // Simulation parameters.
 static const float kMergeThreshold = 0.005;
@@ -25,4 +25,4 @@ static const int kNumObjects = 64*64*64*64;
 static const int kNumObjects = PARAM_MAX_OBJ;
 #endif  // PARAM_MAX_OBJ
 
-#endif  // EXAMPLE_COLLISION_SOA_CONFIGURATION_H
+#endif  // EXAMPLE_COLLISION_CONFIGURATION_H

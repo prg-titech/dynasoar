@@ -11,7 +11,7 @@ class NodeBase;
 class BodyNode;
 class TreeNode;
 
-using AllocatorT = SoaAllocator<64*64*64*64, NodeBase, BodyNode, TreeNode>;
+using AllocatorT = SoaAllocator<kNumObjects, NodeBase, BodyNode, TreeNode>;
 
 
 class NodeBase : public AllocatorT::Base {
@@ -28,11 +28,11 @@ class NodeBase : public AllocatorT::Base {
 
 // TODO: Fix visibility.
 // protected:
-  SoaField<NodeBase, 0> parent_;
-  SoaField<NodeBase, 1> pos_x_;
-  SoaField<NodeBase, 2> pos_y_;
-  SoaField<NodeBase, 3> mass_;
-  SoaField<NodeBase, 4> child_index_;
+  Field<NodeBase, 0> parent_;
+  Field<NodeBase, 1> pos_x_;
+  Field<NodeBase, 2> pos_y_;
+  Field<NodeBase, 3> mass_;
+  Field<NodeBase, 4> child_index_;
 
 // public:
   __DEV__ NodeBase(TreeNode* parent, double pos_x, double pos_y, double mass);
@@ -68,10 +68,10 @@ class BodyNode : public NodeBase {
       double)          // force_y_
 
  protected:
-  SoaField<BodyNode, 0> vel_x_;
-  SoaField<BodyNode, 1> vel_y_;
-  SoaField<BodyNode, 2> force_x_;
-  SoaField<BodyNode, 3> force_y_;
+  Field<BodyNode, 0> vel_x_;
+  Field<BodyNode, 1> vel_y_;
+  Field<BodyNode, 2> force_x_;
+  Field<BodyNode, 3> force_y_;
 
  public:
   __DEV__ BodyNode(double pos_x, double pos_y, double vel_x, double vel_y,
@@ -91,7 +91,10 @@ class BodyNode : public NodeBase {
 
   __DEV__ void add_checksum();
 
+#ifdef OPTION_RENDER
+  // Only for rendering purposes.
   __DEV__ void add_to_draw_array();
+#endif  // OPTION_RENDER
 };
 
 
@@ -111,13 +114,13 @@ class TreeNode : public NodeBase {
       bool)                                       // bfs_done_
 
 // private:
-  SoaField<TreeNode, 0> children_;
-  SoaField<TreeNode, 1> p1_x_;
-  SoaField<TreeNode, 2> p1_y_;
-  SoaField<TreeNode, 3> p2_x_;
-  SoaField<TreeNode, 4> p2_y_;
-  SoaField<TreeNode, 5> bfs_frontier_;
-  SoaField<TreeNode, 6> bfs_done_;
+  Field<TreeNode, 0> children_;
+  Field<TreeNode, 1> p1_x_;
+  Field<TreeNode, 2> p1_y_;
+  Field<TreeNode, 3> p2_x_;
+  Field<TreeNode, 4> p2_y_;
+  Field<TreeNode, 5> bfs_frontier_;
+  Field<TreeNode, 6> bfs_done_;
 
  public:
   __DEV__ TreeNode(TreeNode* parent, double p1_x, double p1_y, double p2_x,
@@ -153,7 +156,13 @@ class TreeNode : public NodeBase {
 
   __DEV__ void bfs_delete();
 
+  // Only for debugging.
   __DEV__ void check_consistency();
+
+#ifdef OPTION_RENDER
+  // Only for rendering purposes.
+  __DEV__ void add_to_draw_array();
+#endif  // OPTION_RENDER
 };
 
 #endif  // EXAMPLE_BARNES_HUT_DYNAMIC_SOA_BARNES_HUT_H

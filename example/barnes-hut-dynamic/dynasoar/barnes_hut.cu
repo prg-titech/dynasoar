@@ -4,11 +4,41 @@
 #include "barnes_hut.h"
 #include "../configuration.h"
 
+#ifdef OPTION_RENDER
+#include "../rendering.h"
+#endif  // OPTION_RENDER
+
 
 // Allocator handles.
 AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ AllocatorT* device_allocator;
 
+
+#ifdef OPTION_RENDER
+// Helper variables for rendering and checksum computation.
+__device__ int draw_counter = 0;
+__device__ float Body_pos_x[kNumBodies];
+__device__ float Body_pos_y[kNumBodies];
+__device__ float Body_vel_x[kNumBodies];
+__device__ float Body_vel_y[kNumBodies];
+__device__ float Body_mass[kNumBodies];
+__device__ int Tree_draw_counter = 0;
+__device__ float Tree_p1_x[kNumBodies];
+__device__ float Tree_p1_y[kNumBodies];
+__device__ float Tree_p2_x[kNumBodies];
+__device__ float Tree_p2_y[kNumBodies];
+int host_draw_counter;
+float host_Body_pos_x[kNumBodies];
+float host_Body_pos_y[kNumBodies];
+float host_Body_vel_x[kNumBodies];
+float host_Body_vel_y[kNumBodies];
+float host_Body_mass[kNumBodies];
+int host_Tree_draw_counter;
+float host_Tree_p1_x[kNumBodies];
+float host_Tree_p1_y[kNumBodies];
+float host_Tree_p2_x[kNumBodies];
+float host_Tree_p2_y[kNumBodies];
+#endif  // OPTION_RENDER
 
 // Root of the quad tree.
 __DEV__ TreeNode* tree;
@@ -455,6 +485,66 @@ __DEV__ void TreeNode::bfs_step() {
 }
 
 
+#ifdef OPTION_RENDER
+__DEV__ void BodyNode::add_to_draw_array() {
+  int idx = atomicAdd(&draw_counter, 1);
+  Body_pos_x[idx] = pos_x_;
+  Body_pos_y[idx] = pos_y_;
+  Body_vel_x[idx] = vel_x_;
+  Body_vel_y[idx] = vel_y_;
+  Body_mass[idx] = mass_;
+}
+
+__DEV__ void TreeNode::add_to_draw_array() {
+  int idx = atomicAdd(&Tree_draw_counter, 1);
+  Tree_p1_x[idx] = p1_x_;
+  Tree_p1_y[idx] = p1_y_;
+  Tree_p2_x[idx] = p2_x_;
+  Tree_p2_y[idx] = p2_y_;
+}
+
+__global__ void kernel_reset_draw_counters() {
+  draw_counter = 0;
+  Tree_draw_counter = 0;
+}
+
+void transfer_data() {
+  // Extract data from DynaSOAr data structure.
+  kernel_reset_draw_counters<<<1, 1>>>();
+  gpuErrchk(cudaDeviceSynchronize());
+  allocator_handle->parallel_do<BodyNode, &BodyNode::add_to_draw_array>();
+  gpuErrchk(cudaDeviceSynchronize());
+  allocator_handle->parallel_do<TreeNode, &TreeNode::add_to_draw_array>();
+  gpuErrchk(cudaDeviceSynchronize());
+
+  // Copy data to host.
+  cudaMemcpyFromSymbol(host_Body_pos_x, Body_pos_x,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(host_Body_pos_y, Body_pos_y,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(host_Body_vel_x, Body_vel_x,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(host_Body_vel_y, Body_vel_y,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(host_Body_mass, Body_mass, sizeof(float)*kNumBodies, 0,
+                       cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(&host_draw_counter, draw_counter, sizeof(int), 0,
+                       cudaMemcpyDeviceToHost);
+
+  cudaMemcpyFromSymbol(host_Tree_p1_x, Tree_p1_x,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(host_Tree_p1_y, Tree_p1_y,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(host_Tree_p2_x, Tree_p2_x,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(host_Tree_p2_y, Tree_p2_y,
+                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(&host_Tree_draw_counter, Tree_draw_counter, sizeof(int),
+                       0, cudaMemcpyDeviceToHost);
+}
+#endif  // OPTION_RENDER
+
+
 void step() {
   // Generate tree summaries.
   allocator_handle->parallel_do<TreeNode, &TreeNode::initialize_frontier>();
@@ -536,6 +626,10 @@ void initialize_simulation() {
 
 
 int main(int /*argc*/, char** /*argv*/) {
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
+
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
@@ -547,14 +641,28 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
-    if (i%100 == 0) printf("%i\n", i);
     step();
+
+#ifdef OPTION_RENDER
+    // Transfer and render.
+    transfer_data();
+    draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
+         host_draw_counter,
+         host_Tree_p1_x, host_Tree_p1_y, host_Tree_p2_x, host_Tree_p2_y,
+         host_Tree_draw_counter);
+#endif  // OPTION_RENDER
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
+
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
+
+  return 0;
 }
