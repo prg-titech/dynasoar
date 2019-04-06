@@ -11,17 +11,19 @@ AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ AllocatorT* device_allocator;
 
 
+#ifdef OPTION_RENDER
 // Rendering array.
 // TODO: Fix variable names.
 __device__ char* device_render_cells;
 char* host_render_cells;
 char* d_device_render_cells;
+#endif  // OPTION_RENDER
 
 
 // Dataset.
 __device__ int SIZE_X;
 __device__ int SIZE_Y;
-__device__ Cell* cells;
+__device__ Cell** cells;
 dataset_t dataset;
 
 
@@ -52,7 +54,7 @@ __device__ int Agent::num_alive_neighbors() {
       int ny = cell_y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        if (cells[ny*SIZE_X + nx].agent()->cast<Alive>() != nullptr) {
+        if (cells[ny*SIZE_X + nx]->agent()->cast<Alive>() != nullptr) {
           result++;
         }
       }
@@ -88,7 +90,7 @@ __device__ void Alive::update() {
   } else {
     if (action_ == kActionDie) {
       // Replace with Candidate. Or should we?
-      cells[cid].agent_ = new(device_allocator) Candidate(cid);
+      cells[cid]->agent_ = new(device_allocator) Candidate(cid);
       destroy(device_allocator, this);
     }
   }
@@ -108,7 +110,7 @@ __device__ void Alive::create_candidates() {
       int ny = cell_y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        if (cells[ny*SIZE_X + nx].is_empty()) {
+        if (cells[ny*SIZE_X + nx]->is_empty()) {
           // Candidate should be created here.
           maybe_create_candidate(nx, ny);
         }
@@ -126,12 +128,12 @@ __device__ void Alive::maybe_create_candidate(int x, int y) {
       int ny = y + dy;
 
       if (nx > -1 && nx < SIZE_X && ny > -1 && ny < SIZE_Y) {
-        Alive* alive = cells[ny*SIZE_X + nx].agent()->cast<Alive>();
+        Alive* alive = cells[ny*SIZE_X + nx]->agent()->cast<Alive>();
         if (alive != nullptr) {
           if (alive->is_new_) {
             if (alive == this) {
               // Create candidate now.
-              cells[y*SIZE_X + x].agent_ =
+              cells[y*SIZE_X + x]->agent_ =
                   new(device_allocator) Candidate(y*SIZE_X + x);
             }  // else: Created by other thread.
 
@@ -143,11 +145,6 @@ __device__ void Alive::maybe_create_candidate(int x, int y) {
   }
 
   assert(false);
-}
-
-
-__device__ void Alive::update_render_array() {
-  device_render_cells[cell_id_] = 1;
 }
 
 
@@ -170,10 +167,10 @@ __device__ void Candidate::update() {
   int cid = cell_id_;
 
   if (action_ == kActionSpawnAlive) {
-    cells[cid].agent_ = new(device_allocator) Alive(cid);
+    cells[cid]->agent_ = new(device_allocator) Alive(cid);
     destroy(device_allocator, this);
   } else if (action_ == kActionDie) {
-    cells[cid].agent_ = nullptr;
+    cells[cid]->agent_ = nullptr;
     destroy(device_allocator, this);
   }
 }
@@ -182,7 +179,7 @@ __device__ void Candidate::update() {
 __global__ void create_cells() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < SIZE_X*SIZE_Y; i += blockDim.x * gridDim.x) {
-    new(cells + i) Cell();
+    cells[i] = new(device_allocator) Cell();
   }
 }
 
@@ -191,11 +188,16 @@ __global__ void create_cells() {
 __global__ void load_game(int* cell_ids, int num_cells) {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
        i < num_cells; i += blockDim.x * gridDim.x) {
-    cells[cell_ids[i]].agent_ = new(device_allocator) Alive(cell_ids[i]);
-    assert(cells[cell_ids[i]].agent()->cell_id() == cell_ids[i]);
+    cells[cell_ids[i]]->agent_ = new(device_allocator) Alive(cell_ids[i]);
+    assert(cells[cell_ids[i]]->agent()->cell_id() == cell_ids[i]);
   }
 }
 
+
+#ifdef OPTION_RENDER
+__device__ void Alive::update_render_array() {
+  device_render_cells[cell_id_] = 1;
+}
 
 __global__ void initialize_render_arrays() {
   for (int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -203,7 +205,6 @@ __global__ void initialize_render_arrays() {
     device_render_cells[i] = 0;
   }
 }
-
 
 void render() {
   initialize_render_arrays<<<128, 128>>>();
@@ -214,6 +215,7 @@ void render() {
              sizeof(char)*dataset.x*dataset.y, cudaMemcpyDeviceToHost);
   draw(host_render_cells);
 }
+#endif  // OPTION_RENDER
 
 
 void transfer_dataset() {
@@ -235,21 +237,33 @@ void transfer_dataset() {
 
 
 __device__ int device_checksum;
+__device__ int device_num_candidates;
 
 __device__ void Alive::update_checksum() {
   atomicAdd(&device_checksum, 1);
 }
 
 
+__device__ void Candidate::update_counter() {
+  atomicAdd(&device_num_candidates, 1);
+}
+
 int checksum() {
   int host_checksum = 0;
+  int host_num_candidates = 0;
   cudaMemcpyToSymbol(device_checksum, &host_checksum, sizeof(int), 0,
+                     cudaMemcpyHostToDevice);
+  cudaMemcpyToSymbol(device_num_candidates, &host_num_candidates, sizeof(int), 0,
                      cudaMemcpyHostToDevice);
 
   allocator_handle->parallel_do<Alive, &Alive::update_checksum>();
+  allocator_handle->parallel_do<Candidate, &Candidate::update_counter>();
 
   cudaMemcpyFromSymbol(&host_checksum, device_checksum, sizeof(int), 0,
                        cudaMemcpyDeviceToHost);
+  cudaMemcpyFromSymbol(&host_num_candidates, device_num_candidates, sizeof(int), 0,
+                       cudaMemcpyDeviceToHost);
+
   return host_checksum;
 }
 
@@ -268,13 +282,9 @@ int main(int argc, char** argv) {
   cudaMemcpyToSymbol(SIZE_Y, &dataset.y, sizeof(int), 0,
                      cudaMemcpyHostToDevice);
 
-  if (kOptionRender) {
-    init_renderer();
-  }
-  
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 2*1024U*1024*1024);
-  size_t heap_size;
-  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -283,16 +293,18 @@ int main(int argc, char** argv) {
                      cudaMemcpyHostToDevice);
 
   // Allocate memory.
-  Cell* host_cells;
-  cudaMalloc(&host_cells, sizeof(Cell)*dataset.x*dataset.y);
-  cudaMemcpyToSymbol(cells, &host_cells, sizeof(Cell*), 0,
+  Cell** host_cells;
+  cudaMalloc(&host_cells, sizeof(Cell*)*dataset.x*dataset.y);
+  cudaMemcpyToSymbol(cells, &host_cells, sizeof(Cell**), 0,
                      cudaMemcpyHostToDevice);
 
+#ifdef OPTION_RENDER
   cudaMalloc(&d_device_render_cells, sizeof(char)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(device_render_cells, &d_device_render_cells,
                      sizeof(char*), 0, cudaMemcpyHostToDevice);
 
   host_render_cells = new char[dataset.x*dataset.y];
+#endif  // OPTION_RENDER
 
   // Initialize cells.
   create_cells<<<128, 128>>>();
@@ -304,35 +316,43 @@ int main(int argc, char** argv) {
 
   // Run simulation.
   for (int i = 0; i < kNumIterations; ++i) {
+#ifndef NDEBUG
     printf("%i\n", i);
+    allocator_handle->DBG_collect_stats();
+#endif  // NDEBUG
+
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
     allocator_handle->parallel_do<Candidate, &Candidate::update>();
     allocator_handle->parallel_do<Alive, &Alive::update>();
 
-    if (kOptionRender) {
-      render();
-    }
-  }
-
-  if (kOptionRender) {
-    close_renderer();
+#ifdef OPTION_RENDER
+    render();
+#endif  // OPTION_RENDER
   }
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
+
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 
 #ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
 #endif  // NDEBUG
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
 
+
+#ifdef OPTION_RENDER
   delete[] host_render_cells;
-  cudaFree(host_cells);
   cudaFree(d_device_render_cells);
+#endif  // OPTION_RENDER
+
+  cudaFree(host_cells);
 
   return 0;
 }

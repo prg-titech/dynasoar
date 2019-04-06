@@ -2,6 +2,7 @@
 #define EXAMPLE_GAME_OF_LIFE_SOA_GOL_NO_CELL_H
 
 #include "allocator_config.h"
+#include "../configuration.h"
 
 // Pre-declare all classes.
 class Cell;
@@ -9,7 +10,7 @@ class Agent;
 class Alive;
 class Candidate;
 
-using AllocatorT = SoaAllocator<64*64*64*64, Agent, Alive, Candidate>;
+using AllocatorT = SoaAllocator<kNumObjects, Agent, Alive, Candidate>;
 
 
 static const int kActionNone = 0;
@@ -72,8 +73,10 @@ class Alive : public Agent {
 
   __device__ void update();
 
+#ifdef OPTION_RENDER
   // Only for rendering.
   __device__ void update_render_array();
+#endif  // OPTION_RENDER
 
   // Only for checksum computation.
   __device__ void update_checksum();

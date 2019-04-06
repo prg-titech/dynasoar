@@ -11,11 +11,13 @@ AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ AllocatorT* device_allocator;
 
 
+#ifdef OPTION_RENDER
 // Rendering array.
 // TODO: Fix variable names.
 __device__ int* device_render_cells;
 int* host_render_cells;
 int* d_device_render_cells;
+#endif  // OPTION_RENDER
 
 
 // Dataset.
@@ -133,16 +135,6 @@ __device__ void Alive::create_candidates() {
 }
 
 
-__device__ void Alive::update_render_array() {
-  device_render_cells[cell_id_] = state_ + 1;
-}
-
-
-__device__ void Candidate::update_render_array() {
-  device_render_cells[cell_id_] = -1;
-}
-
-
 __device__ Candidate::Candidate(int cell_id) : Agent(cell_id) {}
 
 
@@ -199,6 +191,15 @@ __global__ void initialize_render_arrays() {
 }
 
 
+#ifdef OPTION_RENDER
+__device__ void Alive::update_render_array() {
+  device_render_cells[cell_id_] = state_ + 1;
+}
+
+__device__ void Candidate::update_render_array() {
+  device_render_cells[cell_id_] = -1;
+}
+
 void render() {
   initialize_render_arrays<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
@@ -209,7 +210,7 @@ void render() {
              sizeof(int)*dataset.x*dataset.y, cudaMemcpyDeviceToHost);
   draw(host_render_cells);
 }
-
+#endif  // OPTION_RENDER
 
 void transfer_dataset() {
   int* dev_cell_ids;
@@ -262,12 +263,14 @@ int checksum() {
 }
 
 
+/*
 void defrag() {
 #ifdef OPTION_DEFRAG
   allocator_handle->parallel_defrag<Alive>();
   allocator_handle->parallel_defrag<Candidate>();
 #endif  // OPTION_DEFRAG
 }
+*/
 
 
 int main(int /*argc*/, char** /*argv*/) {
@@ -279,13 +282,9 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(SIZE_Y, &dataset.y, sizeof(int), 0,
                      cudaMemcpyHostToDevice);
 
-  if (kOptionRender) {
-    init_renderer();
-  }
-  
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, 2*1024U*1024*1024);
-  size_t heap_size;
-  cudaDeviceGetLimit(&heap_size, cudaLimitMallocHeapSize);
+#ifdef OPTION_RENDER
+  init_renderer();
+#endif  // OPTION_RENDER
 
   // Create new allocator.
   allocator_handle = new AllocatorHandle<AllocatorT>();
@@ -299,11 +298,13 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(cells, &host_cells, sizeof(Cell**), 0,
                      cudaMemcpyHostToDevice);
 
+#ifdef OPTION_RENDER
   cudaMalloc(&d_device_render_cells, sizeof(int)*dataset.x*dataset.y);
   cudaMemcpyToSymbol(device_render_cells, &d_device_render_cells,
                      sizeof(int*), 0, cudaMemcpyHostToDevice);
 
   host_render_cells = new int[dataset.x*dataset.y];
+#endif  // OPTION_RENDER
 
   // Initialize cells.
   create_cells<<<1024, 1024>>>();
@@ -315,21 +316,23 @@ int main(int /*argc*/, char** /*argv*/) {
 
   // Run simulation.
   for (int i = 0; i < kNumIterations; ++i) {
+/*
     if (kOptionDefrag) {
       if (i % 50 == 0) {
         defrag();
       }
     }
+*/
 
-    if (kOptionRender) {
-      render();
-    }
+#ifdef OPTION_RENDER
+    render();
+#endif  // OPTION_RENDER
 
-    if (kOptionPrintStats && i % 1 == 0) {
-      printf("%i\n", i);
-      // allocator_handle->DBG_print_state_stats();
-      // allocator_handle->DBG_collect_stats();
-    }
+#ifndef NDEBUG
+    printf("%i\n", i);
+    allocator_handle->DBG_print_state_stats();
+    // allocator_handle->DBG_collect_stats();
+#endif  // NDEBUG
 
     allocator_handle->parallel_do<Candidate, &Candidate::prepare>();
     allocator_handle->parallel_do<Alive, &Alive::prepare>();
@@ -337,28 +340,31 @@ int main(int /*argc*/, char** /*argv*/) {
     allocator_handle->parallel_do<Alive, &Alive::update>();
   }
 
-  if (kOptionRender) {
-    close_renderer();
-  }
-
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
+
+#ifdef OPTION_RENDER
+  close_renderer();
+#endif  // OPTION_RENDER
 
 #ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
 #endif  // NDEBUG
 
-  printf("%lu,%lu\n", millis, allocator_handle->DBG_get_enumeration_time());
+  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
 
-  if (kOptionPrintStats) {
-    allocator_handle->DBG_print_collected_stats();
-  }
+//  if (kOptionPrintStats) {
+//    allocator_handle->DBG_print_collected_stats();
+//  }
 
+#ifdef OPTION_RENDER
   delete[] host_render_cells;
-  cudaFree(host_cells);
   cudaFree(d_device_render_cells);
+#endif  // OPTION_RENDER
+
+  cudaFree(host_cells);
 
   return 0;
 }

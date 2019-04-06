@@ -8,7 +8,7 @@
 extern dataset_t dataset;
 
 // Constants for rendering.
-static const int kCellWidth = 4;
+static const int kCellWidth = 2;
 
 // SDL rendering variables.
 SDL_Window* window = nullptr;
