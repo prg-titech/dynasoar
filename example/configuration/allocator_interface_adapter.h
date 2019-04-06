@@ -8,8 +8,8 @@
 #include "allocator/tuple_helper.h"
 
 #ifndef PARAM_HEAP_SIZE
-// Custom allocator heap size: 4 GiB
-static const size_t kMallocHeapSize = 4ULL*1024*1024*1024;
+// Custom allocator heap size: 8 GiB
+static const size_t kMallocHeapSize = 8ULL*1024*1024*1024;
 #else
 // Heap size specified by parameter.
 static const size_t kMallocHeapSize = PARAM_HEAP_SIZE;
