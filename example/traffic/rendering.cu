@@ -6,8 +6,8 @@
 
 
 // Constants for rendering.
-static const int kWindowWidth = 1000;
-static const int kWindowHeight = 1000;
+static const int kWindowWidth = 500;
+static const int kWindowHeight = 500;
 
 // SDL rendering variables.
 SDL_Window* window = nullptr;
@@ -19,7 +19,7 @@ static void render_rect(SDL_Renderer* renderer, float x, float y,
   assert(y >= 0 && y <= 1);
 
   SDL_Rect rect;
-  rect.w = rect.h = 8;
+  rect.w = rect.h = 3;
   rect.x = x * kWindowWidth - rect.w/2;
   rect.y = y * kWindowHeight - rect.h/2;
 
