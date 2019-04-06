@@ -45,10 +45,10 @@ struct PointerHelper {
 // Wrapper type for fields of SOA-structured classes. This class contains the
 // logic for calculating the data location of a field from an object
 // identifier.
-template<typename C, int Field>
+template<typename C, int FieldIndex>
 class SoaField {
  private:
-  using T = typename SoaFieldHelper<C, Field>::type;
+  using T = typename SoaFieldHelper<C, FieldIndex>::type;
 
   // Dummy field forces size of class to be zero.
   char _[0];
@@ -97,7 +97,7 @@ class SoaField {
     // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(
         block_base + kBlockDataSectionOffset
-        + BlockSize*SoaFieldHelper<C, Field>::kOffset);
+        + BlockSize*SoaFieldHelper<C, FieldIndex>::kOffset);
     return soa_array + obj_id;
   }
 
@@ -108,7 +108,7 @@ class SoaField {
     // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(
         block_base + kBlockDataSectionOffset
-        + block_size*SoaFieldHelper<C, Field>::kOffset);
+        + block_size*SoaFieldHelper<C, FieldIndex>::kOffset);
     return soa_array + obj_id;
   }
 
@@ -166,10 +166,14 @@ class SoaField {
     return *data_ptr();
   }
 
-  __DEV__ T& operator=(const SoaField<C, Field>& field) {
+  __DEV__ T& operator=(const SoaField<C, FieldIndex>& field) {
     *data_ptr() = field.get();
     return *data_ptr();
   }
 };
+
+
+template<typename C, int FieldIndex>
+using Field = SoaField<C, FieldIndex>;
 
 #endif  // ALLOCATOR_SOA_FIELD_H

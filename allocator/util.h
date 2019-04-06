@@ -3,6 +3,9 @@
 
 #include "util/util.h"
 
+#define GCC_COMPILER (defined(__GNUC__) && !defined(__clang__))
+
+
 __forceinline__ __device__ unsigned __lane_id()
 {
   unsigned ret;

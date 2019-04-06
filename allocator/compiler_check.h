@@ -1,6 +1,15 @@
 #ifndef ALLOCATOR_COMPILER_CHECK_H
 #define ALLOCATOR_COMPILER_CHECK_H
 
+#ifndef __NVCC__
+#error Must compile with nvcc
+#endif  // __NVCC__
+
+#if __CUDACC_VER_MAJOR__ < 9
+#warning Old CUDA version detected. Version 9 or higher is recommended.
+#endif
+
+
 #include "allocator/soa_allocator.h"
 
 namespace _compiler_check {

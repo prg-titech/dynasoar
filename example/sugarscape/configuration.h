@@ -1,8 +1,19 @@
-#ifndef EXAMPLE_SUGARSCAPE_SOA_CONFIGURATION_H
-#define EXAMPLE_SUGARSCAPE_SOA_CONFIGURATION_H
+#ifndef EXAMPLE_SUGARSCAPE_CONFIGURATION_H
+#define EXAMPLE_SUGARSCAPE_CONFIGURATION_H
 
 // Size of simulation.
+#ifndef PARAM_SIZE
 static const int kSize = 1700;
+#else
+static const int kSize = PARAM_SIZE;
+#endif  // PARAM_SIZE
+
+#ifndef PARAM_MAX_OBJ
+static const int kNumObjects = 64*64*64*64;
+#else
+static const int kNumObjects = PARAM_MAX_OBJ;
+#endif  // PARAM_MAX_OBJ
+
 static const int kSeed = 42;
 
 // For initialization only.
@@ -24,8 +35,11 @@ static const float kSugarDiffusionRate = 0.125;
 static const int kMinMatingAge = 22;
 static const int kMaxChildren = 8;
 
-// Debug/rendering
-static const bool kOptionRender = false;
-static const bool kOptionPrintStats = false;
+// Helper data structure for rendering and checksum computation.
+struct CellInfo {
+  int sugar;
+  char agent_type;
+};
 
-#endif  // EXAMPLE_SUGARSCAPE_SOA_CONFIGURATION_H
+
+#endif  // EXAMPLE_SUGARSCAPE_CONFIGURATION_H

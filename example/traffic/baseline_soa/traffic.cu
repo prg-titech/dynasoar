@@ -806,12 +806,12 @@ int main(int /*argc*/, char** /*argv*/) {
 
   auto time_end = std::chrono::system_clock::now();
   auto elapsed = time_end - time_start;
-  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+  auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
 #ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
 #endif  // NDEBUG
 
-  printf("%lu\n", millis);
+  printf("%lu\n", micros);
 }

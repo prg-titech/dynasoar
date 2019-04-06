@@ -16,11 +16,18 @@ extern dataset_t dataset;
 
 
 static const int kNumIterations = 25000;  // 1000
-static const bool kOptionRender = false;
-static const bool kOptionPrintStats = true;
-static const bool kOptionDefrag = true;
 
+#ifndef PARAM_SIZE
 static const int kSize = 5000;  // 18000
+#else
+static const int kSize = PARAM_SIZE;
+#endif  // PARAM_SIZE
+
+#ifndef PARAM_MAX_OBJ
+static const int kNumObjects = 48*64*64*64*64;
+#else
+static const int kNumObjects = PARAM_MAX_OBJ;
+#endif  // PARAM_MAX_OBJ
 
 #endif  // EXAMPLE_GENERATION_CONFIGURATION_H
 

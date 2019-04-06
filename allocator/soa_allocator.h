@@ -24,6 +24,7 @@ template<BlockIndexT N_Objects, class... Types>
 class SoaAllocator {
  public:
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
+  using Base = SoaBase<ThisAllocator>;
 
   static const ObjectIndexT kNumBlockElements = 64;
   static const uint64_t kBlockAddrBitmask = 0xFFFFFFFFFFC0;
@@ -118,7 +119,7 @@ class SoaAllocator {
 
   long unsigned int DBG_get_enumeration_time() {
     // Microseconds to milliseconds.
-    return bench_prefix_sum_time/1000;
+    return bench_prefix_sum_time;
   }
   // ---- END ----
 

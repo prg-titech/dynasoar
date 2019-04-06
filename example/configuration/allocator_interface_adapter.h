@@ -7,6 +7,15 @@
 
 #include "allocator/tuple_helper.h"
 
+#ifndef PARAM_HEAP_SIZE
+// Custom allocator heap size: 4 GiB
+static const size_t kMallocHeapSize = 4ULL*1024*1024*1024;
+#else
+// Heap size specified by parameter.
+static const size_t kMallocHeapSize = PARAM_HEAP_SIZE;
+#endif  // PARAM_HEAP_SIZE
+
+
 #define declare_field_types(classname, ...) \
   __DEV__ void* operator new(size_t sz, typename classname::Allocator* allocator) { \
     return allocator->allocate_new<classname>(); \
@@ -21,8 +30,6 @@
     assert(false);  /* Construct must not throw exceptions. */ \
   } \
   using FieldTypes = std::tuple<__VA_ARGS__>;
-
-static const size_t kMallocHeapSize = 8ULL*1024*1024*1024;
 
 // For benchmarks: Measure time spent outside of parallel sections.
 long unsigned int bench_prefix_sum_time = 0;
@@ -130,6 +137,34 @@ struct ParallelDoTypeHelper1 {
 };
 
 
+template<class AllocatorT>
+class SoaBase {
+ public:
+  using Allocator = AllocatorT;
+  using BaseClass = void;
+  static const bool kIsAbstract = false;
+
+  __DEV__ uint8_t get_type() const { return dynamic_type_; }
+
+  template<typename T>
+  __DEV__ T* cast() {
+    if (this != nullptr
+        && get_type() == AllocatorT::template TypeId<T>::value) {
+      return static_cast<T*>(this);
+    } else {
+      return nullptr;
+    }
+  }
+
+ private:
+  friend AllocatorT;
+
+  uint8_t dynamic_type_;
+
+  __DEV__ void set_type(uint8_t type_id) { dynamic_type_ = type_id; }
+};
+
+
 // TODO: Fix visiblity.
 template<template<typename> typename AllocatorStateT,
          uint32_t N_Objects, class... Types>
@@ -137,6 +172,7 @@ class SoaAllocatorAdapter {
  public:
   using ThisAllocator = SoaAllocatorAdapter<
       AllocatorStateT, N_Objects, Types...>;
+  using Base = SoaBase<ThisAllocator>;
 
   // Zero-initialization of arrays can take a long time.
   __DEV__ SoaAllocatorAdapter() = delete;
@@ -148,7 +184,7 @@ class SoaAllocatorAdapter {
 
   long unsigned int DBG_get_enumeration_time() {
     // Convert microseconds to milliseconds.
-    return bench_prefix_sum_time/1000;
+    return bench_prefix_sum_time;
   }
 
   template<typename T>
@@ -546,7 +582,7 @@ class AllocatorHandle {
     cudaDeviceSetLimit(cudaLimitMallocHeapSize, kMallocHeapSize);
 
     if (allocator_heap_size == 0) {
-      allocator_heap_size = 3ULL*kMallocHeapSize/4;
+      allocator_heap_size = kMallocHeapSize;
     }
 
 #ifndef NDEBUG
@@ -648,10 +684,10 @@ class AllocatorHandle {
 };
 
 
-template<typename C, int Field>
+template<typename C, int FieldIndex>
 class SoaField {
  private:
-  using T = typename SoaFieldHelper<C, Field>::type;
+  using T = typename SoaFieldHelper<C, FieldIndex>::type;
 
   // Data stored in here.
   T data_;
@@ -707,32 +743,8 @@ class SoaField {
 };
 
 
-template<class AllocatorT>
-class SoaBase {
- public:
-  using Allocator = AllocatorT;
-  using BaseClass = void;
-  static const bool kIsAbstract = false;
-
-  __DEV__ uint8_t get_type() const { return dynamic_type_; }
-
-  template<typename T>
-  __DEV__ T* cast() {
-    if (this != nullptr
-        && get_type() == AllocatorT::template TypeId<T>::value) {
-      return static_cast<T*>(this);
-    } else {
-      return nullptr;
-    }
-  }
-
- private:
-  friend AllocatorT;
-
-  uint8_t dynamic_type_;
-
-  __DEV__ void set_type(uint8_t type_id) { dynamic_type_ = type_id; }
-};
+template<typename C, int FieldIndex>
+using Field = SoaField<C, FieldIndex>;
 
 
 // TODO: Is it safe to make these static?
@@ -742,9 +754,9 @@ __DEV__ __forceinline__ static void destroy(AllocatorT* allocator, T* ptr) {
 }
 
 
-template<typename AllocatorT, typename C, int Field>
+template<typename AllocatorT, typename C, int FieldIndex>
 __DEV__ __forceinline__ static void destroy(AllocatorT* allocator,
-                                            const SoaField<C, Field>& value) {
+                                            const SoaField<C, FieldIndex>& value) {
   allocator->template free(value.get());
 }
 
