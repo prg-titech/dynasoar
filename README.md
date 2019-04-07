@@ -42,7 +42,7 @@ DynaSOAr has a host side API (`AllocatorHandle<AllocatorT>`) and a device side A
 * `AllocatorT::parallel_defrag<C>()`: Runs a defragmentation pass on all objects of type `C`. This pass compacts objects and rewrites pointers to object that were relocated.
 
 ## API Example
-This example does not compute anything meaningful and is only meant to show the API. Take a look at the code in the `example` directory for more interesting examples.
+This example does not compute anything meaningful and is only meant to show the API. Take a look at the [DynaSOAr tutorial](https://github.com/prg-titech/dynasoar/wiki/Tutorial) and at the code in the `example` directory for [more interesting examples](https://github.com/prg-titech/dynasoar/wiki/Benchmark-Applications).
 
 ```c++
 #include "dynasoar.h"
