@@ -1,7 +1,7 @@
 # DynaSOAr: A CUDA Framework for Single-Method Multiple-Objects Applications
 SMMO (Single-Method Multiple-Objects) is a wide-spread pattern of parallel, object-oriented, high-performance code. It is OOP-speech for SIMD (Single-Instruction Multiple-Data) and means that a method should be executed for all objects of a type.
 
-As an example, an nbody simulation consists of `n` body objects, for each of which a `move` method for computing the next position of a body should be executed. DynaSOAr is a CUDA framework (C++ template library) that facilitates the development of such programs. The three main features of DynaSOAr are:
+As an example, an nbody simulation consists of `n` body objects, for each of which a `move` method for computing the next position of a body should be executed. DynaSOAr is a CUDA framework (C++ template library) that facilitates the development of such programs. The four main features of DynaSOAr are:
 
 * SOA Data Layout: Objects are stored in the SIMD-friendly Structure of Arrays data layout. Other layouts may be supported in the future.
 * Dynamic Memory Management on Device: New objects can be created at any time in the CUDA kernel and existing objects can be deleted (`new`/`delete`).
@@ -22,11 +22,11 @@ Tested with CUDA Toolkit 9.1 (gcc version 5.4.0) on a Nvidia Titan Xp machine (U
 
 ```bash
 # Build types: Debug, Release
-cmake -DCMAKE_BUILD_TYPE=Debug -DALLOCATOR=SoaAlloc .
+cmake -DCMAKE_BUILD_TYPE=Debug -DALLOCATOR=dynasoar .
 make
 
 # Examples are located in example directory.
-bin/nbody_soa
+bin/nbody_dynasoar
 ```
 
 ## API Overview
