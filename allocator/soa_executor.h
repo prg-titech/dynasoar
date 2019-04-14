@@ -39,7 +39,7 @@ __global__ static void kernel_parallel_new(
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (tid < num_objects) {
-    allocator->template make_new<T>(idx, args...);
+    allocator->template make_new<T>(tid, args...);
   }
 }
 
