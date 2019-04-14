@@ -329,6 +329,11 @@ class SoaAllocator {
         ::template InnerHelper>(this, p1);
   }
 
+  template<class T, typename... Args>
+  void parallel_new(int num_objects, Args... args) {
+    executor_parallel_new<ThisAllocator, T>(this, num_objects, args...);
+  }
+
   // Call a member function on all objects of type.
   // Device version (sequential).
   // TODO: This does not enumerate subtypes.

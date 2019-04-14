@@ -34,6 +34,9 @@ class Body : public AllocatorT::Base {
   SoaField<Body, 6> mass_;
 
  public:
+  // Construct the idx-th object.
+  __DEV__ Body(int idx);
+
   __DEV__ Body(float pos_x, float pos_y, float vel_x, float vel_y, float mass);
 
   __DEV__ void compute_force();

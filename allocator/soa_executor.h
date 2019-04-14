@@ -5,8 +5,11 @@
 #include <limits>
 
 // For benchmarks: Measure time spent outside of parallel sections.
-// Measure time in microseconds because numbers are small.
+// Measure time in milliseconds because numbers are small.
 long unsigned int bench_prefix_sum_time = 0;
+long unsigned int bench_parallel_new_time = 0;
+
+static const int kCudaBlockSize = 256;
 static const int kMaxInt32 = std::numeric_limits<int>::max();
 
 // TODO: Is it safe to make these static?
@@ -27,6 +30,39 @@ __global__ static void kernel_parallel_do_with_pre(AllocatorT* allocator,
   PreT::run_pre(allocator, args...);
   WrapperT::parallel_do_cuda(allocator, args...);
 }
+
+// Construct objects in parallel.
+template<typename AllocatorT, typename T, typename... Args>
+__global__ static void kernel_parallel_new(
+    AllocatorT* allocator, int num_objects, Args... args) {
+  // TODO: Use grid-side-loop here and in other kernels.
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (tid < num_objects) {
+    allocator->template make_new<T>(num_objects, args...);
+  }
+}
+
+template<typename AllocatorT, typename T, typename... Args>
+void executor_parallel_new(AllocatorT* allocator, int num_objects,
+                           Args... args) {
+  if (num_objects > 0) {
+    auto time_start = std::chrono::system_clock::now();
+    auto time_end = time_start;
+
+    kernel_parallel_new<AllocatorT, T, Args...>
+        <<<(num_objects + kCudaBlockSize - 1)/kCudaBlockSize,
+           kCudaBlockSize>>>(allocator, num_objects, args...);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    time_end = std::chrono::system_clock::now();
+    auto elapsed = time_end - time_start;
+    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+        .count();
+    bench_parallel_new_time += millis;
+  }
+}
+
 
 // Helper data structure for running parallel_do on all subtypes.
 template<typename AllocatorT, class BaseClass, void(BaseClass::*func)(),
@@ -96,7 +132,6 @@ struct ParallelExecutor {
   using BlockHelperIterT = typename AllocatorT::template BlockHelper<IterT>;
   static const int kTypeIndex = BlockHelperIterT::kIndex;
   static const int kSize = BlockHelperIterT::kSize;
-  static const int kCudaBlockSize = 256;
 
   template<R (Base::*func)(Args...)>
   struct FunctionWrapper {
@@ -138,9 +173,9 @@ struct ParallelExecutor {
       }
 
       auto elapsed = time_end - time_start;
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+      auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
           .count();
-      bench_prefix_sum_time += micros;
+      bench_prefix_sum_time += millis;
     }
 
     template<void(AllocatorT::*pre_func)(Args...)>
@@ -183,9 +218,9 @@ struct ParallelExecutor {
 
 
         auto elapsed = time_end - time_start;
-        auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+        auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
             .count();
-        bench_prefix_sum_time += micros;
+        bench_prefix_sum_time += millis;
       }
 
       __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {
