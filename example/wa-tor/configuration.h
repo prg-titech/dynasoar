@@ -7,13 +7,13 @@ static const int kSeed = 42;
 #ifdef PARAM_SIZE_X
 static const int kSizeX = PARAM_SIZE_X;
 #else
-static const int kSizeX = 2048;
+static const int kSizeX = 2560;
 #endif  // PARAM_SIZE_X
 
 #ifdef PARAM_SIZE_Y
 static const int kSizeY = PARAM_SIZE_Y;
 #else
-static const int kSizeY = 2560;
+static const int kSizeY = 2048;
 #endif  // PARAM_SIZE_Y
 
 // Simulation constants.
@@ -26,7 +26,7 @@ static const bool kOptionSharkSpawn = true;
 static const int kNumIterations = 500;
 
 #ifndef PARAM_MAX_OBJ
-static const int kNumObjects = 64*64*64*64;
+static const int kNumObjects = 4*64*64*64*64;
 #else
 static const int kNumObjects = PARAM_MAX_OBJ;
 #endif  // PARAM_MAX_OBJ

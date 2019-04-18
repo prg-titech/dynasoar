@@ -313,6 +313,14 @@ __global__ void print_checksum() {
 }
 
 
+#ifdef OPTION_DEFRAG
+void defrag() {
+  allocator_handle->parallel_defrag<Fish>();
+  allocator_handle->parallel_defrag<Shark>();
+}
+#endif  // OPTION_DEFRAG
+
+
 void step() {
   // --- FISH ---
   allocator_handle->parallel_do<Cell, &Cell::prepare>();
@@ -369,6 +377,10 @@ int main(int /*argc*/, char*[] /*arvg[]*/) {
 
     auto time_before = std::chrono::high_resolution_clock::now();
     step();
+
+#ifdef OPTION_DEFRAG
+    defrag();
+#endif  // OPTION_DEFRAG
 
     auto time_after = std::chrono::high_resolution_clock::now();
     total_time += std::chrono::duration_cast<std::chrono::microseconds>(

@@ -269,6 +269,10 @@ int main(int /*argc*/, char** /*argv*/) {
   kernel_initialize_bodies<<<1, 1>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+#ifdef OPTION_DEFRAG
+  allocator_handle->parallel_defrag<Body>();
+#endif  // OPTION_DEFRAG
+
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
@@ -276,6 +280,12 @@ int main(int /*argc*/, char** /*argv*/) {
     // Print debug information.
     allocator_handle->DBG_print_state_stats();
 #endif  // NDEBUG
+
+#ifdef OPTION_DEFRAG
+    if (i % 10 == 0) {
+      allocator_handle->parallel_defrag<Body>();
+    }
+#endif  // OPTION_DEFRAG
 
     allocator_handle->parallel_do<Body, &Body::compute_force>();
     allocator_handle->parallel_do<Body, &Body::update>();

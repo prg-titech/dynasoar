@@ -7,13 +7,13 @@
 
 static const int kNumComputeIterations = 40;
 static const int kMaxDegree = 5;
-static const float kDt = 0.2f;
-static const int kNumSteps = 500;
+static const float kDt = 0.01f;   // INCREASE?
+static const int kNumSteps = 7500;
 
 #ifdef PARAM_SIZE
 static const int kMaxNodes = PARAM_SIZE;
 #else
-static const int kMaxNodes = 1500000;
+static const int kMaxNodes = 500000;  // INCREASE * 3 ?
 #endif  // PARAM_SIZE_X
 
 static const int kMaxSprings = kMaxNodes*kMaxDegree / 2;

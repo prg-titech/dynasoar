@@ -263,14 +263,12 @@ int checksum() {
 }
 
 
-/*
-void defrag() {
 #ifdef OPTION_DEFRAG
+void defrag() {
   allocator_handle->parallel_defrag<Alive>();
   allocator_handle->parallel_defrag<Candidate>();
-#endif  // OPTION_DEFRAG
 }
-*/
+#endif  // OPTION_DEFRAG
 
 
 int main(int /*argc*/, char** /*argv*/) {
@@ -316,13 +314,9 @@ int main(int /*argc*/, char** /*argv*/) {
 
   // Run simulation.
   for (int i = 0; i < kNumIterations; ++i) {
-/*
-    if (kOptionDefrag) {
-      if (i % 50 == 0) {
-        defrag();
-      }
+    if (i % 50 == 0) {
+      defrag();
     }
-*/
 
 #ifdef OPTION_RENDER
     render();

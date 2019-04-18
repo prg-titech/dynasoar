@@ -7,13 +7,13 @@ static const float kMergeThreshold = 0.005;
 #ifdef PARAM_SIZE
 static const int kNumBodies = PARAM_SIZE;
 #else
-static const int kNumBodies = 40000;
+static const int kNumBodies = 150000;
 #endif  // PARAM_SIZE
 
 static const float kMaxMass = 75;
 static const int kSeed = 42;
-static const float kTimeInterval = 0.05;
-static const int kIterations = 2000;
+static const float kTimeInterval = 0.01;
+static const int kIterations = 10000;
 static const float kDampeningFactor = 0.05f;
 
 // Physical constants.

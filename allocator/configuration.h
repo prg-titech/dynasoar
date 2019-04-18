@@ -2,12 +2,12 @@
 #define ALLOCATOR_AOS_CONFIGURATION_H
 
 // Active defragmentation support.
-// #define OPTION_DEFRAG
+#define OPTION_DEFRAG
 
 // Store defragmentation records in global memory.
-#define OPTION_DEFRAG_USE_GLOBAL
+//#define OPTION_DEFRAG_USE_GLOBAL
 
-#define OPTION_DEFRAG_FORWARDING_POINTER
+//#define OPTION_DEFRAG_FORWARDING_POINTER
 
 // Print additional stats about defragmentation.
 //#define OPTION_DEFRAG_BENCH

@@ -279,6 +279,15 @@ void bfs_and_delete() {
 }
 
 
+#ifdef OPTION_DEFRAG
+void defrag() {
+  allocator_handle->parallel_defrag<AnchorPullNode>(1);
+  allocator_handle->parallel_defrag<Node>(1);
+  allocator_handle->parallel_defrag<Spring>(1);
+}
+#endif  // OPTION_DEFRAG
+
+
 void step() {
   allocator_handle->parallel_do<AnchorPullNode, &AnchorPullNode::pull>();
 
@@ -381,6 +390,12 @@ int main(int /*argc*/, char** /*argv*/) {
     // Print debug information.
     allocator_handle->DBG_print_state_stats();
 #endif  // NDEBUG
+
+#ifdef OPTION_DEFRAG
+    if (i % 500 == 0) {
+      defrag();
+    }
+#endif  // OPTION_DEFRAG
 
     step();
   }
