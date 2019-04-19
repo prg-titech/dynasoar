@@ -93,9 +93,9 @@ class AllocatorHandle {
 
   template<typename T>
   BlockIndexT DBG_allocated_slots() {
-    kernel_store_in_tmp_var<AllocatorT,
-                            &AllocatorT::template DBG_allocated_slots<T>>(
-        allocator_);
+    kernel_store_in_tmp_var
+        <AllocatorT, &AllocatorT::template DBG_allocated_slots<T>>
+        <<<1, 1>>>(allocator_);
     gpuErrchk(cudaDeviceSynchronize());
 
     BlockIndexT result;
@@ -106,9 +106,9 @@ class AllocatorHandle {
 
   template<typename T>
   BlockIndexT DBG_used_slots() {
-    kernel_store_in_tmp_var<AllocatorT,
-                            &AllocatorT::template DBG_used_slots<T>>(
-        allocator_);
+    kernel_store_in_tmp_var
+        <AllocatorT, &AllocatorT::template DBG_used_slots<T>>
+        <<<1, 1>>>(allocator_);
     gpuErrchk(cudaDeviceSynchronize());
 
     BlockIndexT result;
