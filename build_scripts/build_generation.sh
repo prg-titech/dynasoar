@@ -10,13 +10,14 @@ args=""
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
-while getopts "h?rda:s:m:x:" opt; do
+while getopts "h?rda:s:m:x:f:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"
         echo "  -a ALLOC    Choose allocator. Possible values:"
         echo "              bitmap, cuda, dynasoar (default), halloc, mallocmc"
         echo "  -d          Debug mode"
+        echo "  -f F        Defragmentation factor"
         echo "  -m NUM      Max. #objects (of the smallest type)"
         echo "  -r          Render visualization"
         echo "  -s BYTES    Heap size (for allocators different from dynasoar)"
@@ -32,6 +33,8 @@ while getopts "h?rda:s:m:x:" opt; do
     s)  args="${args} -DPARAM_HEAP_SIZE=${OPTARG}"
         ;;
     m)  args="${args} -DPARAM_MAX_OBJ=${OPTARG}"
+        ;;
+    f)  args="${args} -DPARAM_DEFRAG_FACTOR=${OPTARG}"
         ;;
     d)  optimizations="-g -O3"
         ;;
