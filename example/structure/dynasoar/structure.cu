@@ -385,7 +385,6 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumSteps; ++i) {
-    printf("%i\n", i);
 #ifndef NDEBUG
     printf("%i\n", i);
     // Print debug information.
@@ -408,7 +407,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
       .count();
 
-  printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
+  printf("%i, %lu, %lu\n", (int) kDefragFactor, micros, allocator_handle->DBG_get_enumeration_time());
 
 #ifndef NDEBUG
   printf("Checksum: %f\n", checksum());
