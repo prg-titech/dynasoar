@@ -385,6 +385,7 @@ int main(int /*argc*/, char** /*argv*/) {
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumSteps; ++i) {
+    printf("%i\n", i);
 #ifndef NDEBUG
     printf("%i\n", i);
     // Print debug information.
@@ -392,7 +393,7 @@ int main(int /*argc*/, char** /*argv*/) {
 #endif  // NDEBUG
 
 #ifdef OPTION_DEFRAG
-    if (i % 500 == 0) {
+    if (i % 50 == 0) {
       defrag();
     }
 #endif  // OPTION_DEFRAG

@@ -1,0 +1,1008 @@
+1,90913,0
+2,192113,0
+3,267280,0
+4,391565,0
+5,482044,0
+6,575969,0
+7,648216,0
+8,732102,0
+9,757010,0
+10,802282,0
+11,865029,0
+12,938217,0
+13,1016596,0
+14,1044389,0
+15,1114610,0
+16,1191384,0
+17,1273272,0
+18,1349124,0
+19,1433947,0
+20,1496528,0
+21,1592748,0
+22,1685259,0
+23,1789818,0
+24,1914598,0
+25,2001305,0
+26,2093274,0
+27,2211997,0
+28,2328540,0
+29,2420374,0
+30,2601947,0
+31,2781891,0
+32,2897823,0
+33,2964413,0
+34,3146707,0
+35,3346568,0
+36,3482675,0
+37,3684192,0
+38,3873793,0
+39,3978584,0
+40,4207146,0
+41,4315503,0
+42,4512067,0
+43,4694211,0
+44,4905614,0
+45,5118991,0
+46,5405284,0
+47,5522846,0
+48,5744756,0
+49,5940356,0
+50,6134647,0
+51,6447348,0
+52,6595215,0
+53,6962183,0
+54,7039446,0
+55,7251899,0
+56,7568164,0
+57,7896355,0
+58,8044539,0
+59,8250574,0
+60,8638397,0
+61,8996857,0
+62,9128605,0
+63,9457262,0
+64,9733056,0
+65,10006143,0
+66,10304500,0
+67,10556800,0
+68,10903449,0
+69,11282855,0
+70,11528617,0
+71,11887295,0
+72,12172486,0
+73,12457132,0
+74,12943725,0
+75,13251237,0
+76,13446471,0
+77,13827493,0
+78,14231433,0
+79,14795517,0
+80,14923388,0
+81,15260867,0
+82,15717691,0
+83,16302378,0
+84,16551942,0
+85,16909219,0
+86,17236871,0
+87,17616232,0
+88,18043530,0
+89,18467808,0
+90,18870915,0
+91,19188722,0
+92,19800080,0
+93,20340199,0
+94,20870302,0
+95,21270780,0
+96,21892190,0
+97,21916981,0
+98,22481430,0
+99,22864665,0
+100,23118099,0
+101,23625129,0
+102,24414501,0
+103,24720773,0
+104,25066149,0
+105,25649305,0
+106,26056961,0
+107,26537536,0
+108,27013518,0
+109,27677660,0
+110,28289303,0
+111,28712374,0
+112,29135277,0
+113,29721130,0
+114,29981810,0
+115,30771547,0
+116,31496987,0
+117,31707115,0
+118,32320835,0
+119,32862143,0
+120,33661545,0
+121,34357165,0
+122,34719353,0
+123,35160058,0
+124,35787284,0
+125,36189342,0
+126,36834962,0
+127,37774712,0
+128,38215725,0
+129,38715645,0
+130,39417441,0
+131,39931774,0
+132,41333966,0
+133,41348783,0
+134,41783010,0
+135,42676744,0
+136,42933295,0
+137,43461413,0
+138,44477466,0
+139,44833583,0
+140,45343550,0
+141,46088075,0
+142,46733882,0
+143,47806943,0
+144,47984352,0
+145,49080500,0
+146,49445609,0
+147,50291569,0
+148,50677754,0
+149,51630247,0
+150,52686860,0
+151,53219955,0
+152,53520425,0
+153,54427699,0
+154,55410148,0
+155,55483181,0
+156,56751540,0
+157,57589691,0
+158,57935053,0
+159,58702426,0
+160,59426109,0
+161,59912003,0
+162,61311296,0
+163,61284303,0
+164,62315645,0
+165,63376053,0
+166,64027273,0
+167,65059524,0
+168,66307095,0
+169,66514346,0
+170,67253940,0
+171,68125835,0
+172,69041222,0
+173,69881595,0
+174,70902249,0
+175,71682133,0
+176,72035378,0
+177,73666783,0
+178,73489512,0
+179,74678469,0
+180,75427674,0
+181,77258978,0
+182,77710672,0
+183,78511719,0
+184,79427226,0
+185,80194980,0
+186,80910660,0
+187,81627198,0
+188,82551383,0
+189,83913845,0
+190,84297538,0
+191,85232206,0
+192,86396274,0
+193,86899198,0
+194,87977245,0
+195,89058920,0
+196,89954233,0
+197,90366007,0
+198,92184495,0
+199,92809517,0
+200,93779319,0
+201,94458701,0
+202,95024086,0
+203,95911241,0
+204,97553148,0
+205,97817012,0
+206,99842844,0
+207,101421261,0
+208,101450658,0
+209,101995630,0
+210,102914024,0
+211,104116182,0
+212,105485970,0
+213,106028202,0
+214,106794627,0
+215,108899674,0
+216,109758373,0
+217,110576030,0
+218,111155374,0
+219,112690529,0
+220,113599929,0
+221,114435653,0
+222,115451071,0
+223,116019399,0
+224,118209234,0
+225,118498232,0
+226,118869874,0
+227,121026313,0
+228,121877671,0
+229,122526019,0
+230,124622589,0
+231,125329992,0
+232,125712863,0
+233,128565912,0
+234,129207957,0
+235,129014426,0
+236,130506882,0
+237,131564620,0
+238,133159423,0
+239,135746194,0
+240,135391241,0
+241,136423567,0
+242,138423941,0
+243,137869803,0
+244,139015544,0
+245,141082056,0
+246,142521176,0
+247,143470145,0
+248,145215578,0
+249,145310550,0
+250,147534959,0
+251,147367762,0
+252,150071550,0
+253,150447868,0
+254,150310879,0
+255,152852991,0
+256,153431975,0
+257,156023450,0
+258,155816919,0
+259,156953943,0
+260,159305632,0
+261,158833194,0
+262,161897033,0
+263,162013236,0
+264,163892833,0
+265,165398016,0
+266,167210911,0
+267,166414312,0
+268,168126962,0
+269,170206884,0
+270,170665262,0
+271,171753788,0
+272,174144724,0
+273,173957088,0
+274,176920906,0
+275,176177326,0
+276,178111617,0
+277,179761842,0
+278,180416235,0
+279,182448091,0
+280,183046010,0
+281,184814359,0
+282,186091155,0
+283,187213628,0
+284,188703360,0
+285,189845555,0
+286,191027143,0
+287,192272702,0
+288,194540938,0
+289,195220233,0
+290,195688903,0
+291,198019661,0
+292,198401266,0
+293,200910754,0
+294,201759912,0
+295,203771906,0
+296,205275701,0
+297,207330835,0
+298,207013745,0
+299,209191527,0
+300,210028199,0
+301,212227422,0
+302,212966983,0
+303,214975334,0
+304,216344860,0
+305,217971870,0
+306,220196909,0
+307,221360821,0
+308,221624553,0
+309,223506111,0
+310,226282545,0
+311,227791500,0
+312,229149804,0
+313,230739598,0
+314,232376233,0
+315,231510973,0
+316,235912709,0
+317,235812991,0
+318,237250044,0
+319,240505372,0
+320,240647939,0
+321,241004751,0
+322,243558033,0
+323,245247098,0
+324,248825516,0
+325,248703038,0
+326,249719354,0
+327,252560497,0
+328,253504073,0
+329,254012506,0
+330,256242479,0
+331,258053446,0
+332,259395019,0
+333,260663695,0
+334,261522854,0
+335,264648598,0
+336,264548953,0
+337,268535320,0
+338,269428108,0
+339,270048703,0
+340,273881217,0
+341,275349864,0
+342,275948040,0
+343,277894191,0
+344,280427736,0
+345,282088383,0
+346,282750451,0
+347,283515664,0
+348,285788489,0
+349,285948937,0
+350,288145633,0
+351,289595445,0
+352,292192661,0
+353,294501096,0
+354,293727516,0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+72 379,105161,0
+72
+72 381,54859,0
+72 382,108747,0
+72 383,107326,0
+72
+72 385,55314,0
+72 386,53836,0
+72 387,105196,0
+72 388,52867,0
+72 389,55674,0
+72 390,445194,0
+72
+72 392,55387,0
+72 393,54247,0
+72 394,101600,0
+72 395,51886,0
+72 396,54853,0
+72 397,54640,0
+72 398,106447,0
+72
+72 400,108641,0
+72 401,52658,0
+72 402,105436,0
+72 403,400599,0
+72
+72 405,55193,0
+72 406,55546,0
+72 407,102062,0
+72
+72
+72
+72 411,52923,0
+72 412,479866,0
+72 413,505335,0
+72 414,491352,0
+72 415,491440,0
+72 416,492677,0
+72 417,489321,0
+72 418,484138,0
+72 419,493415,0
+72 420,533392,0
+72 421,486588,0
+72 422,486254,0
+72 423,485899,0
+72 424,486276,0
+72 425,486172,0
+72 426,497436,0
+72 427,503107,0
+72 428,501357,0
+72 429,528770,0
+72 430,520334,0
+72 431,493268,0
+72 432,530403,0
+72 433,525264,0
+72 434,500691,0
+72 435,561089,0
+72 436,562430,0
+72 437,536930,0
+72 438,531228,0
+72 439,546564,0
+72 440,539857,0
+72 441,533602,0
+72 442,531261,0
+72 443,541730,0
+72 444,545589,0
+72 445,550999,0
+72 446,553830,0
+72 447,544739,0
+72 448,548562,0
+72 449,571789,0
+72 450,564380,0
+72 451,537320,0
+72 452,555181,0
+72 453,542023,0
+72 454,547990,0
+72 455,547844,0
+72 456,555225,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 457,591596,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 458,608137,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 459,545183,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 460,624097,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 461,606936,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 463,605234,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 464,599771,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 465,616381,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 466,617293,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 467,608497,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 468,606983,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 469,563386,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 470,575876,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 471,540163,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 472,540530,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 473,601758,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 475,605072,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 476,617577,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 477,601788,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 478,600280,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 480,602321,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 481,627311,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 482,621658,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 483,600089,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 484,76835,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 485,608977,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 487,608006,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 488,608578,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 489,609191,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 490,621518,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 491,634507,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 492,611723,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 494,617559,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 495,597942,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 496,617114,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 497,641994,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 498,636314,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 499,632543,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 500,619771,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 501,625467,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 502,642811,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 503,645747,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 504,637379,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 505,628866,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 506,624093,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 507,639611,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 508,619810,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 509,628760,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 510,638270,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 511,650481,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 512,628769,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 513,629089,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 514,647881,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 515,620622,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 516,630921,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 517,652126,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 518,631829,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 519,658705,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 520,652279,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 521,631604,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 522,621438,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 523,621997,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 524,622048,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 525,647889,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 526,652444,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 527,644399,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 528,644393,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 529,658390,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 530,632620,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 531,626776,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 532,623359,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 533,649309,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 534,635937,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 535,661659,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 536,641204,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 537,655225,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 538,660257,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 539,656479,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 540,642747,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 541,642289,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 542,655991,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 543,655418,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 544,658486,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 545,664912,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 546,666871,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 547,666854,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 548,667852,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 549,644502,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 550,640086,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 551,659894,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 552,669809,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 553,667267,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 554,641918,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 555,645269,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 556,652400,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 557,670240,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 558,650401,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 559,660385,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 560,652738,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 561,665133,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 562,635052,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 563,668577,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 564,638502,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 565,672832,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 566,673601,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 567,654358,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 568,680110,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 569,642343,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 570,663078,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 571,643216,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 572,653730,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 573,680818,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 574,676805,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 575,674493,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 576,656868,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 577,658593,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 578,677499,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 579,677004,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 580,659310,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 581,645307,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 582,680089,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 583,659189,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 584,678563,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 585,661121,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 586,651094,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 587,655117,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 588,648646,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 589,679986,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 590,677004,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 591,681913,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 592,683157,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 593,665096,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 594,682152,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 595,670216,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 596,686334,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 597,662597,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 598,691706,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 599,678450,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 600,686125,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 601,663917,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 602,660279,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 603,667309,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 604,658511,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 605,656566,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 606,662056,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 607,655226,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 608,644592,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 609,668462,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 610,657759,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 611,667104,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 612,659325,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 613,670675,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 614,683985,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 615,628272,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 616,662631,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 617,666540,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 618,667098,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 619,663603,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 620,679604,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 621,675381,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 622,657789,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 623,665747,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 624,674654,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 625,695946,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 626,650310,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 627,691966,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 628,682530,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 629,694639,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 630,662481,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 631,681290,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 632,665331,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 633,657030,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 634,675061,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 635,679934,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 636,681326,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 637,694565,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 638,652909,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 639,666494,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 640,667418,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 641,680269,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 642,661551,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 643,681034,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 644,669137,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 645,648124,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 646,668046,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 647,664384,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 648,672304,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 649,692077,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 650,684700,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 651,693901,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 652,692098,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 653,672237,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 654,692320,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 655,700704,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 656,682311,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 657,658250,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 658,684348,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 659,659890,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 660,683075,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 661,658083,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 662,666204,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 663,639664,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 664,689168,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 665,666562,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 666,690059,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 667,700154,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 668,655005,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 669,690690,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 670,681735,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 671,682499,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 672,657799,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 673,686775,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 674,695522,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 675,653566,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 676,645682,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 677,707097,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 678,655560,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 679,655142,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 680,679881,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 681,687350,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 682,677159,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 683,657467,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 684,666300,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 685,654714,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 686,687823,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 687,676151,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 688,680126,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 689,690363,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 690,694932,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 691,691438,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 692,696066,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 693,661451,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 694,672710,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 695,692876,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 696,670777,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 697,642907,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 698,705156,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 699,656711,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 700,711828,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 701,661737,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 702,675091,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 703,675582,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 704,656961,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 705,654463,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 706,673169,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 707,709421,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 708,696338,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 709,650145,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 710,653716,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 711,683960,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 712,696938,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 713,685417,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 714,682248,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 715,665808,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 716,689847,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 717,664675,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 718,653929,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 719,687574,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 720,700347,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 721,681918,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 722,687779,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 723,697263,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 724,653780,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 725,666600,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 726,651936,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 727,700841,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 728,669069,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 729,666240,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 730,701163,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 731,657768,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 732,695499,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 733,701669,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 734,686942,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 735,640451,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 736,656602,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 737,656385,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 738,698779,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 739,702172,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 740,702684,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 741,691333,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 742,656415,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 743,667177,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 744,678845,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 745,706503,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 746,682911,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 747,694485,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 748,644282,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 749,696342,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 750,698137,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 751,712963,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 752,693147,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 753,671853,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 754,675213,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 755,662013,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 756,645228,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 757,664918,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 758,667178,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 759,690002,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 760,703241,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 761,705502,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 762,679741,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 763,704658,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 764,665212,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 765,730972,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 766,701226,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 767,681538,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 768,708793,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 769,730335,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 770,704134,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 771,683100,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 772,725133,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 773,695338,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 774,725789,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 775,691952,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 776,650687,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 777,706134,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 778,677567,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 779,701194,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 780,658556,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 781,613871,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 782,125706,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 783,692162,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 784,666863,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 785,126286,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 786,640161,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 787,130112,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 788,711225,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 789,708148,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 790,717543,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 791,698700,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 792,703635,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 793,684999,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 794,720096,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 795,722404,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 796,683703,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 797,718942,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 798,704713,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 799,714292,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 800,696725,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 801,721457,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 802,693210,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 803,691372,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 804,708824,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 805,710515,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 806,726874,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 807,696245,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 808,714423,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 809,713638,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 810,740460,0
+Max. #objects: 16515072 Trying to allocate for do-all helper: 825.000122 MB 72 811,687953,0
+72 812,694153,0
+72 813,652805,0
+72 814,117082,0
+72 815,653218,0
+72 816,119101,0
+72 817,660614,0
+72 818,116784,0
+72 819,660844,0
+72 820,638375,0
+72 821,724640,0
+72 822,122119,0
+72 823,671693,0
+72 824,703333,0
+72 825,729357,0
+72 826,708698,0
+72 827,640406,0
+72 828,690432,0
+72 829,652942,0
+72 830,652263,0
+72 831,638487,0
+72 832,675710,0
+72 833,640610,0
+72 834,689243,0
+72 835,736270,0
+72 836,119571,0
+72 837,699511,0
+72 838,604845,0
+72 839,613127,0
+72 840,648380,0
+72 841,122335,0
+72 842,704593,0
+72 843,650771,0
+72 844,118981,0
+72 845,655633,0
+72 846,128748,0
+72 847,717316,0
+72 848,123959,0
+72 849,714202,0
+72 850,699836,0
+72 851,681386,0
+72 852,729963,0
+72 853,713449,0
+72 854,724926,0
+72 855,724306,0
+72 856,697940,0
+72 857,679678,0
+72 858,729002,0
+72 859,712042,0
+72 860,716408,0
+72 861,698683,0
+72 862,695206,0
+72 863,712704,0
+72 864,701490,0
+72 865,709023,0
+72 866,708289,0
+72 867,128268,0
+72 868,117689,0
+72 869,118839,0
+72 870,114467,0
+72 871,119034,0
+72 872,119493,0
+72 873,666420,0
+72 874,129347,0
+72 875,115622,0
+72 876,122675,0
+72 877,119426,0
+72 878,122824,0
+72 879,119367,0
+72 880,124181,0
+72 881,120188,0
+72 882,123989,0
+72 883,118085,0
+72 884,124854,0
+72 885,120510,0
+72 886,125530,0
+72 887,122206,0
+72 888,125975,0
+72 889,117384,0
+72 890,126868,0
+72 891,117788,0
+72 892,127237,0
+72 893,118121,0
+72 894,128097,0
+72 895,118081,0
+72 896,128820,0
+72 897,118290,0
+72 898,129498,0
+72 899,118519,0
+72 900,131165,0
+72 901,124040,0
+72 902,131093,0
+72 903,119862,0
+72 904,131595,0
+72 905,121509,0
+72 906,131842,0
+72 907,119662,0
+72 908,132960,0
+72 909,119989,0
+72 910,133534,0
+72 911,120068,0
+72 912,134495,0
+72 913,120523,0
+72 914,134826,0
+72 915,120799,0
+72 916,135594,0
+72 917,121152,0
+72 918,135985,0
+72 919,121155,0
+72 920,136578,0
+72 921,121789,0
+72 922,137284,0
+72 923,121790,0
+72 924,138115,0
+72 925,122156,0
+72 926,138835,0
+72 927,121857,0
+72 928,139404,0
+72 929,122267,0
+72 930,140221,0
+72 931,122639,0
+72 932,140589,0
+72 933,122722,0
+72 934,141434,0
+72 935,123120,0
+72 936,142517,0
+72 937,123973,0
+72 938,143072,0
+72 939,123289,0
+72 940,144172,0
+72 941,124136,0
+72 942,144441,0
+72 943,124746,0
+72 944,145064,0
+72 945,125097,0
+72 946,146050,0
+72 947,125137,0
+72 948,146467,0
+72 949,125883,0
+72 950,147814,0
+72 951,126343,0
+72 952,148382,0
+72 953,126379,0
+72 954,150993,0
+72 955,126756,0
+72 956,151539,0
+72 957,127342,0
+72 958,152614,0
+72 959,127581,0
+72 960,153260,0
+72 961,128446,0
+72 962,152334,0
+72 963,136977,0
+72 964,155447,0
+72 965,128781,0
+72 966,156647,0
+72 967,128987,0
+72 968,157025,0
+72 969,139621,0
+72 970,158265,0
+72 971,129621,0
+72 972,159273,0
+72 973,131363,0
+72 974,160486,0
+72 975,131606,0
+72 976,161904,0
+72 977,132101,0
+72 978,162065,0
+72 979,132955,0
+72 980,163536,0
+72 981,133732,0
+72 982,164401,0
+72 983,134536,0
+72 984,166061,0
+72 985,136271,0
+72 986,168537,0
+72 987,137603,0
+72 988,169986,0
+72 989,137948,0
+72 990,171280,0
+72 991,138799,0
+72 992,172535,0
+72 993,139891,0
+72 994,174460,0
+72 995,140685,0
+72 996,175054,0
+72 997,141755,0
+72 998,176650,0
+72 999,143073,0
+72 1000,175908,0
+72 1001,143290,0
+72 1002,177201,0
+72 1003,144940,0
+72 1004,180299,0
+72 1005,146286,0
+72 1006,181907,0
+72 1007,147498,0
+72 1008,180718,0
