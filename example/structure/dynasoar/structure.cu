@@ -395,7 +395,8 @@ int main(int /*argc*/, char** /*argv*/) {
 #ifdef OPTION_DEFRAG
     if (i % 50 == 0) {
       defrag();
-      printf("%i\n", (int) allocator_handle->DBG_used_slots<Node>());
+      //printf("%i %i\n", (int) allocator_handle->DBG_used_slots<Node>(),
+      //                  (int) allocator_handle->DBG_used_slots<AnchorPullNode>());
     }
 #endif  // OPTION_DEFRAG
 
