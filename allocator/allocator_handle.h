@@ -6,6 +6,14 @@
 #include "allocator/util.h"
 #include "bitmap/bitmap.h"
 
+// Temp variable for data transfers.
+__device__ BlockIndexT d_tmp_var;
+
+template<typename AllocatorT, BlockIndexT (AllocatorT::*func)()>
+__global__ void kernel_store_in_tmp_var(AllocatorT* allocator) {
+  d_tmp_var = (allocator->*func)();
+}
+
 template<typename AllocatorT>
 __global__ void init_allocator_kernel(AllocatorT* allocator,
                                       char* data_buffer) {
@@ -81,6 +89,32 @@ class AllocatorHandle {
 
   long unsigned int DBG_get_enumeration_time() {
     return allocator_->DBG_get_enumeration_time();
+  }
+
+  template<typename T>
+  BlockIndexT DBG_allocated_slots() {
+    kernel_store_in_tmp_var<AllocatorT,
+                            &AllocatorT::template DBG_allocated_slots<T>>(
+        allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    BlockIndexT result;
+    cudaMemcpyFromSymbol(&result, d_tmp_var, sizeof(BlockIndexT), 0,
+                         cudaMemcpyDeviceToHost);
+    return result;
+  }
+
+  template<typename T>
+  BlockIndexT DBG_used_slots() {
+    kernel_store_in_tmp_var<AllocatorT,
+                            &AllocatorT::template DBG_used_slots<T>>(
+        allocator_);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    BlockIndexT result;
+    cudaMemcpyFromSymbol(&result, d_tmp_var, sizeof(BlockIndexT), 0,
+                         cudaMemcpyDeviceToHost);
+    return result;
   }
 
   void DBG_collect_stats() {
