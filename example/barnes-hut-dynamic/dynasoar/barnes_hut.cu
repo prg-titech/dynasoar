@@ -90,8 +90,8 @@ __DEV__ double NodeBase::distance_to(NodeBase* other) {
 __DEV__ void NodeBase::apply_force(BodyNode* body) {
   // Update `body`.
   if (body != this) {
-    double dx = body->pos_x() - pos_x_;
-    double dy = body->pos_y() - pos_y_;
+    double dx = pos_x_ - body->pos_x();
+    double dy = pos_y_ - body->pos_y();
     double dist = sqrt(dx*dx + dy*dy);
     double F = kGravityConstant * mass_ * body->mass()
         / (dist * dist + kDampeningFactor);
@@ -127,7 +127,7 @@ __DEV__ void NodeBase::check_apply_force(BodyNode* body) {
 
 
 __DEV__ void TreeNode::check_apply_force(BodyNode* body) {
-  if (distance_to(body) <= kDistThreshold) {
+  if (contains(body) || distance_to(body) <= kDistThreshold) {
     // Too close. Recurse.
     for (int i = 0; i < 4; ++i) {
       if (children_[i] != nullptr) {

@@ -5,8 +5,14 @@
 
 
 // Constants for rendering.
-static const int kWindowWidth = 500;
-static const int kWindowHeight = 500;
+#ifdef PARAM_RENDER_SCALE
+static const float kRenderScale = PARAM_RENDER_SCALE;
+#else
+static const float kRenderScale = 1.0f;
+#endif  // PARAM_RENDER_SCALE
+
+static const int kWindowWidth = 500*kRenderScale;
+static const int kWindowHeight = 500*kRenderScale;
 
 // SDL rendering variables.
 SDL_Window* window = nullptr;
@@ -15,7 +21,7 @@ SDL_Renderer* renderer = nullptr;
 static void render_rect(SDL_Renderer* renderer, float x, float y, float mass,
                         float max_mass) {
   SDL_Rect rect;
-  rect.w = rect.h = 5;
+  rect.w = rect.h = 5*kRenderScale;
   rect.x = (x/2 + 0.5) * kWindowWidth - rect.w/2;
   rect.y = (y/2 + 0.5) * kWindowHeight - rect.h/2;
 
