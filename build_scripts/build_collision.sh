@@ -10,22 +10,31 @@ args=""
 optimizations="-O3 -DNDEBUG"
 allocator="dynasoar"
 
-while getopts "h?x:rda:s:m:" opt; do
+while getopts "h?x:rda:s:m:i:t:c:" opt; do
     case "$opt" in
     h|\?)
         echo "Optional arguments:"
         echo "  -a ALLOC    Choose allocator. Possible values:"
         echo "              bitmap, cuda, dynasoar (default), halloc, mallocmc"
+        echo "  -c SCALE    Rendering scaling factor"
         echo "  -d          Debug mode"
+        echo "  -i ITER     Number of iterations"
         echo "  -m NUM      Max. #objects (of the smallest type)"
         echo "  -r          Render visualization"
         echo "  -s BYTES    Heap size (for allocators different from dynasoar)"
+        echo "  -t DT       Time step length (delta t)"
         echo "  -x SIZE     Size (#bodies)"
         echo ""
         echo "Example: ${0} -x 1000"
         exit 0
         ;;
     x)  args="${args} -DPARAM_SIZE=${OPTARG}"
+        ;;
+    i)  args="${args} -DPARAM_NUM_ITER=${OPTARG}"
+        ;;
+    t)  args="${args} -DPARAM_DELTA_T=${OPTARG}"
+        ;;
+    c)  args="${args} -DPARAM_RENDER_SCALE=${OPTARG}"
         ;;
     r)  args="${args} -DOPTION_RENDER -lSDL2 example/collision/rendering.cu"
         ;;

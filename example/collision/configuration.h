@@ -12,8 +12,19 @@ static const int kNumBodies = 40000;
 
 static const float kMaxMass = 75;
 static const int kSeed = 42;
-static const float kTimeInterval = 0.05;
+
+#ifdef PARAM_DELTA_T
+static const float kTimeInterval = PARAM_DELTA_T;
+#else
+static const float kTimeInterval = 0.05f;
+#endif  // PARAM_DELTA_T
+
+#ifdef PARAM_NUM_ITER
+static const int kIterations = PARAM_NUM_ITER;
+#else
 static const int kIterations = 2000;
+#endif  // PARAM_NUM_ITER
+
 static const float kDampeningFactor = 0.05f;
 
 // Physical constants.

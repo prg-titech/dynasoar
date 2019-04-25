@@ -4,8 +4,14 @@
 #include "rendering.h"
 
 // Constants for rendering.
-static const int kWindowWidth = 500;
-static const int kWindowHeight = 500;
+#ifdef PARAM_RENDER_SCALE
+static const float kRenderScale = PARAM_RENDER_SCALE;
+#else
+static const float kRenderScale = 1.0f;
+#endif  // PARAM_RENDER_SCALE
+
+static const int kWindowWidth = 500*kRenderScale;
+static const int kWindowHeight = 500*kRenderScale;
 static const int kMaxRect = 20;
 
 // SDL rendering variables.
