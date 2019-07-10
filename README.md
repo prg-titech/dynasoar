@@ -1,12 +1,14 @@
 # DynaSOAr: A CUDA Framework for Single-Method Multiple-Objects Applications
-SMMO (Single-Method Multiple-Objects) is a wide-spread pattern of parallel, object-oriented, high-performance code. It is OOP-speech for SIMD (Single-Instruction Multiple-Data) and means that a method should be executed for all objects of a type.
+SMMO (Single-Method Multiple-Objects) is a wide-spread pattern of parallel, object-oriented, high-performance code. It is OOP-speech for SIMD (Single-Instruction Multiple-Data) and means that a method should be executed for all objects of a type. 
+
+DynaSOAr comes with a parallel, lock-free, dynamic memory allocator that lets programmers create/delete objects in device code. In contrast to other allocators, this allocator is an *object allocator* for structured data. While other allocators allocate *X number of bytes*, this allocator can only allocate objects of C++ classes/structs that were defined within DynaSOAr. This allows us to apply additional data layout optimizations.
 
 As an example, an nbody simulation consists of `n` body objects, for each of which a `move` method for computing the next position of a body should be executed. DynaSOAr is a CUDA framework (C++ template library) that facilitates the development of such programs. The four main features of DynaSOAr are:
 
-* SOA Data Layout: Objects are stored in the SIMD-friendly Structure of Arrays data layout. Other layouts may be supported in the future.
-* Dynamic Memory Management on Device: New objects can be created at any time in the CUDA kernel and existing objects can be deleted (`new`/`delete`).
-* Parallel Enumeration: DynaSOAr provides an efficient way to run a member function (method) for all objects of a type in parallel.
-* Memory Defragmentation: Can lower overall memory usage and speed up application code in the object space becomes to fragmented.
+* **SOA Data Layout:** Objects are stored in the SIMD-friendly Structure of Arrays data layout. Other layouts may be supported in the future.
+* **Dynamic Memory Management on Device:** New objects can be created at any time in the CUDA kernel and existing objects can be deleted (`new`/`delete`).
+* **Parallel Enumeration:** DynaSOAr provides an efficient way to run a member function (method) for all objects of a type in parallel.
+* **Memory Defragmentation:** Can lower overall memory usage and speed up application code in the object space becomes to fragmented.
 
 ## Documentation/Papers
 * Matthias Springer. [CompactGpu: Massivey GPU Memory Compaction](http://m-sp.org/downloads/pldi_2019_src.pdf). ACM Student Research Competition (PLDI 2019).
