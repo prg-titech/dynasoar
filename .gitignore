@@ -54,3 +54,7 @@ bin/
 *.pc
 
 benchmark_results.csv
+demo
+html
+output.txt
+

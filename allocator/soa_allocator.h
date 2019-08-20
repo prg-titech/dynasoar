@@ -19,23 +19,57 @@
 #include "allocator/util.h"
 
 
-// TODO: Fix visibility.
+/**
+ * This is a device-side memory allocator. Objects of this class reside in the
+ * GPU memory. Objects of this class can be used to:
+ * - Allocate an object of a type among \p Types with placement-new syntax.
+ * - Deallocate an object that was previously allocated with the same
+ *   device-side memory allocator.
+ * - Initiate a device_do iteration.
+ * - Retrieve various kinds of debug information/allocator statistics.
+ * @tparam N_Objects The maximum number of objects of the smallest type (within
+ *                   \p Types) that can be allocated.
+ * @tparam Types A list (variadic template) of all types (structs/classes) that
+ *               are under the control of this allocator.
+ */
 template<BlockIndexT N_Objects, class... Types>
 class SoaAllocator {
  public:
+  /**
+   * An alias of this allocator type. Just for convenience.
+   */
   using ThisAllocator = SoaAllocator<N_Objects, Types...>;
+
+  /**
+   * Classes/structs that are under control of this allocator type should
+   * inherit from this class. They do not have to be a direct subclass of this
+   * class, but the inheritance hierarchy should termimate with this class.
+   */
   using Base = SoaBase<ThisAllocator>;
 
+  /**
+   * The maximum number of objects per block. Currently fixed at 64.
+   */
   static const ObjectIndexT kNumBlockElements = 64;
-  static const uint64_t kBlockAddrBitmask = 0xFFFFFFFFFFC0;
   static_assert(kNumBlockElements == 64,
                 "Not implemented: Block size != 64.");
+
+  /**
+   * A bitmask of bits that contain the block address within a fake pointer.
+   */
+  static const uint64_t kBlockAddrBitmask = PointerHelper::kBlockPtrBitmask;
+
+  /**
+   * The number of blocks that the heap consists of.
+   */
   static const BlockIndexT N = N_Objects / kNumBlockElements;
 
+  // N_Objects must be a multiple of 64.
   static_assert(N_Objects % kNumBlockElements == 0,
                 "N_Objects Must be divisible by BlockSize.");
 
 
+// Is memory defragmentation activated? (Check CompactGpu ISMM paper.)
 #ifdef OPTION_DEFRAG
   // ---- Defragmentation (soa_defrag.inc) ----
   template<typename T, int NumRecords>
@@ -48,6 +82,7 @@ class SoaAllocator {
            typename FieldT>
   __DEV__ void maybe_rewrite_pointer(FieldT* scan_location);
 
+// Are we using forwarding pointers to rewrite pointers?
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
   template<typename T>
   __DEV__ void defrag_update_block_state();
@@ -89,15 +124,28 @@ class SoaAllocator {
 #endif  // OPTION_DEFRAG
 
   // ---- Debugging (soa_debug.inc) ----
+  /**
+   * Counts the number of allocated allocated object slots of type \p T, i.e.,
+   * slots of allocated blocks that do not contain an object.
+   */
   template<class T>
   __DEV__ BlockIndexT DBG_allocated_slots();
 
+  /**
+   * Counts the number used object slots of type \p T.
+   */
   template<class T>
   __DEV__ BlockIndexT DBG_used_slots();
 
+  /**
+   * A wrapper around DBG_allocated_slots that can be called from host code.
+   */
   template<class T>
   BlockIndexT DBG_host_allocated_slots();
 
+  /**
+   * A wrapper around DBG_used_slots that can be called from host code.
+   */
   template<class T>
   BlockIndexT DBG_host_used_slots();
 
