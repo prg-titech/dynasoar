@@ -529,6 +529,8 @@ class SoaAllocator {
    * objects of type \p IterT, not taking into account subclasses of \p IterT.
    * The parameter \p Scan indicates whether this operation should be preceded
    * by a bitmap scan operation.
+   * - Spawns a CUDA kernel.
+   * - Enumerates only objects that exist at invocation time.
    * @tparam IterT Enumerate objects of this type.
    * @tparam T Class in which the function is defined.
    * @tparam func Function to be run for each object.
@@ -547,6 +549,7 @@ class SoaAllocator {
    * objects of type \p IterT, not taking into account subclasses of \p IterT.
    * The parameter \p Scan indicates whether this operation should be preceded
    * by a bitmap scan operation. \p func takes an argument of type \p P1.
+   * See parallel_do_single_type() for details.
    * TODO: Generate versions with more than one argument with template pattern
    *       matching.
    * @tparam IterT Enumerate objects of this type.
@@ -598,10 +601,15 @@ class SoaAllocator {
         ::template InnerHelper>(this, p1);
   }
 
-  // Call a member function on all objects of type.
-  // Device version (sequential).
-  // TODO: This does not enumerate subtypes.
-  // TODO: This also enumerates newly-created objects.
+  /**
+   * Device do: Run a member function \p func on all objects of type \p in the
+   * current GPU thread.
+   * TODO: This function should also enumerate subtypes and omit newly created
+   * objects.
+   * @tparam T Class of objects that should be enumerated.
+   * @tparam F Function to be run for each object.
+   * @tparam Args Types of parameters of \p F.
+   */
   template<class T, typename F, typename... Args>
   __DEV__ void device_do(F func, Args... args) {
     // device_do iterates over objects in a block.
@@ -610,6 +618,12 @@ class SoaAllocator {
         func, this, args...);
   }
 
+  /**
+   * Initializes a parallel do-all operation. This function should be run
+   * before each parallel do-all. It sets the object iteration bitmap of every
+   * allocated block of type \p T to its object allocation bitmap.
+   * @tparam T Class of objects that should be enumerated.
+   */
   template<typename T>
   __DEV__ void initialize_iteration() {
     const auto num_blocks = allocated_[BlockHelper<T>::kIndex].scan_num_bits();
@@ -624,8 +638,16 @@ class SoaAllocator {
     }
   }
 
-  // Only executed by one thread per warp. Request are already aggregated when
-  // reaching this function.
+  /**
+   * Reserves one or multiple object slots in a block. Due to allocation
+   * request coalescing, this function is executed by only one GPU thread.
+   * @tparam T Type of objects to be allocated.
+   * @param free_bitmap_ptr A pointer to the object allocation bitmap of the
+   *                        block. Note: DynaSOAr actually maintains free
+   *                        bitmaps instead of allocation bitmaps.
+   * @param alloc_size The number of objects to be allocated (in the warp).
+   * @param block_idx The index of the block in which objects are allocated.
+   */
   template<typename T>
   __DEV__ BlockBitmapT allocate_in_block(BlockBitmapT* free_bitmap_ptr,
                                          int alloc_size, BlockIndexT block_idx) {
@@ -697,7 +719,15 @@ class SoaAllocator {
     return selected_bits;
   }
 
-  // Note: Assuming that the block is leq_50_!
+  /**
+   * Deallocates a block, i.e., turns the block into a free block. This
+   * function merely updates block state bitmaps and assumes that the block
+   * is already invalidated. By default, it assumes that the block is a
+   * defragmentation candidate.
+   * @tparam T Type of the block.
+   * @param block_idx The index of the block.
+   * @param dealloc_leq_50 Update defragmentation candidates bitmap?
+   */
   template<class T>
   __DEV__ void deallocate_block(BlockIndexT block_idx, bool dealloc_leq_50 = true) {
     // Precondition: Block is invalidated.
@@ -715,6 +745,12 @@ class SoaAllocator {
     ASSERT_SUCCESS(global_free_.allocate<true>(block_idx));
   }
 
+  /**
+   * Deallocates an object with a given fake pointer. This function assumes
+   * that the exact runtime type of the object is \p T (not a subtype).
+   * @tparam T Runtime type of the object.
+   * @param obj Fake pointer to the object.
+   */
   template<class T>
   __DEV__ void free_typed(T* obj) {
     obj->~T();
