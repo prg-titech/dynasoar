@@ -138,77 +138,238 @@ class SoaAllocator {
   __DEV__ BlockIndexT DBG_used_slots();
 
   /**
-   * A wrapper around DBG_allocated_slots that can be called from host code.
+   * A wrapper around DBG_allocated_slots() that can be called from host code.
    */
   template<class T>
   BlockIndexT DBG_host_allocated_slots();
 
   /**
-   * A wrapper around DBG_used_slots that can be called from host code.
+   * A wrapper around DBG_used_slots() that can be called from host code.
    */
   template<class T>
   BlockIndexT DBG_host_used_slots();
 
+  /**
+   * Prints statistics about the types of the allocator, including detailed
+   * information for about the structure of blocks.
+   *
+   * The following printing is produced by the wa-tor example program.
+\verbatim
+┌───────────────────────────────────────────────────────────────────────┐
+│ Smallest block type:                                            4Fish │
+│ Max. #objects:             262144                                     │
+│ Block size:                  3904 bytes                               │
+│ #Blocks:                     4096                                     │
+│ #Bitmap levels:                 2                                     │
+│ Data buffer size:     000015.250000 MB                                │
+│ Allocator overead:    000000.114670 MB + block overhead               │
+│ Total memory usage:   000015.364670 MB                                │
+└───────────────────────────────────────────────────────────────────────┘
+\endverbatim
+   * This box gives an overview of the state of the allocator.
+   * - The smallest type under control of this allocator is the C++ class Fish.
+   * - The size of the heap was chosen such that 262144 objects of class Fish
+   *   can be allocated.
+   * - The size of a block (bitmaps, data segment, etc.) is 3904 bytes. This
+   *   value corresponds to SoaAllocator::kBlockSizeBytes.
+   * - The heap consists of 4096 blocks. This value corresponds to
+   *   SoaAllocator::N.
+   * - Each block state bitmap has 2 levels.
+   * - The size of the data buffer (all blocks) is 15.25 MiB.
+   * - The overhead of the allocator (all block state bitmaps) is 0.11 MiB.
+   * - The total GPU memory consumption of the allocator is 15.36 MiB.
+   *
+\verbatim
+┌───────────────────────────────────────────────────────────────────────┐
+│ Block stats for                                5Shark (type ID     2) │
+├────────────────────┬──────────────────────────────────────────────────┤
+│ #fields            │        5                                         │
+│ #objects / block   │       60                                         │
+│ block size         │     3904 bytes                                   │
+│ base class         │                                           5Agent │
+│ is abstract        │        0                                         │
+│ data seg. [60] sz  │     3840 bytes                                   │
+│         (unpadded) │     3840 bytes                                   │
+│        (simple sz) │     3840 bytes                                   │
+│    (padding waste) │        0 bytes                                   │
+│ data seg. [ 1] sz  │       64 bytes                                   │
+│         (unpadded) │       64 bytes                                   │
+│ data seg. [64] sz  │     4096 bytes                                   │
+│         (unpadded) │     4096 bytes                                   │
+├────────────────────┴──────────────────────────────────────────────────┤
+│ Fields                                                                │
+├───────┬─────────────────┬───────────────────────┬──────────┬──────────┤
+│ Index │ Def. Class      │ Type                  │ Size     │ Offset   │
+├───────┼─────────────────┼───────────────────────┼──────────┼──────────┤
+│     1 │          5Shark │                     j │        4 │       60 │
+│     0 │          5Shark │                     j │        4 │       56 │
+│     2 │          5Agent │                     i │        4 │       52 │
+│     1 │          5Agent │                     i │        4 │       48 │
+│     0 │          5Agent │   17curandStateXORWOW │       48 │        0 │
+├───────┼─────────────────┼───────────────────────┼──────────┼──────────┤
+│     Σ │                 │                       │       64 │          │
+└───────┴─────────────────┴───────────────────────┴──────────┴──────────┘
+\endverbatim
+   * There is a box with block structure information for each type that is
+   * under control of the allocator.
+   * - This box shows information about blocks of C++ class Shark.
+   * - This class has 3 fields.
+   * - Block of this type have a size of 3904 bytes. Note that the block size
+   *   of each type is always smaller or equal to 3904, as shown above.
+   * - This class inherits from class Agent.
+   * - This class is not abstract.
+   * - The data segment of blocks of this type have a size of 3840 bytes.
+   * - If "(unpadded)" is smaller than "data seg. [x] sz", then at least one
+   *   SOA array was padded such that the array is properly aligned.
+   * - The box also shows detailed information about each field, including
+   *   fields that were inherited from class Agent. Primitive types are
+   *   currently not properly printed. E.g., "j" means float and "i" means int.
+   */
   static void DBG_print_stats();
 
+  /**
+   * Calculates the overall fragmentation rate of the heap. The fragmentation
+   * rate is defined as the fraction of allocated but unused object slots
+   * among all allocated object slots. See ECOOP paper for details.
+   */
   __DEV__ float DBG_calculate_fragmentation();
 
+  /**
+   * Prints detailed statistics about the state of the allocator and the heap.
+\verbatim
+┌────┬──────────┬──────────┬──────────┬┬──────────┬──────────┬──────────┐
+│ Ty │ #B_alloc │ #B_leq50 │ #B_activ ││ #O_alloc │  #O_used │   O_frag │
+├────┼──────────┼──────────┼──────────┼┼──────────┼──────────┼──────────┤
+│ fr │     1320 │      n/a │      n/a ││      n/a │      n/a │      n/a │
+│  0 │        0 │        0 │        0 ││        0 │        0 │ 0.000000 │
+│  1 │     2224 │        0 │     2141 ││   142336 │   133631 │ 0.061158 │
+│  2 │      552 │        0 │      411 ││    33120 │    12478 │ 0.623249 │
+│  Σ │     2776 │        0 │     2552 ││   175456 │   146109 │ 0.167261 │
+└────┴──────────┴──────────┴──────────┴┴──────────┴──────────┴──────────┘
+\endverbatim
+   * In the above example, there is one line for each type that is under
+   * control of the allocator.
+   * - B_alloc: Number of allocated blocks
+   * - B_leq50: Number of defragmentation candidates
+   * - B_activ: Number of active blocks
+   * - O_alloc: Number of allocated object slots
+   * - O_used:  Number of used object slots. Always >= O_alloc.
+   * - O_frag:  Fragmentation rate: 1 - (O_used / O_alloc)
+   * - Type fr: Free blocks
+   */
   __DEV__ void DBG_print_state_stats();
 
+  /**
+   * Can be called after each parallel do-all operation to determine the
+   * maximum heap usage and fragmentation rate throughout the application
+   * runtime.
+   */
   __DEV__ void DBG_collect_stats();
 
+  /**
+   * Print statistics that were gathered by DBG_collect_stats().
+   */
   __DEV__ void DBG_print_collected_stats();
 
+  /**
+   * A wrapper around DBG_calculate_fragmentation() that can be called from
+   * host code.
+   */
   float DBG_host_calculate_fragmentation();
 
-  // TODO: Consider moving out of soa_debug.inc.
+  /**
+   * Checks if the type encoded in the fake pointer \p ptr is \p T.
+   * TODO: Consider moving out of soa_debug.inc.
+   */
   template<class T>
   __DEV__ static bool is_type(const T* ptr);
 
+  /**
+   * Returns the time spent on enumeration during parallel do-all operations
+   * (e.g., bitmap scan). Parallel do-all automatically keeps track of this
+   * time.
+   */
   long unsigned int DBG_get_enumeration_time() {
-    // Microseconds to milliseconds.
     return bench_prefix_sum_time;
   }
   // ---- END ----
 
 
+  /**
+   * A helper class that provides useful aliases and constants for blocks of
+   * a certain type.
+   * @tparam T Block type
+   */
   template<typename T>
   struct BlockHelper {
     // SoaBase<> has size 1, everything else size 0.
     static_assert(sizeof(T) == 1,
                   "Unexpected superclass size.");
 
+    /**
+     * Index / type ID of \param T within this allocator.
+     */
     static const int kIndex = TYPE_INDEX(Types..., T);
 
+    /**
+     * Block capacity (max. number of objects per block).
+     */
     static const int kSize =
         SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
             ::k64BlockMinSize>::kSize;
 
-    // Data segment size. TODO: Rename.
+    /**
+     * Data segment size in bytes.
+     */
     static const int kBytes =
         SoaBlockSizeCalculator<T, kNumBlockElements, TupleHelper<Types...>
             ::k64BlockMinSize>::kBytes;
 
+    /**
+     * Block type alias.
+     */
     using BlockType = SoaBlock<T, kIndex, kSize>;
 
 #ifdef OPTION_DEFRAG
+    /**
+     * Defragmentation candidate threshold. If a block that more object then
+     * it is no longer a defragmentation candidate.
+     */
     static const int kLeq50Threshold = BlockType::kLeq50Threshold;
 #endif  // OPTION_DEFRAG
   };
 
+  /**
+   * 64-bit data type for bitmaps within a block (e.g., object allocation
+   * bitmap).
+   */
   using BlockBitmapT = unsigned long long int;
 
+  /**
+   * A helper class that determines the type ID of a type \p T.
+   */
   template<typename T>
   struct TypeId {
     static const TypeIndexT value = BlockHelper<T>::kIndex;
   };
 
+  /**
+   * Extracts the type ID from a fake pointer and returns it.
+   */
   __DEV__ static TypeIndexT get_type(const void* ptr) {
     auto type_id = PointerHelper::get_type(ptr);
     assert(type_id < kNumTypes);
     return type_id;
   }
 
+  /**
+   * Initializes the allocator (device memory).
+   * - All bits in the free block bitmap are initially 1.
+   * - All bits in the allocated/active block bitmaps are initially 0.
+   * - All bits in the defrag. candidate bitmaps are initially 0.
+   * \param data_buffer The data buffer that contains the heap (excl. block
+                        state bitmaps).
+   */
   __DEV__ void initialize(char* data_buffer) {
     global_free_.initialize(true);
     for (int i = 0; i < kNumTypes; ++i) {
@@ -238,7 +399,10 @@ class SoaAllocator {
   // Use initialize() instead of constructor to avoid zero-initialization.
   __DEV__ SoaAllocator() = delete;
 
-  // Allocate location and return pointer.
+  /**
+   * Allocates a new object of type \p T and returns a fake pointer to the
+   * object.
+   */
   template<class T>
   __DEV__ T* allocate_new() {
     T* result = nullptr;
@@ -323,12 +487,22 @@ class SoaAllocator {
     return result;
   }
 
-  // Allocate location, construct object and return pointer.
+  /**
+   * Allocates a new object of type \p T, runs the constructor and returns a
+   * fake pointer to the object. This is an alternative for object construction
+   * with the "new" keyword.
+   */
   template<typename T, typename... Args>
   __DEV__ T* make_new(Args&&... args) {
     return new(allocate_new<T>()) T(std::forward<Args>(args)...);
   }
 
+  /**
+   * Deallocates an object of type \p T or a subtype of \p T, given a fake
+   * pointer to the object. This function first determines the runtime type of
+   * the object and then calls free_typed<R>() with the runtime type R of
+   * \p obj.
+   */
   template<class T>
   __DEV__ void free(T* obj) {
     auto type_id = obj->get_type();
@@ -340,29 +514,64 @@ class SoaAllocator {
     }
   }
 
-  // Free object by type ID instead of type.
+  /**
+   * Deallocates an object given a fake pointer and the exact runtime type ID
+   * as a template parameter \p TypeIndex.
+   */
   template<int TypeIndex>
   __DEV__ void free_untyped(void* obj) {
     auto* typed = static_cast<TYPE_ELEMENT(Types, TypeIndex)*>(obj);
     free(typed);
   }
 
-  // Call a member functions on all objects of type IterT.
+  /**
+   * Parallel do-all: Run a member function \p func of class/struct \p T on all
+   * objects of type \p IterT, not taking into account subclasses of \p IterT.
+   * The parameter \p Scan indicates whether this operation should be preceded
+   * by a bitmap scan operation.
+   * @tparam IterT Enumerate objects of this type.
+   * @tparam T Class in which the function is defined.
+   * @tparam func Function to be run for each object.
+   * @tparam Scan Perform bitmap scan?
+   */
   template<class IterT, class T, void(T::*func)(), bool Scan>
   void parallel_do_single_type() {
-    ParallelExecutor<Scan, ThisAllocator, IterT, T, void, T>
+    ParallelExecutor<Scan, ThisAllocator, IterT, T>
+        ::template FunctionArgTypesWrapper<void, T>
         ::template FunctionWrapper<func>
         ::parallel_do(this, /*shared_mem_size=*/ 0);
   }
 
+  /**
+   * Parallel do-all: Run a member function \p func of class/struct \p T on all
+   * objects of type \p IterT, not taking into account subclasses of \p IterT.
+   * The parameter \p Scan indicates whether this operation should be preceded
+   * by a bitmap scan operation. \p func takes an argument of type \p P1.
+   * TODO: Generate versions with more than one argument with template pattern
+   *       matching.
+   * @tparam IterT Enumerate objects of this type.
+   * @tparam T Class in which the function is defined.
+   * @tparam func Function to be run for each object.
+   * @tparam P1 Type of parameter of \p func.
+   * @tparam Scan Perform bitmap scan?
+   */
   template<class IterT, class T, typename P1, void(T::*func)(P1), bool Scan>
   void parallel_do_single_type(P1 p1) {
-    ParallelExecutor<Scan, ThisAllocator, IterT, T, void, T, P1>
+    ParallelExecutor<Scan, ThisAllocator, IterT, T>
+        ::template FunctionArgTypesWrapper<void, T, P1>
         ::template FunctionWrapper<func>
         ::parallel_do(this, /*shared_mem_size=*/ 0, p1);
   }
 
-  // Call a member function on all objects of type T and its subclasses.
+  /**
+   * Parallel do-all: Run a member function \p func of class/struct \p T on all
+   * objects of type \p T, also taking into account subclasses of \p T.
+   * The parameter \p Scan indicates whether this operation should be preceded
+   * by a bitmap scan operation.
+   * @tparam T Class in which the function is defined.
+   * @tparam func Function to be run for each object.
+   * @tparam Scan Perform bitmap scan?
+   */
   template<bool Scan, class T, void(T::*func)()>
   void parallel_do() {
     TupleHelper<Types...>
@@ -370,6 +579,18 @@ class SoaAllocator {
         ::template InnerHelper>(this);
   }
 
+  /**
+   * Parallel do-all: Run a member function \p func of class/struct \p T on all
+   * objects of type \p T, also taking into account subclasses of \p T.
+   * The parameter \p Scan indicates whether this operation should be preceded
+   * by a bitmap scan operation. \p func takes an argument of type \p P1.
+   * TODO: Generate versions with more than one argument with template pattern
+   *       matching.
+   * @tparam T Class in which the function is defined.
+   * @tparam func Function to be run for each object.
+   * @tparam P1 Type of parameter of \p func.
+   * @tparam Scan Perform bitmap scan?
+   */
   template<bool Scan, class T, typename P1, void(T::*func)(P1)>
   void parallel_do(P1 p1) {
     TupleHelper<Types...>
@@ -385,8 +606,8 @@ class SoaAllocator {
   __DEV__ void device_do(F func, Args... args) {
     // device_do iterates over objects in a block.
     allocated_[BlockHelper<T>::kIndex].enumerate(
-      &SequentialExecutor<T, F, ThisAllocator, Args...>::device_do,
-      func, this, args...);
+        &SequentialExecutor<T, F, ThisAllocator, Args...>::device_do,
+        func, this, args...);
   }
 
   template<typename T>
@@ -705,32 +926,67 @@ class SoaAllocator {
     return false;
   }
 
+  /**
+   * The number of types under control of this allocator.
+   */
   static const int kNumTypes = sizeof...(Types);
 
+  /**
+   * The size of block in bytes.
+   */
   static const int kBlockSizeBytes =
       sizeof(typename BlockHelper<typename TupleHelper<Types...>
              ::Type64BlockSizeMin>::BlockType);
 
+  /**
+   * Free block bitmap.
+   */
   Bitmap<BlockIndexT, N> global_free_;
 
+  /**
+   * Allocated block bitmaps (one per type).
+   */
   Bitmap<BlockIndexT, N> allocated_[kNumTypes];
 
+  /**
+   * Active block bitmaps (one per type).
+   */
   Bitmap<BlockIndexT, N> active_[kNumTypes];
 
 #ifdef OPTION_DEFRAG
-  // Bit set if block is <= 50% full and active.
-  // kCubScan preserves order of bits during scan.
+  /**
+   * Defragmentation candidate bitmaps (one per type). A bit is set in this
+   * bitmap if a block is <= 50% full (for defragmentation factor 1). We use a
+   * CUB prefix sum for bitmap scans because it preserves the order of set bit
+   * indices.
+   */
   Bitmap<BlockIndexT, N, unsigned long long int, kCubScan> leq_50_[kNumTypes];
+
+  /**
+   * Number of defragmentation candidates (one counter per type). This counter
+   * allows us to decide quickly if a defragmentation pass should be started.
+   */
   BlockIndexT num_leq_50_[kNumTypes];
 
-  // Temporary storage for defragmentation records.
+  /**
+   * Temporary storage for defragmentation records.
+   */
   SoaDefragRecords<BlockBitmapT, kMaxDefragRecords> defrag_records_;
 #endif  // OPTION_DEFRAG
 
+  /**
+   * The heap: An array of blocks.
+   */
   char* data_;
 
+  /**
+   * Number of blocks. TODO: Remove?
+   */
   static const BlockIndexT kN = N;
 
+  /**
+   * Size of the heap in bytes.
+   */
   static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
 };
 

@@ -90,62 +90,19 @@ struct ParallelDoTypeHelperP1 {
   };
 };
 
-template<bool Scan, typename AllocatorT, typename IterT, typename T,
-         typename R, typename Base, typename... Args>
+template<bool Scan, typename AllocatorT, typename IterT, typename T>
 struct ParallelExecutor {
   using BlockHelperIterT = typename AllocatorT::template BlockHelper<IterT>;
   static const int kTypeIndex = BlockHelperIterT::kIndex;
   static const int kSize = BlockHelperIterT::kSize;
   static const int kCudaBlockSize = 256;
 
-  template<R (Base::*func)(Args...)>
-  struct FunctionWrapper {
-    using ThisClass = FunctionWrapper<func>;
+  template<typename R, typename Base, typename... Args>
+  struct FunctionArgTypesWrapper {
 
-    static void parallel_do(AllocatorT* allocator, int shared_mem_size,
-                            Args... args) {
-      auto time_start = std::chrono::system_clock::now();
-      auto time_end = time_start;
-
-      if (Scan) {
-        // Initialize iteration: Perform scan operation on bitmap.
-        allocator->allocated_[kTypeIndex].scan();
-      }
-
-      // Determine number of CUDA threads.
-      auto* d_num_soa_blocks_ptr =
-          &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
-              .data_.scan_data.enumeration_result_size;
-      auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
-
-      if (num_soa_blocks > 0) {
-        member_func_kernel<AllocatorT,
-                           &AllocatorT::template initialize_iteration<IterT>>
-            <<<(num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
-               kCudaBlockSize>>>(allocator);
-        gpuErrchk(cudaDeviceSynchronize());
-
-        time_end = std::chrono::system_clock::now();
-
-        auto total_threads = num_soa_blocks * kSize;
-        kernel_parallel_do<ThisClass>
-            <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
-              kCudaBlockSize,
-              shared_mem_size>>>(allocator, args...);
-        gpuErrchk(cudaDeviceSynchronize());
-      } else {
-        time_end = std::chrono::system_clock::now();
-      }
-
-      auto elapsed = time_end - time_start;
-      auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
-          .count();
-      bench_prefix_sum_time += micros;
-    }
-
-    template<void(AllocatorT::*pre_func)(Args...)>
-    struct WithPre {
-      using PreClass = WithPre<pre_func>;
+    template<R (Base::*func)(Args...)>
+    struct FunctionWrapper {
+      using ThisClass = FunctionWrapper<func>;
 
       static void parallel_do(AllocatorT* allocator, int shared_mem_size,
                               Args... args) {
@@ -153,6 +110,7 @@ struct ParallelExecutor {
         auto time_end = time_start;
 
         if (Scan) {
+          // Initialize iteration: Perform scan operation on bitmap.
           allocator->allocated_[kTypeIndex].scan();
         }
 
@@ -172,7 +130,7 @@ struct ParallelExecutor {
           time_end = std::chrono::system_clock::now();
 
           auto total_threads = num_soa_blocks * kSize;
-          kernel_parallel_do_with_pre<ThisClass, PreClass>
+          kernel_parallel_do<ThisClass>
               <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
                 kCudaBlockSize,
                 shared_mem_size>>>(allocator, args...);
@@ -181,46 +139,91 @@ struct ParallelExecutor {
           time_end = std::chrono::system_clock::now();
         }
 
-
         auto elapsed = time_end - time_start;
         auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
             .count();
         bench_prefix_sum_time += micros;
       }
 
-      __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {
-        (allocator->*pre_func)(args...);
-      }
-    };
+      template<void(AllocatorT::*pre_func)(Args...)>
+      struct WithPre {
+        using PreClass = WithPre<pre_func>;
 
-    static __DEV__ void parallel_do_cuda(AllocatorT* allocator,
-                                         Args... args) {
-      const auto N_alloc =
-          allocator->allocated_[kTypeIndex].scan_num_bits();
+        static void parallel_do(AllocatorT* allocator, int shared_mem_size,
+                                Args... args) {
+          auto time_start = std::chrono::system_clock::now();
+          auto time_end = time_start;
 
-      // Round to multiple of kSize.
-      int num_threads = ((blockDim.x * gridDim.x)/kSize)*kSize;
-      int tid = blockIdx.x * blockDim.x + threadIdx.x;
-      if (tid < num_threads) {
-        for (int j = tid/kSize; j < N_alloc; j += num_threads/kSize) {
-          // i is the index of in the scan array.
-          auto block_idx = allocator->allocated_[kTypeIndex].scan_get_index(j);
-          assert(block_idx <= kMaxInt32/64);
+          if (Scan) {
+            allocator->allocated_[kTypeIndex].scan();
+          }
 
-          // TODO: Consider doing a scan over "allocated" bitmap.
-          auto* block = allocator->template get_block<IterT>(block_idx);
-          const auto& iteration_bitmap = block->iteration_bitmap;
-          int thread_offset = tid % kSize;
+          // Determine number of CUDA threads.
+          auto* d_num_soa_blocks_ptr =
+              &allocator->allocated_[AllocatorT::template BlockHelper<IterT>::kIndex]
+                  .data_.scan_data.enumeration_result_size;
+          auto num_soa_blocks = copy_from_device(d_num_soa_blocks_ptr);
 
-          if ((iteration_bitmap & (1ULL << thread_offset)) != 0ULL) {
-            IterT* obj = allocator->template get_object<IterT>(
-                block, thread_offset);
-            // call the function.
-            (obj->*func)(args...);
+          if (num_soa_blocks > 0) {
+            member_func_kernel<AllocatorT,
+                               &AllocatorT::template initialize_iteration<IterT>>
+                <<<(num_soa_blocks + kCudaBlockSize - 1)/kCudaBlockSize,
+                   kCudaBlockSize>>>(allocator);
+            gpuErrchk(cudaDeviceSynchronize());
+
+            time_end = std::chrono::system_clock::now();
+
+            auto total_threads = num_soa_blocks * kSize;
+            kernel_parallel_do_with_pre<ThisClass, PreClass>
+                <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
+                  kCudaBlockSize,
+                  shared_mem_size>>>(allocator, args...);
+            gpuErrchk(cudaDeviceSynchronize());
+          } else {
+            time_end = std::chrono::system_clock::now();
+          }
+
+
+          auto elapsed = time_end - time_start;
+          auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
+              .count();
+          bench_prefix_sum_time += micros;
+        }
+
+        __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {
+          (allocator->*pre_func)(args...);
+        }
+      };
+
+      static __DEV__ void parallel_do_cuda(AllocatorT* allocator,
+                                           Args... args) {
+        const auto N_alloc =
+            allocator->allocated_[kTypeIndex].scan_num_bits();
+
+        // Round to multiple of kSize.
+        int num_threads = ((blockDim.x * gridDim.x)/kSize)*kSize;
+        int tid = blockIdx.x * blockDim.x + threadIdx.x;
+        if (tid < num_threads) {
+          for (int j = tid/kSize; j < N_alloc; j += num_threads/kSize) {
+            // i is the index of in the scan array.
+            auto block_idx = allocator->allocated_[kTypeIndex].scan_get_index(j);
+            assert(block_idx <= kMaxInt32/64);
+
+            // TODO: Consider doing a scan over "allocated" bitmap.
+            auto* block = allocator->template get_block<IterT>(block_idx);
+            const auto& iteration_bitmap = block->iteration_bitmap;
+            int thread_offset = tid % kSize;
+
+            if ((iteration_bitmap & (1ULL << thread_offset)) != 0ULL) {
+              IterT* obj = allocator->template get_object<IterT>(
+                  block, thread_offset);
+              // call the function.
+              (obj->*func)(args...);
+            }
           }
         }
       }
-    }
+    };
   };
 };
 
