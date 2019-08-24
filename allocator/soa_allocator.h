@@ -811,11 +811,17 @@ class SoaAllocator {
     };
   };
 
+  /**
+   * Checks if a block location is in state allocated[T].
+   */
   template<typename T>
   __DEV__ bool is_block_allocated(BlockIndexT index) {
     return allocated_[BlockHelper<T>::kIndex][index];
   }
 
+  /**
+   * Decodes the block index from a fake pointer.
+   */
   template<class T>
   __DEV__ BlockIndexT get_block_idx(T* ptr) {
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
@@ -825,11 +831,21 @@ class SoaAllocator {
     return ((ptr_as_int & kBlockAddrBitmask) - data_as_int) / kBlockSizeBytes;
   }
 
+  /**
+   * Decodes the object slot ID from a fake pointer.
+   */
   template<class T>
   __DEV__ static ObjectIndexT get_object_id(T* ptr) {
     return PointerHelper::obj_id_from_obj_ptr(ptr);
   }
 
+  /**
+   * Build a fake pointer for an object of type \p T in a given block and with
+   * a given object slot ID.
+   * @tparam T Object type
+   * @param block Pointer to block
+   * @param obj_id Object slot ID
+   */
   template<class T>
   __DEV__ static T* get_object(typename BlockHelper<T>::BlockType* block,
                                ObjectIndexT obj_id) {
@@ -837,6 +853,11 @@ class SoaAllocator {
     return block->make_pointer(obj_id);
   }
 
+  /**
+   * Get a pointer to a block with a given index.
+   * @tparam Object type
+   * @param block_idx Block index
+   */
   template<class T>
   __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx)
       const {
@@ -848,6 +869,16 @@ class SoaAllocator {
     return result;
   }
 
+  /**
+   * Finds and returns the index of a block in state active[T]. If no block
+   * could be found, this function retries, until up to
+   * \p kFindActiveBlockRetries attempts were made. If still no block could be
+   * found, this function initializes a new active[T] block.
+   * - This function must be used with caution because, by the time the
+   *   function returns, the returned block may already not longer be active.
+   * - When running out of memory, this function does not terminate and runs
+   *   indefinitely. TODO: Change this.
+   */
   template<class T>
   __DEV__ BlockIndexT find_active_block() {
     BlockIndexT block_idx;
@@ -879,6 +910,11 @@ class SoaAllocator {
     return block_idx;
   }
 
+  /**
+   * Initializes a new block of type \p T in a given block location.
+   * @tparam T Object type
+   * @param block_idx Index of block
+   */
   template<class T>
   __DEV__ void initialize_block(BlockIndexT block_idx) {
     static_assert(sizeof(typename BlockHelper<T>::BlockType)
@@ -890,6 +926,16 @@ class SoaAllocator {
     new(block_ptr) typename BlockHelper<T>::BlockType();
   }
 
+  /**
+   * Builds a fake pointer from a bitmap of newly allocated object slots. This
+   * function extracts the \p rank -th set bit index from \p allocation and
+   * builds a fake pointer for that object slot in block \p block_idx and with
+   * type \p T. Returns nullptr if there are not enough set bits.
+   * @tparam T Object type
+   * @param block_idx Block index
+   * @param rank Set bit index
+   * @param allocation A bitmap with set bits for newly allocated object slots
+   */
   template<class T>
   __DEV__ T* get_ptr_from_allocation(BlockIndexT block_idx, int rank,
                                      BlockBitmapT allocation) {
@@ -912,8 +958,16 @@ class SoaAllocator {
     }
   }
 
-  // Precondition: Block is active.
-  // Postcondition: Do not change active status.
+  /**
+   * Invalidates a block.
+   * - Precondition: The block must be active.
+   * - Postcondition: If the block was successfully invalidated, then its type
+   *   can no longer change until it is reinitialized.
+   *
+   * @tparam T Type of block. TODO: Block invalidation should be independent
+   *           of the block type.
+   * @param block_idx Index of the block
+   */
   template<class T>
   __DEV__ bool invalidate_block(BlockIndexT block_idx) {
     auto* block = get_block<T>(block_idx);
