@@ -9,13 +9,41 @@
 #include "bitmap/util.h"
 
 #ifndef NDEBUG
+/**
+ * The maximum number of times that a bitmap update is retried. (If it fails
+ * due to bitmap inconsistencies.)
+ */
 static const int kMaxRetry = 10000000;
+
+/**
+ * Condition for doing another iteration.
+ */
 #define CONTINUE_RETRY (_retry_counter++ < kMaxRetry)
+
+/**
+ * Initializes the retry counter.
+ */
 #define INIT_RETRY int _retry_counter = 0;
+
+/**
+ * In debug mode, \p expr must evaluate to true.
+ */
 #define ASSERT_SUCCESS(expr) assert(expr);
+
 #else
+
+/**
+ * Number of bitmap update retries is not limited in optimized mode.
+ */
 #define CONTINUE_RETRY (true)
+
+/**
+ * No retry counter needed in optimized mode.
+ */
 #define INIT_RETRY
+/**
+ * \p expr should evaluate to true, but in optimized mode this is not enforced.
+ */
 #define ASSERT_SUCCESS(expr) expr;
 #endif  // NDEBUG
 
@@ -60,13 +88,36 @@ struct ScanData {
   SizeT enumeration_result_size;
 };
 
-// TODO: Only works with ContainerT = unsigned long long int.
+/**
+ * A bitmap consisting of \p N bits. To accelerate certain bitmap operations,
+ * this class maintains a hierarchy of bitmaps. This hierarchy is hidden from
+ * the bitmap's public API.
+ * @tparam SizeT Data type of indices. Usually int or unsigned int.
+ * @tparam N Number of bits.
+ * @tparam ContainerT Data type that is used internally to store bits. This
+ *                    is currently fixed to unsigned long long int.
+ * @tparam ScanType Scan strategy. Scanning = enumerating all set bits. There
+ *                  are two possible strategies: Prefix sum-based CUB scan and
+ *                  scan based on atomic operations.
+ */
 template<typename SizeT, SizeT N, typename ContainerT = unsigned long long int,
          int ScanType = kAtomicScan>
 class Bitmap {
  public:
+  /**
+   * Error code. This value is returned if a set bit was requested but none was
+   * found, e.g., because the bitmaps has no set bits.
+   */
   static const SizeT kIndexError = std::numeric_limits<SizeT>::max();
+
+  /**
+   * Shortcut for constant 0.
+   */
   static const ContainerT kZero = 0;
+
+  /**
+   * Shortcut for constant 1.
+   */
   static const ContainerT kOne = 1;
 
   struct BitPosition {
@@ -80,13 +131,29 @@ class Bitmap {
     SizeT offset;
   };
 
+  /**
+   * Note: Bitmaps should be initialized with Bitmap::initialize().
+   */
   Bitmap() = default;
 
-  // Delete copy constructor.
+  /**
+   * Copying a bitmap is expensive, so we delete the copy constructor.
+   */
   __DEV__ Bitmap(const Bitmap&) = delete;
 
-  // Allocate specific index, i.e., set bit to 1. Return value indicates
-  // success. If Retry, then continue retrying until successful update.
+  /**
+   * Allocates, i.e., sets a bit to 1, at a specific index. The return value
+   * indicates if this operation switched the bit to 1. If the bit was already
+   * 1, then this function returns false. If \p Retry is set to true, then this
+   * function keeps trying to set the bit to 1 until the bit was actually
+   * changed from 0 to 1 by this function call.
+   * * If \p Retry is false, then this function corresponds to try_set() in the
+   *   paper.
+   * * If \p Retry is true, then this function corresponds to set() the paper.
+   * @tparam Retry Indicates whether the operation should retry until the bit
+   *         was actually switched/modified.
+   * @param index Index of the bit.
+   */
   template<bool Retry = false>
   __DEV__ bool allocate(SizeT index) {
     BitPosition pos(index);
@@ -111,14 +178,23 @@ class Bitmap {
     return success;
   }
 
-  // Return the index of an allocated bit, utilizing the hierarchical bitmap
-  // structure.
+  /**
+   * Finds and returns the index of an allocated (set) bit. This function uses
+   * the internal bitmap hierarchy for better performance. If \p Retry is
+   * false, then this function corresponds to try_find_set() in the paper. If
+   * \p Retry is true, then this function retries until a bit was found. This
+   * may result in an endless loop.
+   * @tparam Retry Indicates whether the operation should retry until a set bit
+   *         was located.
+   * @param seed A seed that is used to randomize the hierarchy/tree traversal.
+   */
   template<bool Retry = false>
   __DEV__ SizeT find_allocated(int seed) const {
     SizeT index;
 
     INIT_RETRY;
 
+    // TODO: Modify seed with every retry?
     do {
       index = find_allocated_private(seed);
     } while (Retry && index == kIndexError && CONTINUE_RETRY);
@@ -129,8 +205,11 @@ class Bitmap {
     return index;
   }
 
-  // Deallocate arbitrary bit and return its index. Assuming that there is
-  // at least one remaining allocation. Retries until success.
+  /**
+   * Deallocates (clears) an arbitrary bit and returns its index, assuming that
+   * there is at least one remaining set bit. Retries until a bit was found and
+   * cleared. Corresponds to clear() in the paper.
+   */
   __DEV__ SizeT deallocate() {
     SizeT index;
     bool success;
@@ -152,6 +231,9 @@ class Bitmap {
     return index;
   }
 
+  /**
+   * Same as Bitmap::deallocate(), but a specific seed can be specified.
+   */
   __DEV__ SizeT deallocate_seed(int seed) {
     SizeT index;
     bool success;
