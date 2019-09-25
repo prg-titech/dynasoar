@@ -255,8 +255,22 @@ class Bitmap {
     return index;
   }
 
-  // Deallocate specific index, i.e., set bit to 0. Return value indicates
-  // success. If Retry, then continue retrying until successful update.
+  /**
+   * Deallocates (clears) a bit at a specific index, i.e., sets the bit to 0.
+   * If \p Retry is true, then this function repeatedly attempts to flip the
+   * bit to 0 and only stops if this function invocation actually changed
+   * the bit. In that case, the return value of the function is always true.
+   * Otherwise, the return value of the function indicates whether the bit was
+   * successfully flipped. (false return values indicate that the bit was
+   * already 0.)
+   * * If \p Retry is false, then this function corresponds to try_clear()
+   *   in the paper.
+   * * If \p Retry is true, then this function corresponds to clear() in the
+   *   paper. (The variant that takes an argument.)
+   * @tparam Retry Indicates whether the operation should be repeated until bit
+   *         was actually changed.
+   * @param index Position/index of the bit.
+   */
   template<bool Retry = false>
   __DEV__ bool deallocate(SizeT index) {
     BitPosition pos(index);
@@ -281,11 +295,15 @@ class Bitmap {
     return success;
   }
 
-  // Return the index of an arbitrary, allocated bit. This algorithm forwards
-  // the request to the top-most (deepest nested) bitmap and returns the index
-  // of the container in which to search. On the lowest level, the container ID
-  // equals the bit index.
-  // TODO: Sould be private.
+  /**
+   * Returns the index of an arbitrary set bit. This algorithm forwards the
+   * request to the higher-level (nested) bitmap, which returns the index
+   * of the container in which to search. On the lowest level (usually the
+   * level of the initial function invocation), the container ID equals the
+   * index of the selected bit.
+   * @param seed Seed value for randomizing the hierarchy traversal.
+   * TODO: Not public API, function should be private.
+   */
   __DEV__ SizeT find_allocated_private(int seed) const {
     SizeT container;
 
@@ -302,7 +320,11 @@ class Bitmap {
     return find_allocated_in_container(container, seed);
   }
 
-  // Copy other bitmap.
+  /**
+   * Initializes this bitmap by copying another bitmap.
+   * TODO: The constructor should do this.
+   * @param other Source bitmap
+   */
   __DEV__ void initialize(const Bitmap<SizeT, N, ContainerT, ScanType>& other) {
     for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
          i < kNumContainers;
@@ -314,7 +336,11 @@ class Bitmap {
       data_.nested_initialize(other.data_);
     }
   }
-  // Initialize bitmap to all 0 or all 1.
+
+  /**
+   * Initializes this bitmap with all 0 or all 1.
+   * @param allocated true indicates all 1, falses indicates all 0
+   */
   __DEV__ void initialize(bool allocated = false) {
     for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
          i < kNumContainers;
@@ -336,62 +362,121 @@ class Bitmap {
     }
   }
 
+  /**
+   * Only for debugging: Counts the number of set bits.
+   */
   __DEV__ SizeT DBG_count_num_ones() {
     return data_.DBG_count_num_ones();
   }
 
-  // Return true if index is allocated.
+  /**
+   * Checks if the index-th bit is set.
+   * @param index Position of bit
+   */
   __DEV__ bool operator[](SizeT index) const {
     return data_.containers[index/kBitsize] & (kOne << (index % kBitsize));
   }
 
+  /**
+   * Returns a container of bits.
+   * @param index Index of container
+   */
   __DEV__ ContainerT get_container(SizeT index) const {
     return data_.containers[index];
   }
 
-  // Initiate scan operation (from the host side). This request is forwarded
-  // to the next-level bitmap. Afterwards, scan continues here.
+  /**
+   * Initiates a bitmap scan operation. The \p ScanType class template
+   * parameter determines which strategy is used. Afterwards, scan_num_bits(),
+   * scan_num_bits_ptr() and scan_get_index() can be invoked.
+   * Note: This function is part of the indices() operation in the paper.
+   * Note: This function must be invoked from the host side. Internally, it
+   * launches multiple CUDA kernels.
+   */
   void scan() {
     gpuErrchk(cudaPeekAtLastError());
     data_.scan();
   }
 
-  // May only be called after scan.
+  /**
+   * Returns the number of set bits in the bitmap. Can only be called after a
+   * scan().
+   */
   __DEV__ SizeT scan_num_bits() const {
     return data_.scan_data.enumeration_result_size;
   }
 
+  /**
+   * Returns a pointer to a memory address that contains the number of set bits
+   * in the bitmap. Can only be called after a scan().
+   */
   __host__ __device__ SizeT* scan_num_bits_ptr() {
     return &data_.scan_data.enumeration_result_size;
   }
 
-  // Returns the index of the pos-th set bit.
+  /**
+   * Returns the index of the pos-th set bit in the bitmap. Can only be called
+   * after a scan().
+   */
   __DEV__ SizeT scan_get_index(SizeT pos) const {
     return data_.scan_data.enumeration_result_buffer[pos];
   }
 
-  // Nested bitmap data structure.
+  /**
+   * Contains the bitmap itself and maybe a nested bitmap. There are template
+   * specialization with and without a nested bitmap.
+   * @tparam NumContainers The number of containers (size of the bitmap).
+   * @tparam HasNested Indicates whether this bitmap has a nested bitmap.
+   */
   template<SizeT NumContainers, bool HasNested>
   struct BitmapData;
 
-  // Bitmap data structure with a nested bitmap.
+  /**
+   * BitmapData specialization that contains a nested bitmap.
+   * @tparam NumContainers The number of containers (size of the bitmap).
+   */
   template<SizeT NumContainers>
   struct BitmapData<NumContainers, true> {
+    /**
+     * A shortcut for this template instantiation.
+     */
     using ThisClass = BitmapData<NumContainers, true>;
 
+    /**
+     * The number of bits per container.
+     */
     static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
+    /**
+     * An array of containers. This is the actual bitmap.
+     */
     ContainerT containers[NumContainers];
 
-    // Buffers for parallel enumeration.
+    /**
+     * Stores the result of a scan operation.
+     */
     ScanData<SizeT, NumContainers, kBitsize> scan_data;
 
-    // Containers that store the bits.
+    /**
+     * Type of the nested bitmap. The number of containers of this bitmap is
+     * the number of bits of the nested bitmap.
+     */
     using BitmapT = Bitmap<SizeT, NumContainers, ContainerT, ScanType>;
+
+    /**
+     * The nested (higher-level) bitmap.
+     */
     BitmapT nested;
 
+    /**
+     * The level of this bitmap. Contrary to the the paper, the innermost
+     * bitmap has level 1 and we keep counting with every outer bitmap.
+     */
     static const int kLevels = 1 + BitmapT::kLevels;
 
+    /**
+     * Only for debugging: Count the number of ones.
+     */
     __DEV__ SizeT DBG_count_num_ones() {
       SizeT result = 0;
       for (int i = 0; i < NumContainers; ++i) {
@@ -400,13 +485,21 @@ class Bitmap {
       return result;
     }
 
-    // Allocate a specific bit in the nested bitmap.
+    /**
+     * Allocates a specific bit in BitmapData::nested.
+     * @tparam Retry Indicates whether the operation retries until the bit was
+     *               actually modified.
+     */
     template<bool Retry>
     __DEV__ bool nested_allocate(SizeT pos) {
       return nested.allocate<Retry>(pos);
     }
 
-    // Deallocate a specific bit in the nested bitmap.
+    /**
+     * Clears a specific bit in BitmapData::nested.
+     * @tparam Retry Indicates whether the operation retries until the bit was
+     *               actually modified.
+     */
     template<bool Retry>
     __DEV__ bool nested_deallocate(SizeT pos) {
       return nested.deallocate<Retry>(pos);
@@ -585,7 +678,10 @@ class Bitmap {
     }
   };
 
-  // Bitmap data structure without a nested bitmap.
+  /**
+   * BitmapData specialization that does not contain a nested bitmap.
+   * @tparam NumContainers The number of containers (size of the bitmap).
+   */
   template<SizeT NumContainers>
   struct BitmapData<NumContainers, false> {
     static_assert(NumContainers == 1,
