@@ -25,7 +25,7 @@ class AllocatorHandle {
   AllocatorHandle(const AllocatorHandle<AllocatorT>&) = delete;
 
   // Initialize the allocator: Allocator class and data buffer.
-  AllocatorHandle() {
+  AllocatorHandle(bool unified_memory = false) {
 #ifndef NDEBUG
     int device_id;
     gpuErrchk(cudaGetDevice(&device_id));
@@ -56,7 +56,13 @@ class AllocatorHandle {
     gpuErrchk(cudaMalloc(&allocator_, sizeof(AllocatorT)));
     assert(allocator_ != nullptr);
 
-    gpuErrchk(cudaMalloc(&data_buffer_, AllocatorT::kDataBufferSize));
+    if (unified_memory) {
+      // Unified memory is accessible from both host and device.
+      gpuErrchk(cudaMallocManaged(&data_buffer_, AllocatorT::kDataBufferSize));
+    } else {
+      gpuErrchk(cudaMalloc(&data_buffer_, AllocatorT::kDataBufferSize));
+    }
+
 #ifndef NDEBUG
     void* maybe_out_of_memory = nullptr;  // To show OOM text...
     assert(data_buffer_ != maybe_out_of_memory);
