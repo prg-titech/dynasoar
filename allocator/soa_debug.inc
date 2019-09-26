@@ -286,7 +286,7 @@ struct PointerTypeChecker {
       }
     };
 
-    __DEV__ bool operator()(const BaseClass* obj) {
+    __device__ __host__ bool operator()(const BaseClass* obj) {
       return ClassSelector<std::is_base_of<BaseClass, T>::value, 0>::call(obj);
     }
   };

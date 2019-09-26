@@ -361,7 +361,7 @@ class SoaAllocator {
   /**
    * Extracts the type ID from a fake pointer and returns it.
    */
-  __DEV__ static TypeIndexT get_type(const void* ptr) {
+  __device__ __host__ static TypeIndexT get_type(const void* ptr) {
     auto type_id = PointerHelper::get_type(ptr);
     assert(type_id < kNumTypes);
     return type_id;
