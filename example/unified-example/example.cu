@@ -69,7 +69,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
   Foo* host_selected_object;
   cudaMemcpyFromSymbol(&host_selected_object, selected_object, sizeof(Foo*), 0,
-                       cudaMemcpyHostToDevice);
+                       cudaMemcpyDeviceToHost);
 
   int result = host_selected_object->qux();
   if (result == 35 + 2 + 3) {

@@ -287,7 +287,7 @@ class SoaAllocator {
    * TODO: Consider moving out of soa_debug.inc.
    */
   template<class T>
-  __DEV__ static bool is_type(const T* ptr);
+  __device__ __host__ static bool is_type(const T* ptr);
 
   /**
    * Returns the time spent on enumeration during parallel do-all operations
@@ -1072,6 +1072,8 @@ class SoaAllocator {
    * Size of the heap in bytes.
    */
   static const size_t kDataBufferSize = static_cast<size_t>(N)*kBlockSizeBytes;
+
+  static const size_t kN = N;
 };
 
 

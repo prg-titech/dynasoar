@@ -78,16 +78,18 @@ class SoaBase {
   using BaseClass = void;
   static const bool kIsAbstract = false;
 
-  __DEV__ TypeIndexT get_type() const { return AllocatorT::get_type(this); }
+  __device__ __host__ TypeIndexT get_type() const {
+    return AllocatorT::get_type(this);
+  }
 
-  __DEV__ void DBG_print_ptr_decoding() const {
+  __device__ __host__ void DBG_print_ptr_decoding() const {
     char* block_ptr = PointerHelper::block_base_from_obj_ptr(this);
     int obj_id = PointerHelper::obj_id_from_obj_ptr(this);
     printf("%p = Block %p  |  Object %i\n", this, block_ptr, obj_id);
   }
 
   template<typename T>
-  __DEV__ T* cast() {
+  __device__ __host__ T* cast() {
     if (this != nullptr
         && get_type() == AllocatorT::template BlockHelper<T>::kIndex) {
       return static_cast<T*>(this);

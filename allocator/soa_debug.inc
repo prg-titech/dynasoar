@@ -269,7 +269,7 @@ struct PointerTypeChecker {
     // T is a subclass of BaseClass. Check if same type.
     template<bool Check, int Dummy>
     struct ClassSelector {
-      __DEV__ static bool call(const BaseClass* obj) {
+      __device__ __host__ static bool call(const BaseClass* obj) {
         if (obj->get_type() == ThisAllocator::template BlockHelper<T>::kIndex) {
           return false;  // No need to check other types.
         } else {
@@ -281,7 +281,7 @@ struct PointerTypeChecker {
     // T is not a subclass of BaseClass. Skip.
     template<int Dummy>
     struct ClassSelector<false, Dummy> {
-      __DEV__ static bool call(const BaseClass* obj) {
+      __device__ __host__ static bool call(const BaseClass* obj) {
         return true;
       }
     };
@@ -295,7 +295,7 @@ struct PointerTypeChecker {
 // Check type of pointer.
 template<BlockIndexT N_Objects, class... Types>
 template<class T>
-__DEV__ bool SoaAllocator<N_Objects, Types...>::is_type(const T* ptr) {
+bool SoaAllocator<N_Objects, Types...>::is_type(const T* ptr) {
   return TupleHelper<Types...>::template dev_for_all<PointerTypeChecker<
-      ThisAllocator, T>::InnerHelper>(ptr);
+      ThisAllocator, T>::template InnerHelper>(ptr);
 }

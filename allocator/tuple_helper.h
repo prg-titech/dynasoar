@@ -30,7 +30,7 @@ struct TupleHelper<T, Types...> {
   }
 
   template<template<class> typename F, typename... Args>
-  __DEV__ static bool dev_for_all(Args... args) {
+  __device__ __host__ static bool dev_for_all(Args... args) {
     F<T> func;
     if (func(args...)) {  // If F returns false, stop enumerating.
       return TupleHelper<Types...>::template dev_for_all<F>(args...);
@@ -108,7 +108,7 @@ struct TupleHelper<> {
   static bool for_all(Args... /*args*/) { return false; }
 
   template<template<class> typename F, typename... Args>
-  __DEV__ static bool dev_for_all(Args... /*args*/) { return false; }
+  __device__ __host__ static bool dev_for_all(Args... /*args*/) { return false; }
 
   static const int kThisClass64BlockSize = std::numeric_limits<int>::max();
   static const int k64BlockMinSize = kThisClass64BlockSize;
