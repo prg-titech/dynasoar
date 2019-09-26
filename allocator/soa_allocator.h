@@ -390,6 +390,13 @@ class SoaAllocator {
 
     // Check alignment of data storage buffer.
     assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
+
+    // Ensure that most significant bits of data address are not in use. This
+    // is required for our fake pointer mangling scheme.
+    assert((reinterpret_cast<uintptr_t>(data_)
+            & PointerHelper::kMemAddrBitmask) == 0);
+    assert(((reinterpret_cast<uintptr_t>(data_) + kDataBufferSize)
+            & PointerHelper::kMemAddrBitmask) == 0);
   }
 
   /**

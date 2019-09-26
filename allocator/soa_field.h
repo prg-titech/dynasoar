@@ -6,6 +6,7 @@
 struct PointerHelper {
   static const uint8_t kObjectIdBitmask = 0x3F;
   static const uintptr_t kBlockPtrBitmask = 0xFFFFFFFFFFC0;
+  static const uintptr_t kMemAddrBitmask = kBlockPtrBitmask | kObjectIdBitmask;
 
   __DEV__ static ObjectIndexT obj_id_from_obj_ptr(const void* obj) {
     uint8_t result =
