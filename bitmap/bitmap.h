@@ -47,8 +47,9 @@ static const int kMaxRetry = 10000000;
 #define ASSERT_SUCCESS(expr) expr;
 #endif  // NDEBUG
 
-// Save memory: Allocate only one set of buffers.
+// TODO: Save memory: Allocate only one set of buffers.
 // TODO: This should be stored in SoaAllocator class.
+// TODO: Needs refactoring.
 #define CUB_MAX_NUM_BLOCKS 64*64*64*64
 __device__ int cub_enumeration_base_buffer[CUB_MAX_NUM_BLOCKS];
 __device__ int cub_enumeration_id_buffer[CUB_MAX_NUM_BLOCKS];
@@ -120,6 +121,9 @@ class Bitmap {
    */
   static const ContainerT kOne = 1;
 
+  /**
+   * Represents the position of a bit in this bitmap.
+   */
   struct BitPosition {
     __DEV__ BitPosition(SizeT index) : container_index(index / kBitsize),
                                        offset(index % kBitsize) {
@@ -127,7 +131,14 @@ class Bitmap {
       assert(index < N);
     }
 
+    /**
+     * Index of container.
+     */
     SizeT container_index;
+
+    /**
+     * Index of bit within the container.
+     */
     SizeT offset;
   };
 
@@ -481,7 +492,7 @@ class Bitmap {
     static const int kLevels = 1 + BitmapT::kLevels;
 
     /**
-     * Only for debugging: Count the number of ones.
+     * Only for debugging: Counts the number of ones.
      */
     __DEV__ SizeT DBG_count_num_ones() {
       SizeT result = 0;
@@ -528,7 +539,10 @@ class Bitmap {
       nested.initialize(other.nested);
     }
 
-    // Initialize the nested bitmap.
+    /**
+     * Initializes the bitmap with all zeros or all ones.
+     * @param allocated Zeros or ones.
+     */
     __DEV__ void nested_initialize(bool allocated) {
       nested.initialize(allocated);
     }
@@ -596,6 +610,18 @@ class Bitmap {
       }
     }
 
+    /**
+     * A prefix sum-based (CUB) scan works as follows. Process is described in
+     * detail in the paper.
+     * 1. Run scan operation on nested bitmap.
+     * 2. Get number of ones in nested bitmap. If none, exit.
+     * 3. Pre-Scan: Generate an integer buffer of size "number of bits". If a
+     *    bit is set, then the corresponding buffer element is 1, otherwise 0.
+     * 4. Run CUB scan (prefix sum).
+     * 5. Post-Scan: For every set bit, write the corresponding prefix sum
+     *    result value to the result array at the same location.
+     * @tparam S Required for enable_if.
+     */
     template<int S = ScanType>
     typename std::enable_if<S == kCubScan, void>::type
     scan() {  
@@ -664,6 +690,16 @@ class Bitmap {
       }      
     }
 
+    /**
+     * An atomic scan works as follows. Process is described in detail in the
+     * paper (indicies() operation).
+     * 1. Run scan operation on nested bitmap.
+     * 2. Get number of ones in nested bitmap. If none, exit.
+     * 3. Init: Set result size to 0.
+     * 4. Atomic Scan: For every set bit, increase an atomic counter. As an
+     *    optimization, this is done on a per-container basis.
+     * @tparam S Required for enable_if.
+     */
     template<int S = ScanType>
     typename std::enable_if<S == kAtomicScan, void>::type scan() {
       nested.scan();
@@ -700,38 +736,72 @@ class Bitmap {
     static_assert(NumContainers == 1,
                   "L0 bitmap should have only one container.");
 
+    /**
+     * A shortcut for this template instantiation.
+     */
     using ThisClass = BitmapData<NumContainers, false>;
 
+    /**
+     * The number of bits per container.
+     */
     static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
+    /**
+     * The top-level bitmap has exactly one level.
+     */
     static const int kLevels = 1;
 
-    // Bitmaps without a nested bitmap have exactly one container.
+    /**
+     * Bitmaps without a nested bitmap have exactly one container.
+     */
     ContainerT containers[NumContainers];
 
-    // Buffers for parallel enumeration.
+    /**
+     * Stores the result of a scan operation.
+     */
     ScanData<SizeT, NumContainers, kBitsize> scan_data;
 
+    /**
+     * Only for debugging: Counts the number of ones.
+     */
     __DEV__ SizeT DBG_count_num_ones() {
       return __popcll(containers[0]);
     }
 
+    /**
+     * Function is never called, but required for typing reasons.
+     */
     template<bool Retry>
     __DEV__ bool nested_allocate(SizeT pos) { assert(false); return false; }
 
+    /**
+     * Function is never called, but required for typing reasons.
+     */
     template<bool Retry>
     __DEV__ bool nested_deallocate(SizeT pos) { assert(false); return false; }
 
+    /**
+     * Function is never called, but required for typing reasons.
+     */
     __DEV__ SizeT nested_find_allocated_private(int seed) const {
       assert(false);
       return kIndexError;
     }
 
+    /**
+     * Function is never called, but required for typing reasons.
+     */
     __DEV__ void nested_initialize(
         const BitmapData<NumContainers, false>& other) { assert(false); }
 
+    /**
+     * Function is never called, but required for typing reasons.
+     */
     __DEV__ void nested_initialize(bool allocated) { assert(false); }
 
+    /**
+     * Counts the number and indicies of set bits with population count.
+     */
     __DEV__ void trivial_scan() {
       assert(blockDim.x == 64 && gridDim.x == 1);
       auto val = containers[0];
@@ -745,6 +815,9 @@ class Bitmap {
       scan_data.enumeration_result_size = __popcll(val);
     }
 
+    /**
+     * This bitmap has only one container, so scan is trivial.
+     */
     void scan() {
       // Does not perform a prefix scan but computes the result directly.
       member_func_kernel<ThisClass, &ThisClass::trivial_scan>
@@ -753,10 +826,13 @@ class Bitmap {
     }
   };
 
-  // Returns the index of an allocated bit inside a container. Returns
-  // kIndexError if not allocated bit was found.
+  /**
+   * Returns the index of an allocated bit inside a container. Returns
+   * kIndexError if no allocated bit was found.
+   * @param container Container of bits.
+   * @param seed Seed for randomizing traversals.
+   */
   __DEV__ SizeT find_allocated_in_container(SizeT container, int seed) const {
-    // TODO: For better performance, choose random one.
     int selected = find_allocated_bit(data_.containers[container], seed);
     if (selected == -1) {
       // No space in here.
@@ -766,6 +842,12 @@ class Bitmap {
     }
   }
 
+  /**
+   * This is an alternative strategy to find_allocated_bit_fast(). This
+   * strategy always selects the first set bit. Results in poor performance.
+   * @param val Container of bits.
+   * @param seed Not utilized.
+   */
   __DEV__ int find_first_bit(ContainerT val, int seed) const {
     // TODO: Adapt for other data types.
     return __ffsll(val) - 1;
@@ -775,9 +857,15 @@ class Bitmap {
     return find_allocated_bit_fast(val, seed);
   }
 
-  // Find index of *some* bit that is set to 1.
-  // TODO: Make this more efficient!
+  /**
+   * Find the position of a bit that is set to 1 in a given container. To
+   * avoid multiple threads from selecting the same bit, the bitmap is first
+   * rotation-shifted by \p seed and the warp ID.
+   * @param val Container of bits.
+   * @param seed Seed for randomizing traversals.
+   */
   __DEV__ int find_allocated_bit_fast(ContainerT val, int seed) const {
+    // TODO: Can this be more efficient?
     unsigned int rotation_len = (seed+warp_id()) % (sizeof(val)*8);
     const ContainerT rotated_val = rotl(val, rotation_len);
 
@@ -785,38 +873,56 @@ class Bitmap {
     if (first_bit_pos == -1) {
       return -1;
     } else {
+      // Shift result back.
       return (first_bit_pos - rotation_len) % (sizeof(val)*8);
     }
   }
 
-  __DEV__ int find_allocated_bit_compact(ContainerT val) const {
-    return __ffsll(val) - 1;
-  }
-
+  /**
+   * Enumerate all set bits sequentially. This function is required for
+   * device_do and implemented in sequential_enumerate.h.
+   */
   template<typename F, typename... Args>
   __DEV__ void enumerate(F func, Args... args);
 
-  // The number of bits per container.
+  /**
+   * The number of bits per container.
+   */
   static const uint8_t kBitsize = 8*sizeof(ContainerT);
 
-  // The number of containers on this level.
+  /**
+   * The number of containers on this level.
+   */
   static const SizeT kNumContainers =
       N <= kBitsize ? 1 : (N + kBitsize - 1)/kBitsize;
 
-  // Indicates if this bitmap has a higher-level (nested) bitmap.
+  /**
+   * Indicates if this bitmap has a higher-level (nested) bitmap.
+   */
   static const bool kHasNested = kNumContainers > 1;
 
+  // Type aliases that can be accessed from outside this class.
   using SizeTT = SizeT;
   using ContainerTT = ContainerT;
 
-  // Nested bitmap structure.
+  /**
+   * Nested bitmap structure type.
+   */
   using BitmapDataT = BitmapData<kNumContainers, kHasNested>;
+
+  /**
+   * Nested bitmap structure.
+   */
   BitmapDataT data_;
 
-  // Number of bitmap levels, including this one.
+  /**
+   * Number of bitmap levels, including this one.
+   */
   static const int kLevels = BitmapDataT::kLevels;
 
-  // Type of outer bitmap.
+  /**
+   * Type of outer bitmap. (Going the other way in the hierarchy.)
+   */
   using OuterBitmapT = Bitmap<SizeT, N*kBitsize, ContainerT, ScanType>;
 };
 
