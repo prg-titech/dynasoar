@@ -505,11 +505,18 @@ class Bitmap {
       return nested.deallocate<Retry>(pos);
     }
 
-    // Find an allocated bit in the nested bitmap.
+    /**
+     * Find and return the position of a set bit in BitmapData::nested.
+     * @param seed Seed for randomizing the tree traversal.
+     */
     __DEV__ SizeT nested_find_allocated_private(int seed) const {
       return nested.find_allocated_private(seed);
     }
 
+    /**
+     * Initializes the bitmap from another bitmap.
+     * @param other Bitmap to be copied.
+     */
     __DEV__ void nested_initialize(
         const BitmapData<NumContainers, true>& other) {
       nested.initialize(other.nested);
