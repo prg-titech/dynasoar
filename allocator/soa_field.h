@@ -8,7 +8,8 @@ struct PointerHelper {
   static const uintptr_t kBlockPtrBitmask = 0xFFFFFFFFFFC0;
   static const uintptr_t kMemAddrBitmask = kBlockPtrBitmask | kObjectIdBitmask;
 
-  __DEV__ static ObjectIndexT obj_id_from_obj_ptr(const void* obj) {
+  __host__ __device__ static ObjectIndexT obj_id_from_obj_ptr(
+      const void* obj) {
     uint8_t result =
         static_cast<uint8_t>(reinterpret_cast<uintptr_t&>(obj))
         & kObjectIdBitmask;
@@ -16,15 +17,15 @@ struct PointerHelper {
     return reinterpret_cast<ObjectIndexT&>(result);
   }
 
-  __DEV__ static char* block_base_from_obj_ptr(const void* obj) {
+  __host__ __device__ static char* block_base_from_obj_ptr(const void* obj) {
     auto& ptr_base = reinterpret_cast<uintptr_t&>(obj);
     return reinterpret_cast<char*>(ptr_base & kBlockPtrBitmask);
   }
 
   // Replace block base and object ID in ptr.
   template<typename T>
-  __DEV__ static T* rewrite_pointer(T* ptr, void* block_base,
-                                    ObjectIndexT obj_id) {
+  __host__ __device__ static T* rewrite_pointer(T* ptr, void* block_base,
+                                                ObjectIndexT obj_id) {
     auto& ptr_as_int = reinterpret_cast<uintptr_t&>(ptr);
     // Clear object ID and block base (48 bits).
     ptr_as_int &= ~((1ULL << 48) - 1);
@@ -36,7 +37,7 @@ struct PointerHelper {
     return reinterpret_cast<T*>(ptr_as_int);
   }
 
-  __DEV__ static TypeIndexT get_type(const void* ptr) {
+  __host__ __device__ static TypeIndexT get_type(const void* ptr) {
     auto& ptr_base = reinterpret_cast<uintptr_t&>(ptr);
     uint8_t type_id = ptr_base >> 56;  // Truncated.
     return reinterpret_cast<TypeIndexT&>(type_id);
@@ -55,18 +56,18 @@ class SoaField {
   char _[0];
 
   // Calculate data pointer from address.
-  __DEV__ T* data_ptr() const {
+  __host__ __device__ T* data_ptr() const {
     // All SoaField<> have size 0. Offset of all fields is 1.
     auto ptr_base = reinterpret_cast<uintptr_t>(this) - 1;
     return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
   }
 
-  __DEV__ volatile T* volatile_data_ptr() const {
+  __host__ __device__ volatile T* volatile_data_ptr() const {
     return data_ptr();
   }
 
  public:
-  __DEV__ static T* data_ptr_from_obj_ptr(C* obj) {
+  __host__ __device__ static T* data_ptr_from_obj_ptr(C* obj) {
     auto& ptr_base = reinterpret_cast<uintptr_t&>(obj);
 
 #ifndef NDEBUG
@@ -92,8 +93,8 @@ class SoaField {
   }
 
   template<int BlockSize>
-  __DEV__ static T* data_ptr_from_location(char* block_base,
-                                           ObjectIndexT obj_id) {
+  __host__ __device__ static T* data_ptr_from_location(char* block_base,
+                                                       ObjectIndexT obj_id) {
     assert(obj_id < BlockSize);
     // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(
@@ -102,9 +103,9 @@ class SoaField {
     return soa_array + obj_id;
   }
 
-  __DEV__ static T* data_ptr_from_location(char* block_base,
-                                           ObjectIndexT block_size,
-                                           ObjectIndexT obj_id) {
+  __host__ __device__ static T* data_ptr_from_location(char* block_base,
+                                                       ObjectIndexT block_size,
+                                                       ObjectIndexT obj_id) {
     assert(obj_id < block_size);
     // Address of SOA array.
     T* soa_array = reinterpret_cast<T*>(
@@ -114,60 +115,67 @@ class SoaField {
   }
 
   // Field initialization.
-  __DEV__ SoaField() {}
-  __DEV__ explicit SoaField(const T& value) { *data_ptr() = value; }
+  __host__ __device__ SoaField() {}
+
+  __host__ __device__ explicit SoaField(const T& value) {
+    *data_ptr() = value;
+  }
 
   // Implicit conversion operator for automatic conversion to base type.
-  __DEV__ operator T&() { return *data_ptr(); }
-  __DEV__ operator const T&() const { return *data_ptr(); }
+  __host__ __device__ operator T&() { return *data_ptr(); }
+  __host__ __device__ operator const T&() const { return *data_ptr(); }
 
   // Explicitly get value. Just for better code readability.
-  __DEV__ T& get() { return *data_ptr(); }
-  __DEV__ const T& get() const { return *data_ptr(); }
+  __host__ __device__ T& get() { return *data_ptr(); }
+  __host__ __device__ const T& get() const { return *data_ptr(); }
 
-  __DEV__ volatile T& volatile_get() { return *volatile_data_ptr(); }
-  __DEV__ const volatile T& volatile_get() const {
+  __host__ __device__ volatile T& volatile_get() {
+    return *volatile_data_ptr();
+  }
+
+  __host__ __device__ const volatile T& volatile_get() const {
     return *volatile_data_ptr();
   }
 
   // Custom address-of operator.
-  __DEV__ T* operator&() { return data_ptr(); }
-  __DEV__ const T* operator&() const { return data_ptr(); }
+  __host__ __device__ T* operator&() { return data_ptr(); }
+  __host__ __device__ const T* operator&() const { return data_ptr(); }
 
   // Support member function calls.
-  __DEV__ T& operator->() { return *data_ptr(); }
-  __DEV__ const T& operator->() const { return *data_ptr(); }
+  __host__ __device__ T& operator->() { return *data_ptr(); }
+  __host__ __device__ const T& operator->() const { return *data_ptr(); }
 
   // Dereference type in case of pointer type.
-  __DEV__ typename std::remove_pointer<T>::type& operator*() {
+  __host__ __device__ typename std::remove_pointer<T>::type& operator*() {
     return **data_ptr();
   }
-  __DEV__ typename std::remove_pointer<T>::type& operator*() const {
+  __host__ __device__ typename std::remove_pointer<T>::type& operator*()
+      const {
     return **data_ptr();
   }
 
   // Array access in case of device array.
   template<typename U = T>
-  __DEV__ typename std::enable_if<is_device_array<U>::value,
-                                  typename U::BaseType>::type&
+  __host__ __device__ typename std::enable_if<is_device_array<U>::value,
+                                              typename U::BaseType>::type&
   operator[](size_t pos) {
     return (*data_ptr())[pos];
   }
 
   template<typename U = T>
-  __DEV__ const typename std::enable_if<is_device_array<U>::value,
-                                        typename U::BaseType>::type&
-  operator[](size_t pos) const {
+  __host__ __device__ const typename std::enable_if<is_device_array<U>::value,
+                                                    typename U::BaseType>
+      ::type& operator[](size_t pos) const {
     return (*data_ptr())[pos];
   }
 
   // Assignment operator.
-  __DEV__ T& operator=(const T& value) {
+  __host__ __device__ T& operator=(const T& value) {
     *data_ptr() = value;
     return *data_ptr();
   }
 
-  __DEV__ T& operator=(const SoaField<C, FieldIndex>& field) {
+  __host__ __device__ T& operator=(const SoaField<C, FieldIndex>& field) {
     *data_ptr() = field.get();
     return *data_ptr();
   }

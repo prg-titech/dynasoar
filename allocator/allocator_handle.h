@@ -53,11 +53,16 @@ class AllocatorHandle {
     AllocatorT::DBG_print_stats();
 #endif  // NDEBUG
 
-    gpuErrchk(cudaMalloc(&allocator_, sizeof(AllocatorT)));
+    if (unified_memory) {
+      // Unified memory is accessible from both host and device.
+      gpuErrchk(cudaMallocManaged(&allocator_, sizeof(AllocatorT)));
+    } else {
+      gpuErrchk(cudaMalloc(&allocator_, sizeof(AllocatorT)));
+    }
+
     assert(allocator_ != nullptr);
 
     if (unified_memory) {
-      // Unified memory is accessible from both host and device.
       gpuErrchk(cudaMallocManaged(&data_buffer_, AllocatorT::kDataBufferSize));
     } else {
       gpuErrchk(cudaMalloc(&data_buffer_, AllocatorT::kDataBufferSize));
