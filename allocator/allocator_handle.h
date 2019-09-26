@@ -9,7 +9,7 @@
 template<typename AllocatorT>
 __global__ void init_allocator_kernel(AllocatorT* allocator,
                                       char* data_buffer) {
-  allocator->initialize(data_buffer);
+  new(allocator) AllocatorT(data_buffer);
 }
 
 template<typename AllocatorT>

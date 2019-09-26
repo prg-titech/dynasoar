@@ -137,9 +137,57 @@ class Bitmap {
   Bitmap() = default;
 
   /**
-   * Copying a bitmap is expensive, so we delete the copy constructor.
+   * Initializes this bitmap by copying another bitmap.
+   * @param other Bitmap to copy.
    */
-  __DEV__ Bitmap(const Bitmap&) = delete;
+  __DEV__ Bitmap(const Bitmap& other) { initialize(other); }
+
+  /**
+   * Initializes this bitmap with all zeros or all ones.
+   * @param state false indicates all zeros, true indicates all ones.
+   */
+  __DEV__ Bitmap(bool state) { initialize(state); }
+
+  /**
+   * Initializes this bitmap by copying another bitmap.
+   * @param other Source bitmap
+   */
+  __DEV__ void initialize(const Bitmap<SizeT, N, ContainerT, ScanType>& other) {
+    for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
+         i < kNumContainers;
+         i += blockDim.x*gridDim.x) {
+      data_.containers[i] = other.data_.containers[i];
+    }
+
+    if (kHasNested) {
+      data_.nested_initialize(other.data_);
+    }
+  }
+
+  /**
+   * Initializes this bitmap with all 0 or all 1.
+   * @param allocated true indicates all 1, falses indicates all 0
+   */
+  __DEV__ void initialize(bool allocated = false) {
+    for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
+         i < kNumContainers;
+         i += blockDim.x*gridDim.x) {
+      if (allocated) {
+        if (i == kNumContainers - 1 && N % kBitsize > 0) {
+          // Last container is only partially occupied.
+          data_.containers[i] = (kOne << (N % kBitsize)) - 1;
+        } else if (i < kNumContainers) {
+          data_.containers[i] = ~kZero;
+        }
+      } else {
+        data_.containers[i] = static_cast<ContainerT>(0);
+      }
+    }
+
+    if (kHasNested) {
+      data_.nested_initialize(allocated);
+    }
+  }
 
   /**
    * Allocates, i.e., sets a bit to 1, at a specific index. The return value
@@ -318,48 +366,6 @@ class Bitmap {
     }
 
     return find_allocated_in_container(container, seed);
-  }
-
-  /**
-   * Initializes this bitmap by copying another bitmap.
-   * TODO: The constructor should do this.
-   * @param other Source bitmap
-   */
-  __DEV__ void initialize(const Bitmap<SizeT, N, ContainerT, ScanType>& other) {
-    for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
-         i < kNumContainers;
-         i += blockDim.x*gridDim.x) {
-      data_.containers[i] = other.data_.containers[i];
-    }
-
-    if (kHasNested) {
-      data_.nested_initialize(other.data_);
-    }
-  }
-
-  /**
-   * Initializes this bitmap with all 0 or all 1.
-   * @param allocated true indicates all 1, falses indicates all 0
-   */
-  __DEV__ void initialize(bool allocated = false) {
-    for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
-         i < kNumContainers;
-         i += blockDim.x*gridDim.x) {
-      if (allocated) {
-        if (i == kNumContainers - 1 && N % kBitsize > 0) {
-          // Last container is only partially occupied.
-          data_.containers[i] = (kOne << (N % kBitsize)) - 1;
-        } else if (i < kNumContainers) {
-          data_.containers[i] = ~kZero;
-        }
-      } else {
-        data_.containers[i] = static_cast<ContainerT>(0);
-      }
-    }
-
-    if (kHasNested) {
-      data_.nested_initialize(allocated);
-    }
   }
 
   /**

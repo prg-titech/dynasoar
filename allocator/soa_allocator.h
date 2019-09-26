@@ -64,6 +64,11 @@ class SoaAllocator {
    */
   static const BlockIndexT N = N_Objects / kNumBlockElements;
 
+  /**
+   * An alias for the block state bitmap type. Just for convenience.
+   */
+  using StateBitmapT = Bitmap<BlockIndexT, N>;
+
   // N_Objects must be a multiple of 64.
   static_assert(N_Objects % kNumBlockElements == 0,
                 "N_Objects Must be divisible by BlockSize.");
@@ -362,42 +367,30 @@ class SoaAllocator {
     return type_id;
   }
 
+  __DEV__ SoaAllocator(const ThisAllocator&) = delete;
+
   /**
    * Initializes the allocator (device memory).
    * - All bits in the free block bitmap are initially 1.
    * - All bits in the allocated/active block bitmaps are initially 0.
    * - All bits in the defrag. candidate bitmaps are initially 0.
-   * \param data_buffer The data buffer that contains the heap (excl. block
+   * @param data_buffer The data buffer that contains the heap (excl. block
                         state bitmaps).
    */
-  __DEV__ void initialize(char* data_buffer) {
-    global_free_.initialize(true);
+  __DEV__ SoaAllocator(char* data_buffer) : data_(data_buffer), global_free_(true) {
     for (int i = 0; i < kNumTypes; ++i) {
-      allocated_[i].initialize(false);
-      active_[i].initialize(false);
-#ifdef OPTION_DEFRAG
-      leq_50_[i].initialize(false);
-#endif  // OPTION_DEFRAG
+      new(allocated_ + i) StateBitmapT(false);
+      new(active_ + i) StateBitmapT(false);
 
-      if (threadIdx.x == 0 && blockIdx.x == 0) {
 #ifdef OPTION_DEFRAG
-        num_leq_50_[i] = 0;
+      new(leq_50_ + i) StateBitmapT(false);
+      num_leq_50_[i] = 0;
 #endif  // OPTION_DEFRAG
-      }
     }
 
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-      data_ = data_buffer;
-
-      // Check alignment of data storage buffer.
-      assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
-    }
+    // Check alignment of data storage buffer.
+    assert(reinterpret_cast<uintptr_t>(data_) % 64 == 0);
   }
-
-  __DEV__ SoaAllocator(const ThisAllocator&) = delete;
-
-  // Use initialize() instead of constructor to avoid zero-initialization.
-  __DEV__ SoaAllocator() = delete;
 
   /**
    * Allocates a new object of type \p T and returns a fake pointer to the
@@ -889,13 +882,12 @@ class SoaAllocator {
       do {
         block_idx = active_[BlockHelper<T>::kIndex]
             .template find_allocated<false>(retries + blockIdx.x);
-      } while (block_idx == Bitmap<BlockIndexT, N>::kIndexError
-               && --retries > 0);
+      } while (block_idx == StateBitmapT::kIndexError && --retries > 0);
 
-      if (block_idx == Bitmap<BlockIndexT, N>::kIndexError) {
+      if (block_idx == StateBitmapT::kIndexError) {
         // TODO: May be out of memory here.
         block_idx = global_free_.deallocate_seed(blockIdx.x);
-        assert(block_idx != (Bitmap<BlockIndexT, N>::kIndexError));  // OOM
+        assert(block_idx != (StateBitmapT::kIndexError));  // OOM
         initialize_block<T>(block_idx);
         ASSERT_SUCCESS(allocated_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
 #ifdef OPTION_DEFRAG
@@ -904,7 +896,7 @@ class SoaAllocator {
 #endif  // OPTION_DEFRAG
         ASSERT_SUCCESS(active_[BlockHelper<T>::kIndex].allocate<true>(block_idx));
       }
-    } while (block_idx == Bitmap<BlockIndexT, N>::kIndexError);
+    } while (block_idx == StateBitmapT::kIndexError);
 
     assert(block_idx < N);
     return block_idx;
@@ -1031,17 +1023,17 @@ class SoaAllocator {
   /**
    * Free block bitmap.
    */
-  Bitmap<BlockIndexT, N> global_free_;
+  StateBitmapT global_free_;
 
   /**
    * Allocated block bitmaps (one per type).
    */
-  Bitmap<BlockIndexT, N> allocated_[kNumTypes];
+  StateBitmapT allocated_[kNumTypes];
 
   /**
    * Active block bitmaps (one per type).
    */
-  Bitmap<BlockIndexT, N> active_[kNumTypes];
+  StateBitmapT active_[kNumTypes];
 
 #ifdef OPTION_DEFRAG
   /**
@@ -1068,11 +1060,6 @@ class SoaAllocator {
    * The heap: An array of blocks.
    */
   char* data_;
-
-  /**
-   * Number of blocks. TODO: Remove?
-   */
-  static const BlockIndexT kN = N;
 
   /**
    * Size of the heap in bytes.
