@@ -17,6 +17,7 @@
 #include "allocator/soa_field.h"
 #include "allocator/tuple_helper.h"
 #include "allocator/util.h"
+#include "allocator/type_system.h"
 
 
 /**
@@ -283,13 +284,6 @@ class SoaAllocator {
   float DBG_host_calculate_fragmentation();
 
   /**
-   * Checks if the type encoded in the fake pointer \p ptr is \p T.
-   * TODO: Consider moving out of soa_debug.inc.
-   */
-  template<class T>
-  __device__ __host__ static bool is_type(const T* ptr);
-
-  /**
    * Returns the time spent on enumeration during parallel do-all operations
    * (e.g., bitmap scan). Parallel do-all automatically keeps track of this
    * time.
@@ -360,11 +354,23 @@ class SoaAllocator {
 
   /**
    * Extracts the type ID from a fake pointer and returns it.
+   * @param ptr Fake pointer
    */
   __device__ __host__ static TypeIndexT get_type(const void* ptr) {
     auto type_id = PointerHelper::get_type(ptr);
     assert(type_id < kNumTypes);
     return type_id;
+  }
+
+  /**
+   * Checks if the type encoded in the fake pointer \p ptr is \p T.
+   * @param ptr Fake pointer
+   * @tparam T Expected type
+   */
+  template<class T>
+  __device__ __host__ static bool is_type(const T* ptr) {
+    return TupleHelper<Types...>::template dev_for_all<PointerTypeChecker<
+        ThisAllocator, T>::template InnerHelper>(ptr);
   }
 
   __DEV__ SoaAllocator(const ThisAllocator&) = delete;
