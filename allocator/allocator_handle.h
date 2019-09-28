@@ -18,7 +18,12 @@ __global__ void kernel_print_state_stats(AllocatorT* allocator) {
   allocator->DBG_print_state_stats();
 }
 
-// A wrapper class for accessing the allocator from host side.
+/**
+ * A wrapper class for accessing the allocator from host side. Creating a new
+ * object of this class allocates and initializes various data buffers on the
+ * host and on the device.
+ * @tparam AllocatorT Device allocator type
+ */
 template<typename AllocatorT>
 class AllocatorHandle {
  public:

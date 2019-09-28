@@ -3,7 +3,7 @@
 
 #include <type_traits>
 
-#include "bitmap/util.h"
+#include "util/util.h"
 
 template<typename BitmapT, bool HasNested, int Level>
 struct SequentialEnumerator {

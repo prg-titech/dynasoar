@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <cub/cub.cuh>
 
-#include "bitmap/util.h"
+#include "util/util.h"
 
 #ifndef NDEBUG
 /**
@@ -125,8 +125,8 @@ class Bitmap {
    * Represents the position of a bit in this bitmap.
    */
   struct BitPosition {
-    __DEV__ BitPosition(SizeT index) : container_index(index / kBitsize),
-                                       offset(index % kBitsize) {
+    __device__ __host__ BitPosition(SizeT index)
+        : container_index(index / kBitsize), offset(index % kBitsize) {
       assert(index != kIndexError);
       assert(index < N);
     }
@@ -151,38 +151,45 @@ class Bitmap {
    * Initializes this bitmap by copying another bitmap.
    * @param other Bitmap to copy.
    */
-  __DEV__ Bitmap(const Bitmap& other) { initialize(other); }
+  __device__ __host__ Bitmap(const Bitmap& other) { initialize(other); }
 
   /**
    * Initializes this bitmap with all zeros or all ones.
    * @param state false indicates all zeros, true indicates all ones.
    */
-  __DEV__ Bitmap(bool state) { initialize(state); }
+  __device__ __host__ Bitmap(bool state) { initialize(state); }
 
   /**
    * Initializes this bitmap by copying another bitmap.
    * @param other Source bitmap
    */
-  __DEV__ void initialize(const Bitmap<SizeT, N, ContainerT, ScanType>& other) {
-    for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
+  __device__ __host__ void initialize(
+      const Bitmap<SizeT, N, ContainerT, ScanType>& other) {
+#ifdef __CUDA_ARCH__
+    for (SizeT i = blockIdx.x * blockDim.x + threadIdx.x;
          i < kNumContainers;
-         i += blockDim.x*gridDim.x) {
+         i += blockDim.x * gridDim.x) {
+#else
+    for (SizeT i = 0; i < kNumContainers; ++i) {
+#endif  // __CUDA_ARCH__
       data_.containers[i] = other.data_.containers[i];
     }
 
-    if (kHasNested) {
-      data_.nested_initialize(other.data_);
-    }
+    if (kHasNested) { data_.nested_initialize(other.data_); }
   }
 
   /**
    * Initializes this bitmap with all 0 or all 1.
    * @param allocated true indicates all 1, falses indicates all 0
    */
-  __DEV__ void initialize(bool allocated = false) {
-    for (SizeT i = blockIdx.x*blockDim.x + threadIdx.x;
+  __device__ __host__ void initialize(bool allocated = false) {
+#ifdef __CUDA_ARCH__
+    for (SizeT i = blockIdx.x * blockDim.x + threadIdx.x;
          i < kNumContainers;
-         i += blockDim.x*gridDim.x) {
+         i += blockDim.x * gridDim.x) {
+#else
+    for (SizeT i = 0; i < kNumContainers; ++i) {
+#endif  // __CUDA_ARCH_
       if (allocated) {
         if (i == kNumContainers - 1 && N % kBitsize > 0) {
           // Last container is only partially occupied.
@@ -195,9 +202,7 @@ class Bitmap {
       }
     }
 
-    if (kHasNested) {
-      data_.nested_initialize(allocated);
-    }
+    if (kHasNested) { data_.nested_initialize(allocated); }
   }
 
   /**
@@ -214,7 +219,7 @@ class Bitmap {
    * @param index Index of the bit.
    */
   template<bool Retry = false>
-  __DEV__ bool allocate(SizeT index) {
+  __device__ bool allocate(SizeT index) {
     BitPosition pos(index);
 
     // Set bit to one.
@@ -248,14 +253,14 @@ class Bitmap {
    * @param seed A seed that is used to randomize the hierarchy/tree traversal.
    */
   template<bool Retry = false>
-  __DEV__ SizeT find_allocated(int seed) const {
+  __device__ __host__ SizeT find_allocated(int seed) const {
     SizeT index;
 
     INIT_RETRY;
 
     // TODO: Modify seed with every retry?
     do {
-      index = find_allocated_private(seed);
+      index = try_find_allocated(seed);
     } while (Retry && index == kIndexError && CONTINUE_RETRY);
 
     assert(!Retry || index != kIndexError);
@@ -269,7 +274,7 @@ class Bitmap {
    * there is at least one remaining set bit. Retries until a bit was found and
    * cleared. Corresponds to clear() in the paper.
    */
-  __DEV__ SizeT deallocate() {
+  __device__ SizeT deallocate() {
     SizeT index;
     bool success;
 
@@ -293,7 +298,7 @@ class Bitmap {
   /**
    * Same as Bitmap::deallocate(), but a specific seed can be specified.
    */
-  __DEV__ SizeT deallocate_seed(int seed) {
+  __device__ SizeT deallocate_seed(int seed) {
     SizeT index;
     bool success;
 
@@ -331,7 +336,7 @@ class Bitmap {
    * @param index Position/index of the bit.
    */
   template<bool Retry = false>
-  __DEV__ bool deallocate(SizeT index) {
+  __device__ bool deallocate(SizeT index) {
     BitPosition pos(index);
 
     // Set bit to zero.
@@ -346,7 +351,7 @@ class Bitmap {
       success = (previous & pos_mask) != 0;
     } while (Retry && !success && CONTINUE_RETRY);    // Retry until success
 
-    if (kHasNested && success && __popcll(previous) == 1) {
+    if (kHasNested && success && bit_popcll(previous) == 1) {
       // Deallocated only bit, propagate to nested.
       ASSERT_SUCCESS(data_.nested_deallocate<true>(pos.container_index));
     }
@@ -363,11 +368,11 @@ class Bitmap {
    * @param seed Seed value for randomizing the hierarchy traversal.
    * TODO: Not public API, function should be private.
    */
-  __DEV__ SizeT find_allocated_private(int seed) const {
+  __device__ __host__ SizeT try_find_allocated(int seed) const {
     SizeT container;
 
     if (kHasNested) {
-      container = data_.nested_find_allocated_private(seed);
+      container = data_.nested_try_find_allocated(seed);
 
       if (container == kIndexError) {
         return kIndexError;
@@ -382,7 +387,7 @@ class Bitmap {
   /**
    * Only for debugging: Counts the number of set bits.
    */
-  __DEV__ SizeT DBG_count_num_ones() {
+  __device__ __host__ SizeT DBG_count_num_ones() {
     return data_.DBG_count_num_ones();
   }
 
@@ -390,7 +395,7 @@ class Bitmap {
    * Checks if the index-th bit is set.
    * @param index Position of bit
    */
-  __DEV__ bool operator[](SizeT index) const {
+  __device__ __host__ bool operator[](SizeT index) const {
     return data_.containers[index/kBitsize] & (kOne << (index % kBitsize));
   }
 
@@ -398,7 +403,7 @@ class Bitmap {
    * Returns a container of bits.
    * @param index Index of container
    */
-  __DEV__ ContainerT get_container(SizeT index) const {
+  __device__ __host__ ContainerT get_container(SizeT index) const {
     return data_.containers[index];
   }
 
@@ -435,7 +440,7 @@ class Bitmap {
    * Returns the index of the pos-th set bit in the bitmap. Can only be called
    * after a scan().
    */
-  __DEV__ SizeT scan_get_index(SizeT pos) const {
+  __device__ __host__ SizeT scan_get_index(SizeT pos) const {
     return data_.scan_data.enumeration_result_buffer[pos];
   }
 
@@ -494,10 +499,10 @@ class Bitmap {
     /**
      * Only for debugging: Counts the number of ones.
      */
-    __DEV__ SizeT DBG_count_num_ones() {
+    __device__ __host__ SizeT DBG_count_num_ones() {
       SizeT result = 0;
       for (int i = 0; i < NumContainers; ++i) {
-        result += __popcll(containers[i]);
+        result += bit_popcll(containers[i]);
       }
       return result;
     }
@@ -508,7 +513,7 @@ class Bitmap {
      *               actually modified.
      */
     template<bool Retry>
-    __DEV__ bool nested_allocate(SizeT pos) {
+    __device__ bool nested_allocate(SizeT pos) {
       return nested.allocate<Retry>(pos);
     }
 
@@ -518,7 +523,7 @@ class Bitmap {
      *               actually modified.
      */
     template<bool Retry>
-    __DEV__ bool nested_deallocate(SizeT pos) {
+    __device__ bool nested_deallocate(SizeT pos) {
       return nested.deallocate<Retry>(pos);
     }
 
@@ -526,15 +531,15 @@ class Bitmap {
      * Find and return the position of a set bit in BitmapData::nested.
      * @param seed Seed for randomizing the tree traversal.
      */
-    __DEV__ SizeT nested_find_allocated_private(int seed) const {
-      return nested.find_allocated_private(seed);
+    __device__ __host__ SizeT nested_try_find_allocated(int seed) const {
+      return nested.try_find_allocated(seed);
     }
 
     /**
      * Initializes the bitmap from another bitmap.
      * @param other Bitmap to be copied.
      */
-    __DEV__ void nested_initialize(
+    __device__ __host__ void nested_initialize(
         const BitmapData<NumContainers, true>& other) {
       nested.initialize(other.nested);
     }
@@ -543,12 +548,12 @@ class Bitmap {
      * Initializes the bitmap with all zeros or all ones.
      * @param allocated Zeros or ones.
      */
-    __DEV__ void nested_initialize(bool allocated) {
+    __device__ __host__ void nested_initialize(bool allocated) {
       nested.initialize(allocated);
     }
 
     template<int S = ScanType>
-    __DEV__ typename std::enable_if<S == kCubScan, void>::type
+    __device__ typename std::enable_if<S == kCubScan, void>::type
     set_result_size() {
       SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
       // Base buffer contains prefix sum.
@@ -564,7 +569,7 @@ class Bitmap {
 
     // TODO: Run with num_selected threads, then we can remove the loop.
     template<int S = ScanType>
-    __DEV__ typename std::enable_if<S == kCubScan, void>::type
+    __device__ typename std::enable_if<S == kCubScan, void>::type
     pre_scan() {
       SizeT* selected = nested.data_.scan_data.enumeration_result_buffer;
       SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
@@ -588,7 +593,7 @@ class Bitmap {
     // Run with num_selected threads.
     // Assumption: enumeration_base_buffer contains exclusive prefix sum.
     template<int S = ScanType>
-    __DEV__ typename std::enable_if<S == kCubScan, void>::type
+    __device__ typename std::enable_if<S == kCubScan, void>::type
     post_scan() {
       SizeT* selected = nested.data_.scan_data.enumeration_result_buffer;
       SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
@@ -656,13 +661,13 @@ class Bitmap {
     }
 
     template<int S = ScanType>
-    __DEV__ typename std::enable_if<S == kAtomicScan, void>::type
+    __device__ typename std::enable_if<S == kAtomicScan, void>::type
     atomic_add_scan_init() {
       scan_data.enumeration_result_size = 0;
     }
 
     template<int S = ScanType>
-    __DEV__ typename std::enable_if<S == kAtomicScan, void>::type
+    __device__ typename std::enable_if<S == kAtomicScan, void>::type
     atomic_add_scan() {
       SizeT* selected = nested.data_.scan_data.enumeration_result_buffer;
       SizeT num_selected = nested.data_.scan_data.enumeration_result_size;
@@ -672,14 +677,14 @@ class Bitmap {
            sid < num_selected; sid += blockDim.x * gridDim.x) {
         SizeT container_id = selected[sid];
         auto value = containers[container_id];
-        int num_bits = __popcll(value);
+        int num_bits = bit_popcll(value);
 
         auto before = atomicAdd(
             reinterpret_cast<unsigned int*>(&scan_data.enumeration_result_size),
             num_bits);
 
         for (int i = 0; i < num_bits; ++i) {
-          int next_bit = __ffsll(value) - 1;
+          int next_bit = bit_ffsll(value) - 1;
           assert(next_bit >= 0);
           scan_data.enumeration_result_buffer[before + i] =
               container_id*kBitsize + next_bit;
@@ -764,26 +769,28 @@ class Bitmap {
     /**
      * Only for debugging: Counts the number of ones.
      */
-    __DEV__ SizeT DBG_count_num_ones() {
-      return __popcll(containers[0]);
+    __device__ __host__ SizeT DBG_count_num_ones() {
+      return bit_popcll(containers[0]);
     }
 
     /**
      * Function is never called, but required for typing reasons.
      */
     template<bool Retry>
-    __DEV__ bool nested_allocate(SizeT pos) { assert(false); return false; }
+    __device__ bool nested_allocate(SizeT pos) { assert(false); return false; }
 
     /**
      * Function is never called, but required for typing reasons.
      */
     template<bool Retry>
-    __DEV__ bool nested_deallocate(SizeT pos) { assert(false); return false; }
+    __device__ bool nested_deallocate(SizeT pos) {
+      assert(false); return false;
+    }
 
     /**
      * Function is never called, but required for typing reasons.
      */
-    __DEV__ SizeT nested_find_allocated_private(int seed) const {
+    __device__ __host__ SizeT nested_try_find_allocated(int seed) const {
       assert(false);
       return kIndexError;
     }
@@ -791,28 +798,30 @@ class Bitmap {
     /**
      * Function is never called, but required for typing reasons.
      */
-    __DEV__ void nested_initialize(
+    __device__ __host__ void nested_initialize(
         const BitmapData<NumContainers, false>& other) { assert(false); }
 
     /**
      * Function is never called, but required for typing reasons.
      */
-    __DEV__ void nested_initialize(bool allocated) { assert(false); }
+    __device__ __host__ void nested_initialize(bool allocated) {
+      assert(false);
+    }
 
     /**
      * Counts the number and indicies of set bits with population count.
      */
-    __DEV__ void trivial_scan() {
+    __device__ void trivial_scan() {
       assert(blockDim.x == 64 && gridDim.x == 1);
       auto val = containers[0];
 
       if (val & (kOne << threadIdx.x)) {
         // Count number of bits before threadIdx.x.
-        int pos = __popcll(val & ((1ULL << threadIdx.x) - 1));
+        int pos = bit_popcll(val & ((1ULL << threadIdx.x) - 1));
         scan_data.enumeration_result_buffer[pos] = threadIdx.x;
       }
 
-      scan_data.enumeration_result_size = __popcll(val);
+      scan_data.enumeration_result_size = bit_popcll(val);
     }
 
     /**
@@ -832,13 +841,14 @@ class Bitmap {
    * @param container Container of bits.
    * @param seed Seed for randomizing traversals.
    */
-  __DEV__ SizeT find_allocated_in_container(SizeT container, int seed) const {
+  __device__ __host__ SizeT find_allocated_in_container(
+      SizeT container, int seed) const {
     int selected = find_allocated_bit(data_.containers[container], seed);
     if (selected == -1) {
       // No space in here.
       return kIndexError;
     } else {
-      return selected + container*kBitsize;
+      return selected + container * kBitsize;
     }
   }
 
@@ -848,12 +858,12 @@ class Bitmap {
    * @param val Container of bits.
    * @param seed Not utilized.
    */
-  __DEV__ int find_first_bit(ContainerT val, int seed) const {
+  __device__ __host__ int find_first_bit(ContainerT val, int seed) const {
     // TODO: Adapt for other data types.
-    return __ffsll(val) - 1;
+    return bit_ffsll(val) - 1;
   }
 
-  __DEV__ int find_allocated_bit(ContainerT val, int seed) const {
+  __device__ __host__ int find_allocated_bit(ContainerT val, int seed) const {
     return find_allocated_bit_fast(val, seed);
   }
 
@@ -864,12 +874,17 @@ class Bitmap {
    * @param val Container of bits.
    * @param seed Seed for randomizing traversals.
    */
-  __DEV__ int find_allocated_bit_fast(ContainerT val, int seed) const {
+  __device__ __host__ int find_allocated_bit_fast(ContainerT val, int seed) const {
+#ifdef __CUDA_ARCH__
     // TODO: Can this be more efficient?
     unsigned int rotation_len = (seed+warp_id()) % (sizeof(val)*8);
+#else
+    unsigned int rotation_len = (seed+rand()) % (sizeof(val)*8);
+#endif  // __CUDA_ARCH__
+
     const ContainerT rotated_val = rotl(val, rotation_len);
 
-    int first_bit_pos = __ffsll(rotated_val) - 1;
+    int first_bit_pos = bit_ffsll(rotated_val) - 1;
     if (first_bit_pos == -1) {
       return -1;
     } else {
@@ -883,7 +898,7 @@ class Bitmap {
    * device_do and implemented in sequential_enumerate.h.
    */
   template<typename F, typename... Args>
-  __DEV__ void enumerate(F func, Args... args);
+  __device__ __host__ void enumerate(F func, Args... args);
 
   /**
    * The number of bits per container.
