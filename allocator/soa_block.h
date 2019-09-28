@@ -20,11 +20,11 @@ class AbstractBlock {
  public:
   using BitmapT = unsigned long long int;
 
-  __DEV__ AbstractBlock() {
+  __device__ AbstractBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % 64 == 0);   // Alignment.
   }
 
-  __DEV__ bool is_slot_allocated(ObjectIndexT index) {
+  __device__ __host__ bool is_slot_allocated(ObjectIndexT index) const {
     return (free_bitmap & (1ULL << index)) == 0;
   }
 
@@ -44,7 +44,7 @@ class AbstractBlock {
   volatile TypeIndexT type_id;
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
-  __DEV__ void** forwarding_pointer_address(ObjectIndexT pos) const {
+  __device__ void** forwarding_pointer_address(ObjectIndexT pos) const {
     char* block_base = const_cast<char*>(reinterpret_cast<const char*>(this));
     // Address of SOA array.
     auto* soa_array = reinterpret_cast<void**>(
@@ -52,11 +52,11 @@ class AbstractBlock {
     return soa_array + pos;
   }
 
-  __DEV__ void set_forwarding_pointer(ObjectIndexT pos, void* ptr) {
+  __device__ void set_forwarding_pointer(ObjectIndexT pos, void* ptr) {
     *forwarding_pointer_address(pos) = ptr;
   }
 
-  __DEV__ void* get_forwarding_pointer(ObjectIndexT pos) const {
+  __device__ void* get_forwarding_pointer(ObjectIndexT pos) const {
     return *forwarding_pointer_address(pos);
   }
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER
@@ -84,7 +84,7 @@ class SoaBlock : public AbstractBlock {
       N == 64 ? (~0ULL) : ((1ULL << N) - 1);
 
   // Initializes a new block.
-  __DEV__ SoaBlock() : AbstractBlock() {
+  __device__ SoaBlock() : AbstractBlock() {
     type_id = TypeId;
     __threadfence();  // Initialize bitmap after type_id is visible.
     free_bitmap = kBitmapInitState;
@@ -92,7 +92,7 @@ class SoaBlock : public AbstractBlock {
   }
 
   // Constructs an object identifier.
-  __DEV__ T* make_pointer(ObjectIndexT index) {
+  __device__ __host__ T* make_pointer(ObjectIndexT index) const {
     uint8_t obj_idx = reinterpret_cast<uint8_t&>(index);
     assert(obj_idx < N);
     uintptr_t ptr_as_int = obj_idx;
@@ -112,16 +112,16 @@ class SoaBlock : public AbstractBlock {
     return reinterpret_cast<T*>(ptr_as_int);
   }
 
-  __DEV__ BitmapT allocation_bitmap() const {
+  __device__ __host__ BitmapT allocation_bitmap() const {
     return ~free_bitmap & kBitmapInitState;
   }
 
   // Initializes object iteration bitmap.
-  __DEV__ void initialize_iteration() {
+  __device__ void initialize_iteration() {
     iteration_bitmap = allocation_bitmap();
   }
 
-  __DEV__ DeallocationState deallocate(ObjectIndexT position) {
+  __device__ DeallocationState deallocate(ObjectIndexT position) {
     BitmapT before;
     BitmapT mask = 1ULL << position;
 
@@ -145,15 +145,15 @@ class SoaBlock : public AbstractBlock {
     }
   }
 
-  __DEV__ ObjectIndexT DBG_num_bits() {
+  __device__ __host__ ObjectIndexT DBG_num_bits() const {
     return N;
   }
 
-  __DEV__ ObjectIndexT DBG_allocated_bits() {
-    return N - __popcll(free_bitmap);
+  __device__ __host__ ObjectIndexT DBG_allocated_bits() const {
+    return N - bit_popcll(free_bitmap);
   }
 
-  __DEV__ TypeIndexT get_static_type() const {
+  __device__ __host__ TypeIndexT get_static_type() const {
     return TypeId;
   }
 

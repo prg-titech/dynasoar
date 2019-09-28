@@ -617,7 +617,7 @@ class SoaAllocator {
    * @tparam Args Types of parameters of \p F.
    */
   template<class T, typename F, typename... Args>
-  __DEV__ void device_do(F func, Args... args) {
+  __device__ __host__ void device_do(F func, Args... args) {
     // device_do iterates over objects in a block.
     allocated_[BlockHelper<T>::kIndex].enumerate(
         &SequentialExecutor<T, F, ThisAllocator, Args...>::device_do,
@@ -821,7 +821,7 @@ class SoaAllocator {
    * Checks if a block location is in state allocated[T].
    */
   template<typename T>
-  __DEV__ bool is_block_allocated(BlockIndexT index) {
+  __device__ __host__ bool is_block_allocated(BlockIndexT index) {
     return allocated_[BlockHelper<T>::kIndex][index];
   }
 
@@ -829,7 +829,7 @@ class SoaAllocator {
    * Decodes the block index from a fake pointer.
    */
   template<class T>
-  __DEV__ BlockIndexT get_block_idx(T* ptr) {
+  __device__ __host__ BlockIndexT get_block_idx(T* ptr) {
     uintptr_t ptr_as_int = reinterpret_cast<uintptr_t>(ptr);
     uintptr_t data_as_int = reinterpret_cast<uintptr_t>(data_);
 
@@ -841,7 +841,7 @@ class SoaAllocator {
    * Decodes the object slot ID from a fake pointer.
    */
   template<class T>
-  __DEV__ static ObjectIndexT get_object_id(T* ptr) {
+  __device__ __host__ static ObjectIndexT get_object_id(T* ptr) {
     return PointerHelper::obj_id_from_obj_ptr(ptr);
   }
 
@@ -853,8 +853,8 @@ class SoaAllocator {
    * @param obj_id Object slot ID
    */
   template<class T>
-  __DEV__ static T* get_object(typename BlockHelper<T>::BlockType* block,
-                               ObjectIndexT obj_id) {
+  __device__ __host__ static T* get_object(
+      typename BlockHelper<T>::BlockType* block, ObjectIndexT obj_id) {
     assert(obj_id < 64);
     return block->make_pointer(obj_id);
   }
@@ -865,8 +865,8 @@ class SoaAllocator {
    * @param block_idx Block index
    */
   template<class T>
-  __DEV__ typename BlockHelper<T>::BlockType* get_block(BlockIndexT block_idx)
-      const {
+  __device__ __host__ typename BlockHelper<T>::BlockType* get_block(
+      BlockIndexT block_idx) const {
     assert(block_idx < N && block_idx >= 0);
     uintptr_t increment = static_cast<uintptr_t>(block_idx)*kBlockSizeBytes;
     auto* result = reinterpret_cast<typename BlockHelper<T>::BlockType*>(
@@ -1084,13 +1084,13 @@ class SoaAllocator {
 
 
 template<typename T, typename F, typename AllocatorT, typename... Args>
-__DEV__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
+__device__ __host__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
     BlockIndexT block_idx, F func, AllocatorT* allocator, Args... args) {
   auto* block = allocator->template get_block<T>(block_idx);
   auto bitmap = block->allocation_bitmap();
 
   while (bitmap != 0ULL) {
-    auto pos = __ffsll(bitmap) - 1;
+    auto pos = bit_ffsll(bitmap) - 1;
     bitmap &= bitmap - 1;
 
     auto* obj = AllocatorT::template get_object<T>(block, pos);
