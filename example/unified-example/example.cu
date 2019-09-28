@@ -21,6 +21,8 @@ AllocatorHandle<AllocatorT>* allocator_handle;
 
 __device__ Foo* selected_object;
 
+int h_accumulator = 0;
+
 #if GCC_COMPILER
 class Foo : public AllocatorT::Base {
 #else
@@ -41,6 +43,10 @@ class Foo : public SoaBase<AllocatorT> {
  
   __device__ __host__ int qux() {
     return field0_ + field1_ + field2_;
+  }
+
+  void add_to_accumulator() {
+    h_accumulator += qux();
   }
 };
 
@@ -73,10 +79,21 @@ int main(int /*argc*/, char** /*argv*/) {
 
   int result = host_selected_object->qux();
   if (result == 35 + 2 + 3) {
-    printf("Check passed!\n");
-    return 0;
+    printf("First check passed!\n");
   } else {
-    printf("ERROR: Check failed! Expected 35, but got %i\n", result);
+    printf("ERROR: First check failed! Expected 35, but got %i\n", result);
     return 1;
   }
+
+  allocator_handle->device_pointer()->template device_do<Foo>(&Foo::add_to_accumulator);
+  int expected = 2048*(2+3) + 2048*2047/2;
+  if (h_accumulator == expected) {
+    printf("Second check passed!\n");
+  } else {
+    printf("ERROR: Second check failed! Expected %i, but got %i\n",
+           expected, h_accumulator);
+    return 1;
+  }
+
+  return 0;
 }
