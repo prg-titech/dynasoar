@@ -9,43 +9,43 @@
 
 #if GCC_COMPILER
 #define declare_field_types(classname, ...) \
-  __DEV__ void* operator new(size_t sz, typename classname::Allocator* allocator) { \
+  __device__ void* operator new(size_t sz, typename classname::Allocator* allocator) { \
     return allocator->allocate_new<classname>(); \
   } \
-  __DEV__ void* operator new(size_t sz, classname* ptr) { \
+  __device__ void* operator new(size_t sz, classname* ptr) { \
     return ptr; \
   } \
-  __DEV__ void operator delete(void* ptr, typename classname::Allocator* allocator) { \
+  __device__ void operator delete(void* ptr, typename classname::Allocator* allocator) { \
     allocator->free<classname>(reinterpret_cast<classname*>(ptr)); \
   } \
-  __DEV__ void operator delete(void*, classname*) { \
+  __device__ void operator delete(void*, classname*) { \
     assert(false);  \
   } \
   using FieldTypes = std::tuple<__VA_ARGS__>;
 #else
 #warning Using untested compiler. GCC recommended.
 template<typename T>
-__DEV__ void* __dynasoar_op_new(void* allocator) {
+__device__ void* __dynasoar_op_new(void* allocator) {
   return reinterpret_cast<typename T::Allocator*>(allocator)->template allocate_new<T>();
 }
 
 template<typename T>
-__DEV__ void __dynasoar_op_delete(void* ptr, void* allocator) {
+__device__ void __dynasoar_op_delete(void* ptr, void* allocator) {
   reinterpret_cast<typename T::Allocator*>(allocator)->template free<T>(
       reinterpret_cast<T*>(ptr));
 }
 
 #define declare_field_types(classname, ...) \
-  __DEV__ void* operator new(size_t sz, void* allocator) { \
+  __device__ void* operator new(size_t sz, void* allocator) { \
     return __dynasoar_op_new<classname>(allocator); \
   } \
-  __DEV__ void* operator new(size_t sz, classname* ptr) { \
+  __device__ void* operator new(size_t sz, classname* ptr) { \
     return ptr; \
   } \
-  __DEV__ void operator delete(void* ptr, void* allocator) { \
+  __device__ void operator delete(void* ptr, void* allocator) { \
     __dynasoar_op_delete<classname>(ptr, allocator); \
   } \
-  __DEV__ void operator delete(void*, classname*) { \
+  __device__ void operator delete(void*, classname*) { \
     assert(false);  /* Construct must not throw exceptions. */ \
   } \
   using FieldTypes = std::tuple<__VA_ARGS__>;
@@ -54,14 +54,14 @@ __DEV__ void __dynasoar_op_delete(void* ptr, void* allocator) {
 
 // TODO: Is it safe to make these static?
 template<typename AllocatorT, typename T>
-__DEV__ __forceinline__ static void destroy(AllocatorT* allocator, T* ptr) {
+__device__ __forceinline__ static void destroy(AllocatorT* allocator, T* ptr) {
   allocator->template free<T>(ptr);
 }
 
 
 template<typename AllocatorT, typename C, int FieldIndex>
-__DEV__ __forceinline__ static void destroy(AllocatorT* allocator,
-                                            const SoaField<C, FieldIndex>& value) {
+__device__ __forceinline__ static void destroy(
+    AllocatorT* allocator, const SoaField<C, FieldIndex>& value) {
   allocator->template free(value.get());
 }
 
@@ -99,7 +99,7 @@ class SoaBase {
   }
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
-  __DEV__ SoaBase<AllocatorT>** forwarding_pointer_address() const {
+  __device__ SoaBase<AllocatorT>** forwarding_pointer_address() const {
     char* block_base = PointerHelper::block_base_from_obj_ptr(this);
     // Address of SOA array.
     auto* soa_array = reinterpret_cast<SoaBase<AllocatorT>**>(
@@ -107,11 +107,11 @@ class SoaBase {
     return soa_array + PointerHelper::obj_id_from_obj_ptr(this);
   }
 
-  __DEV__ SoaBase<AllocatorT>* get_forwarding_pointer() const {
+  __device__ SoaBase<AllocatorT>* get_forwarding_pointer() const {
     return *forwarding_pointer_address();
   }
 
-  __DEV__ void set_forwarding_pointer(SoaBase<AllocatorT>* ptr) {
+  __device__ void set_forwarding_pointer(SoaBase<AllocatorT>* ptr) {
     *forwarding_pointer_address() = ptr;
   }
 #endif  // OPTION_DEFRAG_FORWARDING_POINTER

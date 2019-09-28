@@ -190,13 +190,13 @@ struct ParallelExecutor {
           bench_prefix_sum_time += micros;
         }
 
-        __DEV__ static void run_pre(AllocatorT* allocator, Args... args) {
+        __device__ static void run_pre(AllocatorT* allocator, Args... args) {
           (allocator->*pre_func)(args...);
         }
       };
 
-      static __DEV__ void parallel_do_cuda(AllocatorT* allocator,
-                                           Args... args) {
+      static __device__ void parallel_do_cuda(AllocatorT* allocator,
+                                              Args... args) {
         const auto N_alloc =
             allocator->allocated_[kTypeIndex].scan_num_bits();
 
