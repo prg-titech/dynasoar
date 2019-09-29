@@ -93,7 +93,7 @@ void render_frame() {
   init_frame();
 
   allocator_handle->template device_do<Body>([&](Body* body) {
-    draw_body(body->pos_x, body->pos_y, body->mass_);
+    draw_body(body->pos_x(), body->pos_y(), body->mass());
   });
 
   show_frame();
