@@ -29,9 +29,9 @@ T copy_from_device(T* device_ptr) {
 template<typename T, T>
 struct FunctionTypeGetter;
 
-template<typename T, typename R, typename... Args, R (T::*func)(Args...)>
-struct FunctionTypeGetter<R (T::*)(Args...), func> {
-  static constexpr R (T::*FunctionType)(Args...) = func;
+template<typename T, typename R, typename... Args, R (T::*func)(Args&&...)>
+struct FunctionTypeGetter<R (T::*)(Args&&...), func> {
+  static constexpr R (T::*FunctionType)(Args&&...) = func;
 };
 
 #endif  // ALLOCATOR_SOA_UTIL_H

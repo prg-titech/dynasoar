@@ -1,6 +1,7 @@
 #ifndef ALLOCATOR_ALLOCATOR_HANDLE_H
 #define ALLOCATOR_ALLOCATOR_HANDLE_H
 
+#include "allocator/soa_allocator.h"
 #include "allocator/configuration.h"
 #include "allocator/tuple_helper.h"
 #include "allocator/util.h"
@@ -30,7 +31,8 @@ class AllocatorHandle {
   AllocatorHandle(const AllocatorHandle<AllocatorT>&) = delete;
 
   // Initialize the allocator: Allocator class and data buffer.
-  AllocatorHandle(bool unified_memory = false) {
+  AllocatorHandle(bool unified_memory = false)
+      : unified_memory_(unified_memory) {
 #ifndef NDEBUG
     int device_id;
     gpuErrchk(cudaGetDevice(&device_id));
@@ -135,6 +137,12 @@ class AllocatorHandle {
     allocator_->parallel_do<false, T, P1, func>(p1);
   }
 
+  template<class T, typename F, typename... Args>
+  void device_do(F func, Args&&... args) {
+    allocator_->template device_do<T, F, Args...>(
+        func, std::forward<Args>(args)...);
+  }
+
 #ifdef OPTION_DEFRAG
   // Defrag/compact all objects of type T. Also updates all affected pointers
   // in the data buffer.
@@ -164,6 +172,7 @@ class AllocatorHandle {
  private:
   AllocatorT* allocator_ = nullptr;
   char* data_buffer_ = nullptr;
+  bool unified_memory_ = false;
 };
 
 #endif  // ALLOCATOR_ALLOCATOR_HANDLE_H

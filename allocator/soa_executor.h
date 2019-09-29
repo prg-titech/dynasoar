@@ -100,12 +100,12 @@ struct ParallelExecutor {
   template<typename R, typename Base, typename... Args>
   struct FunctionArgTypesWrapper {
 
-    template<R (Base::*func)(Args...)>
+    template<R (Base::*func)(Args&&...)>
     struct FunctionWrapper {
       using ThisClass = FunctionWrapper<func>;
 
       static void parallel_do(AllocatorT* allocator, int shared_mem_size,
-                              Args... args) {
+                              Args&&... args) {
         auto time_start = std::chrono::system_clock::now();
         auto time_end = time_start;
 
@@ -133,7 +133,7 @@ struct ParallelExecutor {
           kernel_parallel_do<ThisClass>
               <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
                 kCudaBlockSize,
-                shared_mem_size>>>(allocator, args...);
+                shared_mem_size>>>(allocator, std::forward<Args>(args)...);
           gpuErrchk(cudaDeviceSynchronize());
         } else {
           time_end = std::chrono::system_clock::now();
@@ -145,12 +145,12 @@ struct ParallelExecutor {
         bench_prefix_sum_time += micros;
       }
 
-      template<void(AllocatorT::*pre_func)(Args...)>
+      template<void(AllocatorT::*pre_func)(Args&&...)>
       struct WithPre {
         using PreClass = WithPre<pre_func>;
 
         static void parallel_do(AllocatorT* allocator, int shared_mem_size,
-                                Args... args) {
+                                Args&&... args) {
           auto time_start = std::chrono::system_clock::now();
           auto time_end = time_start;
 
@@ -177,7 +177,7 @@ struct ParallelExecutor {
             kernel_parallel_do_with_pre<ThisClass, PreClass>
                 <<<(total_threads + kCudaBlockSize - 1)/kCudaBlockSize,
                   kCudaBlockSize,
-                  shared_mem_size>>>(allocator, args...);
+                  shared_mem_size>>>(allocator, std::forward<Args>(args)...);
             gpuErrchk(cudaDeviceSynchronize());
           } else {
             time_end = std::chrono::system_clock::now();
@@ -190,13 +190,13 @@ struct ParallelExecutor {
           bench_prefix_sum_time += micros;
         }
 
-        __device__ static void run_pre(AllocatorT* allocator, Args... args) {
-          (allocator->*pre_func)(args...);
+        __device__ static void run_pre(AllocatorT* allocator, Args&&... args) {
+          (allocator->*pre_func)(std::forward<Args>(args)...);
         }
       };
 
       static __device__ void parallel_do_cuda(AllocatorT* allocator,
-                                              Args... args) {
+                                              Args&&... args) {
         const auto N_alloc =
             allocator->allocated_[kTypeIndex].scan_num_bits();
 
@@ -218,7 +218,7 @@ struct ParallelExecutor {
               IterT* obj = allocator->template get_object<IterT>(
                   block, thread_offset);
               // call the function.
-              (obj->*func)(args...);
+              (obj->*func)(std::forward<Args>(args)...);
             }
           }
         }
@@ -232,7 +232,7 @@ struct SequentialExecutor {
   // Defined in soa_allocator.h.
   __device__ __host__ static void device_do(BlockIndexT block_idx, F func,
                                             AllocatorT* allocator,
-                                            Args... args);
+                                            Args&&... args);
 };
 
 #endif  // ALLOCATOR_SOA_EXECUTOR_H

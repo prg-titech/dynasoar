@@ -20,21 +20,25 @@ struct TupleHelper<T, Types...> {
   // Returns true if F returned false for one type. Returns true if iteration
   // terminated early, without processing all elements.
   template<template<class> typename F, typename... Args>
-  static bool for_all(Args... args) {
+  static bool for_all(Args&&... args) {
     F<T> func;
-    if (func(args...)) {  // If F returns false, stop enumerating.
-      return TupleHelper<Types...>::template for_all<F>(args...);
+    if (func(std::forward<Args>(args)...)) {
+      return TupleHelper<Types...>::template for_all<F>(
+          std::forward<Args>(args)...);
     } else {
+      // If F returns false, stop enumerating.
       return true;
     }
   }
 
   template<template<class> typename F, typename... Args>
-  __device__ __host__ static bool dev_for_all(Args... args) {
+  __device__ __host__ static bool dev_for_all(Args&&... args) {
     F<T> func;
-    if (func(args...)) {  // If F returns false, stop enumerating.
-      return TupleHelper<Types...>::template dev_for_all<F>(args...);
+    if (func(std::forward<Args>(args)...)) {
+      return TupleHelper<Types...>::template dev_for_all<F>(
+          std::forward<Args>(args)...);
     } else {
+      // If F returns false, stop enumerating.
       return true;
     }
   }
@@ -105,10 +109,12 @@ struct TupleHelper<> {
   using NonAbstractType = void;
 
   template<template<class> typename F, typename... Args>
-  static bool for_all(Args... /*args*/) { return false; }
+  static bool for_all(Args&&... /*args*/) { return false; }
 
   template<template<class> typename F, typename... Args>
-  __device__ __host__ static bool dev_for_all(Args... /*args*/) { return false; }
+  __device__ __host__ static bool dev_for_all(Args&&... /*args*/) {
+    return false;
+  }
 
   static const int kThisClass64BlockSize = std::numeric_limits<int>::max();
   static const int k64BlockMinSize = kThisClass64BlockSize;

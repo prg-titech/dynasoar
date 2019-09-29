@@ -617,11 +617,11 @@ class SoaAllocator {
    * @tparam Args Types of parameters of \p F.
    */
   template<class T, typename F, typename... Args>
-  __device__ __host__ void device_do(F func, Args... args) {
+  __device__ __host__ void device_do(F func, Args&&... args) {
     // device_do iterates over objects in a block.
     allocated_[BlockHelper<T>::kIndex].enumerate(
         &SequentialExecutor<T, F, ThisAllocator, Args...>::device_do,
-        func, this, args...);
+        func, this, std::forward<Args>(args)...);
   }
 
   /**
@@ -1083,9 +1083,27 @@ class SoaAllocator {
 };
 
 
+template<typename T, typename F, typename... Args>
+struct DeviceDoFunctionInvoker {
+  template<typename U = F>
+  __device__ __host__ static typename
+  std::enable_if<std::is_member_function_pointer<U>::value, void>::type
+  call(T* obj, F func, Args&&... args) {
+    (obj->*func)(std::forward<Args>(args)...);
+  }
+
+  template<typename U = F>
+  __device__ __host__ static typename
+  std::enable_if<!std::is_member_function_pointer<U>::value, void>::type
+  call(T* obj, F func, Args&&... args) {
+    func(obj, std::forward<Args>(args)...);
+  }
+};
+
+
 template<typename T, typename F, typename AllocatorT, typename... Args>
 __device__ __host__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
-    BlockIndexT block_idx, F func, AllocatorT* allocator, Args... args) {
+    BlockIndexT block_idx, F func, AllocatorT* allocator, Args&&... args) {
   auto* block = allocator->template get_block<T>(block_idx);
   auto bitmap = block->allocation_bitmap();
 
@@ -1094,7 +1112,8 @@ __device__ __host__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_d
     bitmap &= bitmap - 1;
 
     auto* obj = AllocatorT::template get_object<T>(block, pos);
-    (obj->*func)(args...);
+    DeviceDoFunctionInvoker<T, F, Args...>::call(
+        obj, func, std::forward<Args>(args)...);
   }
 }
 
