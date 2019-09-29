@@ -3,7 +3,8 @@
 
 void init_renderer();
 void close_renderer();
-void draw(float* host_Body_pos_x, float* host_Body_pos_y,
-          float* host_Body_mass);
+void init_frame();
+void show_frame();
+void draw_body(float pos_x, float pos_y, float mass);
 
 #endif  // EXAMPLE_NBODY_SOA_RENDERING_H

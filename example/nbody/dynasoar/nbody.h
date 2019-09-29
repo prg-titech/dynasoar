@@ -34,19 +34,21 @@ class Body : public AllocatorT::Base {
   SoaField<Body, 6> mass_;
 
  public:
-  __DEV__ Body(float pos_x, float pos_y, float vel_x, float vel_y, float mass);
+  __device__ Body(float pos_x, float pos_y, float vel_x, float vel_y,
+                  float mass);
 
-  __DEV__ void compute_force();
+  __device__ void compute_force();
 
-  __DEV__ void apply_force(Body* other);
+  __device__ void apply_force(Body* other);
 
-  __DEV__ void update();
+  __device__ void update();
 
-  __DEV__ void add_checksum();
+  __device__ void add_checksum();
 
-#ifdef OPTION_RENDER
-  __DEV__ void add_to_draw_array();
-#endif  // OPTION_RENDER
+  // Only for rendering.
+  __device__ __host__ float pos_x() const { return pos_x_; }
+  __device__ __host__ float pos_y() const { return pos_y_; }
+  __device__ __host__ float mass() const { return mass_; }
 };
 
 #endif  // EXAMPLE_NBODY_SOA_NBODY_H

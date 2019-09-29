@@ -18,15 +18,6 @@ __device__ AllocatorT* device_allocator;
 __device__ float device_checksum;
 
 
-#ifdef OPTION_RENDER
-// Helper variables for drawing.
-__device__ int draw_counter = 0;
-__device__ float Body_pos_x[kNumBodies];
-__device__ float Body_pos_y[kNumBodies];
-__device__ float Body_mass[kNumBodies];
-#endif  // OPTION_RENDER
-
-
 __DEV__ Body::Body(float pos_x, float pos_y,
                    float vel_x, float vel_y, float mass)
     : pos_x_(pos_x), pos_y_(pos_y),
@@ -98,35 +89,14 @@ __global__ void kernel_initialize_bodies() {
 
 
 #ifdef OPTION_RENDER
-__DEV__ void Body::add_to_draw_array() {
-  int idx = atomicAdd(&draw_counter, 1);
-  Body_pos_x[idx] = pos_x_;
-  Body_pos_y[idx] = pos_y_;
-  Body_mass[idx] = mass_;
-}
-
-__global__ void kernel_reset_draw_counters() {
-  draw_counter = 0;
-}
-
 void render_frame() {
-  // Host-side variables for rendering.
-  float host_Body_pos_x[kNumBodies];
-  float host_Body_pos_y[kNumBodies];
-  float host_Body_mass[kNumBodies];
+  init_frame();
 
-  kernel_reset_draw_counters<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  allocator_handle->parallel_do<Body, &Body::add_to_draw_array>();
-  gpuErrchk(cudaDeviceSynchronize());
+  allocator_handle->template device_do<Body>([&](Body* body) {
+    draw_body(body->pos_x, body->pos_y, body->mass_);
+  });
 
-  cudaMemcpyFromSymbol(host_Body_pos_x, Body_pos_x,
-                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
-  cudaMemcpyFromSymbol(host_Body_pos_y, Body_pos_y, sizeof(float)*kNumBodies, 0,
-             cudaMemcpyDeviceToHost);
-  cudaMemcpyFromSymbol(host_Body_mass, Body_mass, sizeof(float)*kNumBodies, 0,
-             cudaMemcpyDeviceToHost);
-  draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass);
+  show_frame();
 }
 #endif  // OPTION_RENDER
 
@@ -137,7 +107,7 @@ int main(int /*argc*/, char** /*argv*/) {
 #endif  // OPTION_RENDER
 
   // Create new allocator.
-  allocator_handle = new AllocatorHandle<AllocatorT>();
+  allocator_handle = new AllocatorHandle<AllocatorT>(/*unified_memory=*/ true);
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
