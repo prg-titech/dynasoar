@@ -190,7 +190,12 @@ int main(int /*argc*/, char** /*argv*/) {
                cudaMemcpyDeviceToHost);
     cudaMemcpy(Body_mass, host_Body_mass, sizeof(float)*kNumBodies,
                cudaMemcpyDeviceToHost);
-    draw(Body_pos_x, Body_pos_y, Body_mass);
+
+    init_frame();
+    for (int i = 0; i < kNumBodies; ++i) {
+      draw_body(Body_pos_x[i], Body_pos_y[i], Body_mass[i]);
+    }
+    show_frame();
 #endif  // OPTION_RENDER
   }
 

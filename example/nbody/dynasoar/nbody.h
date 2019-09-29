@@ -25,13 +25,13 @@ class Body : public AllocatorT::Base {
       float)          // mass_
 
  private:
-  SoaField<Body, 0> pos_x_;
-  SoaField<Body, 1> pos_y_;
-  SoaField<Body, 2> vel_x_;
-  SoaField<Body, 3> vel_y_;
-  SoaField<Body, 4> force_x_;
-  SoaField<Body, 5> force_y_;
-  SoaField<Body, 6> mass_;
+  Field<Body, 0> pos_x_;
+  Field<Body, 1> pos_y_;
+  Field<Body, 2> vel_x_;
+  Field<Body, 3> vel_y_;
+  Field<Body, 4> force_x_;
+  Field<Body, 5> force_y_;
+  Field<Body, 6> mass_;
 
  public:
   __device__ Body(float pos_x, float pos_y, float vel_x, float vel_y,
@@ -43,7 +43,7 @@ class Body : public AllocatorT::Base {
 
   __device__ void update();
 
-  __device__ void add_checksum();
+  void add_checksum();
 
   // Only for rendering.
   __device__ __host__ float pos_x() const { return pos_x_; }

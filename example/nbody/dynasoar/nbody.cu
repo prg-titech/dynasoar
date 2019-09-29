@@ -15,23 +15,23 @@ __device__ AllocatorT* device_allocator;
 
 
 // Helper variable for checksum computation.
-__device__ float device_checksum;
+float host_checksum;
 
 
-__DEV__ Body::Body(float pos_x, float pos_y,
-                   float vel_x, float vel_y, float mass)
+__device__ Body::Body(float pos_x, float pos_y,
+                      float vel_x, float vel_y, float mass)
     : pos_x_(pos_x), pos_y_(pos_y),
       vel_x_(vel_x), vel_y_(vel_y), mass_(mass) {}
 
 
-__DEV__ void Body::compute_force() {
+__device__ void Body::compute_force() {
   force_x_ = 0.0f;
   force_y_ = 0.0f;
   device_allocator->template device_do<Body>(&Body::apply_force, this);
 }
 
 
-__DEV__ void Body::apply_force(Body* other) {
+__device__ void Body::apply_force(Body* other) {
   // Update `other`.
   if (other != this) {
     float dx = pos_x_ - other->pos_x_;
@@ -45,7 +45,7 @@ __DEV__ void Body::apply_force(Body* other) {
 }
 
 
-__DEV__ void Body::update() {
+__device__ void Body::update() {
   vel_x_ += force_x_*kDt / mass_;
   vel_y_ += force_y_*kDt / mass_;
   pos_x_ += vel_x_*kDt;
@@ -61,14 +61,8 @@ __DEV__ void Body::update() {
 }
 
 
-__DEV__ void Body::add_checksum() {
-  atomicAdd(&device_checksum, pos_x_ + pos_y_*2 + vel_x_*3 + vel_y_*4);
-}
-
-
-__global__ void kernel_compute_checksum() {
-  device_checksum = 0.0f;
-  device_allocator->device_do<Body>(&Body::add_checksum);
+void Body::add_checksum() {
+  host_checksum += pos_x_ + pos_y_*2 + vel_x_*3 + vel_y_*4;
 }
 
 
@@ -139,13 +133,9 @@ int main(int /*argc*/, char** /*argv*/) {
   printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
 
 #ifndef NDEBUG
-  kernel_compute_checksum<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  float checksum;
-  cudaMemcpyFromSymbol(&checksum, device_checksum, sizeof(device_checksum), 0,
-                       cudaMemcpyDeviceToHost);
-  printf("Checksum: %f\n", checksum);
+  host_checksum = 0.0f;
+  allocator_handle->template device_do<Body>(&Body::add_checksum);
+  printf("Checksum: %f\n", host_checksum);
 #endif  // NDEBUG
 
 #ifdef OPTION_RENDER
