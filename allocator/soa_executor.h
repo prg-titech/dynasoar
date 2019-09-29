@@ -4,6 +4,8 @@
 #include <chrono>
 #include <limits>
 
+#include "util/util.h"
+
 // For benchmarks: Measure time spent outside of parallel sections.
 // Measure time in microseconds because numbers are small.
 long unsigned int bench_prefix_sum_time = 0;
@@ -230,9 +232,9 @@ struct ParallelExecutor {
 template<typename T, typename F, typename AllocatorT, typename... Args>
 struct SequentialExecutor {
   // Defined in soa_allocator.h.
-  __device__ __host__ static void device_do(BlockIndexT block_idx, F func,
-                                            AllocatorT* allocator,
-                                            Args&&... args);
+  __host_or_device__ static void device_do(BlockIndexT block_idx, F func,
+                                           AllocatorT* allocator,
+                                           Args&&... args);
 };
 
 #endif  // ALLOCATOR_SOA_EXECUTOR_H

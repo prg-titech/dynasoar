@@ -898,7 +898,7 @@ class Bitmap {
    * device_do and implemented in sequential_enumerate.h.
    */
   template<typename F, typename... Args>
-  __device__ __host__ void enumerate(F func, Args&&... args);
+  __host_or_device__ void enumerate(F func, Args&&... args);
 
   /**
    * The number of bits per container.

@@ -617,7 +617,7 @@ class SoaAllocator {
    * @tparam Args Types of parameters of \p F.
    */
   template<class T, typename F, typename... Args>
-  __device__ __host__ void device_do(F func, Args&&... args) {
+  __host_or_device__ void device_do(F func, Args&&... args) {
     // device_do iterates over objects in a block.
     allocated_[BlockHelper<T>::kIndex].enumerate(
         &SequentialExecutor<T, F, ThisAllocator, Args...>::device_do,
@@ -1085,24 +1085,31 @@ class SoaAllocator {
 
 template<typename T, typename F, typename... Args>
 struct DeviceDoFunctionInvoker {
+  // Pragma disables compiler warning.
+  #pragma hd_warning_disable
   template<typename U = F>
-  __device__ __host__ static typename
+  __host__ __device__ static typename
   std::enable_if<std::is_member_function_pointer<U>::value, void>::type
   call(T* obj, F func, Args&&... args) {
     (obj->*func)(std::forward<Args>(args)...);
   }
 
+  #pragma hd_warning_disable
   template<typename U = F>
-  __device__ __host__ static typename
+  __host__ __device__ static typename
   std::enable_if<!std::is_member_function_pointer<U>::value, void>::type
   call(T* obj, F func, Args&&... args) {
     func(obj, std::forward<Args>(args)...);
   }
+
+  template<typename... Args2>
+  __host__ __device__ static void call(Args2... args) {}
 };
 
 
+#pragma hd_warning_disable
 template<typename T, typename F, typename AllocatorT, typename... Args>
-__device__ __host__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
+__host__ __device__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
     BlockIndexT block_idx, F func, AllocatorT* allocator, Args&&... args) {
   auto* block = allocator->template get_block<T>(block_idx);
   auto bitmap = block->allocation_bitmap();

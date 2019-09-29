@@ -14,7 +14,7 @@ struct SequentialEnumerator {
   template<typename... Args>
   struct HandlerWrapper {
     template<typename F, bool N = HasNested>
-    __device__ __host__ static typename std::enable_if<N, void>::type
+    __host_or_device__ static typename std::enable_if<N, void>::type
     enumerate(BitmapT* bitmap, F func, Args&&... args) {
       // Has nested bitmap. Delegate to next level.
       SequentialEnumerator<typename BitmapT::BitmapDataT::BitmapT,
@@ -25,14 +25,14 @@ struct SequentialEnumerator {
     }
 
     template<typename F, bool N = HasNested>
-    __device__ __host__ static typename std::enable_if<!N, void>::type
+    __host_or_device__ static typename std::enable_if<!N, void>::type
     enumerate(BitmapT* bitmap, F func, Args&&... args) {
       // Does not have a nested bitmap. Start top-down traversal.
       enumerate_top_down(bitmap, 0, func, std::forward<Args>(args)...);
     }
 
     template<typename F, int L = Level>
-    __device__ __host__ static typename std::enable_if<(L > 0), void>::type
+    __host_or_device__ static typename std::enable_if<(L > 0), void>::type
     enumerate_top_down(BitmapT* bitmap, SizeT cid, F func, Args&&... args) {
       // Nested bitmap. Bits are container IDs in outer bitmap.
       assert(cid < BitmapT::kNumContainers);
@@ -56,7 +56,7 @@ struct SequentialEnumerator {
     }
 
     template<typename F, int L = Level>
-    __device__ __host__ static typename std::enable_if<(L == 0), void>::type
+    __host_or_device__ static typename std::enable_if<(L == 0), void>::type
     enumerate_top_down(BitmapT* bitmap, SizeT cid, F func, Args&&... args) {
       // L0 bitmap.
       assert(cid < BitmapT::kNumContainers);
@@ -73,7 +73,7 @@ struct SequentialEnumerator {
       }
     }
 
-    __device__ __host__ static OuterBitmapT* outer_bitmap(
+    __host_or_device__ static OuterBitmapT* outer_bitmap(
         BitmapT* nested_bitmap) {
       auto nested_offset = offsetof(typename OuterBitmapT::BitmapDataT, nested);
       return reinterpret_cast<OuterBitmapT*>(
@@ -88,7 +88,7 @@ using BitmapEnumerator = SequentialEnumerator<BitmapT, BitmapT::kHasNested, 0>;
 
 template<typename SizeT, SizeT N, typename ContainerT, int ScanType>
 template<typename F, typename... Args>
-__device__ __host__ void Bitmap<SizeT, N, ContainerT, ScanType>::enumerate(
+__host_or_device__ void Bitmap<SizeT, N, ContainerT, ScanType>::enumerate(
     F func, Args&&... args) {
   BitmapEnumerator<Bitmap<SizeT, N, ContainerT>>
       ::template HandlerWrapper<Args...>::enumerate(

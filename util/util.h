@@ -6,6 +6,12 @@
 #define __DEV__ __device__
 #define __DEV_HOST__ __device__ __host__
 
+#ifdef __CUDA_ARCH__
+#define __host_or_device__ __device__
+#else
+#define __host_or_device__
+#endif  // __CUDA_ARCH__
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
