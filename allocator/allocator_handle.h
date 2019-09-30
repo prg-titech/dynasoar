@@ -7,12 +7,23 @@
 #include "allocator/util.h"
 #include "bitmap/bitmap.h"
 
+/**
+ * Initializes an allocator at a given memory location.
+ * @param allocator Location of allocator
+ * @param data_buffer Location of the heap
+ * @tparam AllocatorT Allocator type
+ */
 template<typename AllocatorT>
 __global__ void init_allocator_kernel(AllocatorT* allocator,
                                       char* data_buffer) {
   new(allocator) AllocatorT(data_buffer);
 }
 
+/**
+ * Prints debug information about the state of the allocator.
+ * @param allocator Pointer to allocator
+ * @tparam AllocatorT Allocator type
+ */
 template<typename AllocatorT>
 __global__ void kernel_print_state_stats(AllocatorT* allocator) {
   assert(gridDim.x == 1 && blockDim.x == 1);
@@ -28,9 +39,21 @@ __global__ void kernel_print_state_stats(AllocatorT* allocator) {
 template<typename AllocatorT>
 class AllocatorHandle {
  public:
+  /**
+   * Allocators cannot be copied.
+   */
   AllocatorHandle(const AllocatorHandle<AllocatorT>&) = delete;
 
-  // Initialize the allocator: Allocator class and data buffer.
+  /**
+   * Initializes the allocator.
+   * 1. Allocates a device allocator object (AllocatorT) in device memory.
+   * 2. Allocates a heap data buffer in device memory.
+   * 3. Initializes the device allocator.
+   * If \p unified_memory is set to true, then all device allocations are
+   * allocated in CUDA unified memory. This allows programmers to access
+   * objects located on device in host code without manual memory transfers.
+   * @param unified_memory Enable/disable unified memory
+   */
   AllocatorHandle(bool unified_memory = false)
       : unified_memory_(unified_memory) {
 #ifndef NDEBUG
@@ -91,13 +114,15 @@ class AllocatorHandle {
     gpuErrchk(cudaDeviceSynchronize());
   }
 
-  // Delete the allocator: Free all associated CUDA memory.
+  /**
+   * Deletes the allocator: Frees all associated CUDA memory.
+   */
   ~AllocatorHandle() {
     cudaFree(allocator_);
     cudaFree(data_buffer_);
   }
 
-  long unsigned int DBG_get_enumeration_time() {
+  long unsigned int DBG_get_enumeration_time() const {
     return allocator_->DBG_get_enumeration_time();
   }
 
@@ -113,32 +138,75 @@ class AllocatorHandle {
     gpuErrchk(cudaDeviceSynchronize());
   }
 
-  // Returns a device pointer to the allocator.
-  AllocatorT* device_pointer() { return allocator_; }
+  /**
+   * Returns a device handle to the allocator.
+   */
+  AllocatorT* device_pointer() const { return allocator_; }
 
-  // Runs a member function T::func for all objects of a type on device.
+  /**
+   * Parallel do-all: Runs a member function T::func for all objects of type T
+   * and subtypes in parallel in a CUDA kernel. Spawns a separate kernel for
+   * each subtype to avoid branch divergence.
+   * @tparam T Base class
+   * @tparam func Member function to be run in parallel
+   */
   template<class T, void(T::*func)()>
   void parallel_do() {
     allocator_->parallel_do<true, T, func>();
   }
 
+  /**
+   * Parallel do-all: Same as parallel_do(), but the member function takes one
+   * argument of type \p P1.
+   * @tparam T Base class
+   * @tparam P1 Type of first parameter
+   * @tparam func Member function to be run in parallel
+   * @param p1 Argument value
+   */
   template<class T, typename P1, void(T::*func)(P1)>
-  void parallel_do(P1 p1) {
-    allocator_->parallel_do<true, T, P1, func>(p1);
+  void parallel_do(P1&& p1) {
+    allocator_->parallel_do<true, T, P1, func>(std::forward<P1>(p1));
   }
 
+  /**
+   * Fast parallel do-all: Same as parallel_do(), but does omits the scan
+   * operation. Assumes that the set of objects of type \p T has not changed
+   * since the last parallel do-all operation. (The state of the objects
+   * themselves may have been modified since then.)
+   * @tparam T Base class
+   * @tparam func Member function to be run in parallel
+   */
   template<class T, void(T::*func)()>
   void fast_parallel_do() {
     allocator_->parallel_do<false, T, func>();
   }
 
+  /**
+   * Fast parallel do-all: Same as fast_parallel_do(), but the member function
+   * takes one argument of type \p P1.
+   * @tparam T Base class
+   * @tparam P1 Type of first parameter
+   * @tparam func Member function to be run in parallel
+   * @param p1 Argument value
+   */
   template<class T, typename P1, void(T::*func)(P1)>
   void fast_parallel_do(P1 p1) {
     allocator_->parallel_do<false, T, P1, func>(p1);
   }
 
+  /**
+   * Device do: Runs a member function \p func of class \p T for all objects
+   * of type \p T. In contrast to parallel_do(), device_do() runs on the host
+   * and without parallelization. Requires unified_memory support.
+   * @param func Member function to be run
+   * @param args Argument values
+   * @tparam T Base class
+   * @tparam F Type of member function
+   * @tparam Args Types of arguments
+   */
   template<class T, typename F, typename... Args>
   void device_do(F func, Args&&... args) {
+    assert(unified_memory_);
     allocator_->template device_do<T, F, Args...>(
         func, std::forward<Args>(args)...);
   }
@@ -170,8 +238,19 @@ class AllocatorHandle {
 #endif  // OPTION_DEFRAG
 
  private:
+  /**
+   * Pointer to allocator handle in device memory.
+   */
   AllocatorT* allocator_ = nullptr;
+
+  /**
+   * Data buffer/heap in device memory.
+   */
   char* data_buffer_ = nullptr;
+
+  /**
+   * Unified memory activated?
+   */
   bool unified_memory_ = false;
 };
 

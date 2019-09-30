@@ -70,9 +70,9 @@ struct ParallelDoTypeHelperP1 {
     // IterT is a subclass of BaseClass. Check if same type.
     template<bool Check, int Dummy>
     struct ClassSelector {
-      static bool call(AllocatorT* allocator, P1 p1) {
-        allocator->template parallel_do_single_type<IterT, BaseClass, P1, func,
-                                                    Scan>(p1);
+      static bool call(AllocatorT* allocator, P1&& p1) {
+        allocator->template parallel_do_single_type<
+            IterT, BaseClass, P1, func, Scan>(std::forward<P1>(p1));
         return true;  // true means "continue processing".
       }
     };
@@ -80,14 +80,14 @@ struct ParallelDoTypeHelperP1 {
     // IterT is not a subclass of BaseClass. Skip.
     template<int Dummy>
     struct ClassSelector<false, Dummy> {
-      static bool call(AllocatorT* /*allocator*/, P1 /*p1*/) {
+      static bool call(AllocatorT* /*allocator*/, P1&& /*p1*/) {
         return true;
       }
     };
 
-    bool operator()(AllocatorT* allocator, P1 p1) {
+    bool operator()(AllocatorT* allocator, P1&& p1) {
       return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
-          ::call(allocator, p1);
+          ::call(allocator, std::forward<P1>(p1));
     }
   };
 };
@@ -232,9 +232,9 @@ struct ParallelExecutor {
 template<typename T, typename F, typename AllocatorT, typename... Args>
 struct SequentialExecutor {
   // Defined in soa_allocator.h.
-  __host_or_device__ static void device_do(BlockIndexT block_idx, F func,
-                                           AllocatorT* allocator,
-                                           Args&&... args);
+  __host__ __device__ static void device_do(BlockIndexT block_idx, F func,
+                                            AllocatorT* allocator,
+                                            Args&&... args);
 };
 
 #endif  // ALLOCATOR_SOA_EXECUTOR_H

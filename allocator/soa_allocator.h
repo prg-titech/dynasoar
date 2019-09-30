@@ -288,7 +288,7 @@ class SoaAllocator {
    * (e.g., bitmap scan). Parallel do-all automatically keeps track of this
    * time.
    */
-  long unsigned int DBG_get_enumeration_time() {
+  long unsigned int DBG_get_enumeration_time() const {
     return bench_prefix_sum_time;
   }
   // ---- END ----
@@ -565,11 +565,11 @@ class SoaAllocator {
    * @tparam Scan Perform bitmap scan?
    */
   template<class IterT, class T, typename P1, void(T::*func)(P1), bool Scan>
-  void parallel_do_single_type(P1 p1) {
+  void parallel_do_single_type(P1&& p1) {
     ParallelExecutor<Scan, ThisAllocator, IterT, T>
         ::template FunctionArgTypesWrapper<void, T, P1>
         ::template FunctionWrapper<func>
-        ::parallel_do(this, /*shared_mem_size=*/ 0, p1);
+        ::parallel_do(this, /*shared_mem_size=*/ 0, std::forward<P1>(p1));
   }
 
   /**
@@ -601,10 +601,10 @@ class SoaAllocator {
    * @tparam Scan Perform bitmap scan?
    */
   template<bool Scan, class T, typename P1, void(T::*func)(P1)>
-  void parallel_do(P1 p1) {
+  void parallel_do(P1&& p1) {
     TupleHelper<Types...>
         ::template for_all<ParallelDoTypeHelperP1<ThisAllocator, T, P1, func, Scan>
-        ::template InnerHelper>(this, p1);
+        ::template InnerHelper>(this, std::forward<P1>(p1));
   }
 
   /**
