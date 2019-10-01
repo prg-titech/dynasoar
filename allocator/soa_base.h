@@ -8,6 +8,11 @@
 
 
 #if GCC_COMPILER
+/**
+ * Predeclares all field types of a class.
+ * @param classname Name of class
+ * @param ... Types, separated by comma
+ */
 #define declare_field_types(classname, ...) \
   __device__ void* operator new(size_t sz, typename classname::Allocator* allocator) { \
     return allocator->allocate_new<classname>(); \
@@ -52,13 +57,28 @@ __device__ void __dynasoar_op_delete(void* ptr, void* allocator) {
 #endif  // GCC_COMPILER
 
 
-// TODO: Is it safe to make these static?
+/**
+ * Deletes an object of type or subtype \p T.
+ * @param allocator Allocator that was used for allocating the object
+ * @param ptr Object pointer
+ * @tparam AllocatorT Allocator type
+ * @tparam Type of object
+ */
 template<typename AllocatorT, typename T>
 __device__ __forceinline__ static void destroy(AllocatorT* allocator, T* ptr) {
   allocator->template free<T>(ptr);
 }
 
 
+/**
+ * Deletes an object of type or subtype \p T, where the object pointer is
+ * stored in a field.
+ * @param allocator Allocator that was used for allocating the object
+ * @param value Field containing the pointer
+ * @tparam AllocatorT Allocator type
+ * @tparam C Class containing the field
+ * @tparam FieldIndex Index of field within \p C
+ */
 template<typename AllocatorT, typename C, int FieldIndex>
 __device__ __forceinline__ static void destroy(
     AllocatorT* allocator, const SoaField<C, FieldIndex>& value) {
@@ -66,16 +86,37 @@ __device__ __forceinline__ static void destroy(
 }
 
 
-// User-defined classes should inherit from this class.
+/**
+ * All user-defined classes that are under control of the allocator should
+ * inherit from this class; either directly, or by inheriting from a class that
+ * inherits from this class at some point in its inheritance chain. This class
+ * provides basic functionality such as a type cast operation and rewrite
+ * logic for memory defragmentation.
+ * @tparam AllocatorT Allocator type
+ */
 template<class AllocatorT>
 class SoaBase {
  private:
-  // Class should have size 1.
+  /**
+   * Dummy field. Ensures that the C++ size of this class is 1.
+   */
   char _;
 
  public:
+  /**
+   * Publicly accessible allocator type alias.
+   */
   using Allocator = AllocatorT;
+
+  /**
+   * Subclasses that inherit from a class other than SoaBase must override
+   * this type alias with the class that they are inheriting from.
+   */
   using BaseClass = void;
+
+  /**
+   * Abstract classes should override this value with true.
+   */
   static const bool kIsAbstract = false;
 
   __device__ __host__ TypeIndexT get_type() const {
