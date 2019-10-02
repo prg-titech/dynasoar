@@ -119,21 +119,50 @@ class SoaBase {
    */
   static const bool kIsAbstract = false;
 
+  /**
+   * Returns the type ID of this object.
+   */
   __device__ __host__ TypeIndexT get_type() const {
     return AllocatorT::get_type(this);
   }
 
+  /**
+   * Prints some information that is encoded in the (fake) location of this
+   * object.
+   */
   __device__ __host__ void DBG_print_ptr_decoding() const {
     char* block_ptr = PointerHelper::block_base_from_obj_ptr(this);
     int obj_id = PointerHelper::obj_id_from_obj_ptr(this);
     printf("%p = Block %p  |  Object %i\n", this, block_ptr, obj_id);
   }
 
+  /**
+   * Casts this object to an object of different type. Returns nullptr if this
+   * object is not an object of the request type \p T. Note: This function is
+   * similar to dynamic_cast<T*>.
+   * @tparam T Requested type
+   */
   template<typename T>
   __device__ __host__ T* cast() {
     if (this != nullptr
         && get_type() == AllocatorT::template BlockHelper<T>::kIndex) {
       return static_cast<T*>(this);
+    } else {
+      return nullptr;
+    }
+  }
+
+  /**
+   * Casts this object to an object of different type. Returns nullptr if this
+   * object is not an object of the request type \p T. Note: This function is
+   * similar to dynamic_cast<T*>.
+   * @tparam T Requested type
+   */
+  template<typename T>
+  __device__ __host__ const T* cast() const {
+    if (this != nullptr
+        && get_type() == AllocatorT::template BlockHelper<T>::kIndex) {
+      return static_cast<const T*>(this);
     } else {
       return nullptr;
     }

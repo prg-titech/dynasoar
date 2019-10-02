@@ -562,7 +562,7 @@ __DEV__ void SoaAllocator<N_Objects, Types...>::defrag_store_forwarding_ptr() {
       // Store forwarding pointer.
       auto* target_obj_ptr = target_block->make_pointer(target_object_id);
       assert(target_obj_ptr->get_type() == BlockHelper<T>::kIndex);
-      assert(target_obj_ptr->get_type() == source_block->get_static_type());
+      assert(target_obj_ptr->get_type() == source_block->get_type());
       source_block->set_forwarding_pointer(source_object_id, target_obj_ptr);
     }
   }

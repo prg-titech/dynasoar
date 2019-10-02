@@ -5,42 +5,88 @@
 #include "allocator/soa_helper.h"
 #include "allocator/util.h"
 
-
+/**
+ * Resulting state of an atomic deallocation in a block. Based on this state,
+ * block state bitmap may have to be updated.
+ */
 enum DeallocationState : int8_t {
-  kBlockNowEmpty,      // Deallocate block.
+  /**
+   * The block is now empty and should be deallocated.
+   */
+  kBlockNowEmpty,
+
 #ifdef OPTION_DEFRAG
-  kBlockNowLeq50Full,  // Less/equal to 50% full.
+  /**
+   * The block is now less/equal than n/(n+1) full, where n is the
+   * defragmentation factor. By default, n = 1, so the default threshold is
+   * 50%.
+   */
+  kBlockNowLeq50Full,
 #endif  // OPTION_DEFRAG
-  kBlockNowActive,     // Activate block.
-  kRegularDealloc      // Nothing to do.
+
+  /**
+   * The block is now active (previously inactive, i.e., full).
+   */
+  kBlockNowActive,
+
+  /**
+   * No state change. Nothing to do.
+   */
+  kRegularDealloc
 };
 
 
+/**
+ * An untyped DynaSOAr block.
+ */
 class AbstractBlock {
  public:
+  /**
+   * 64-bit data type for object allocation/iteration bitmaps.
+   */
   using BitmapT = unsigned long long int;
 
+  /**
+   * Constructor of this block.
+   */
   __device__ AbstractBlock() {
     assert(reinterpret_cast<uintptr_t>(this) % 64 == 0);   // Alignment.
   }
 
+  /**
+   * Checks if object slot \p index is allocated (in use).
+   * @param index Object slot index
+   */
   __device__ __host__ bool is_slot_allocated(ObjectIndexT index) const {
     return (free_bitmap & (1ULL << index)) == 0;
   }
 
-  // Dummy area that may be overwritten by zero initialization.
-  // Data section begins after kBlockDataSectionOffset bytes.
-  // TODO: Do we need this on GPU? Can this be replaced when using ROSE?
+  /**
+   * Dummy area that may be overwritten by zero initialization.
+   * Data section begins after kBlockDataSectionOffset bytes from the beginning
+   * of this object.
+   * TODO: Do we need this on GPU? Can this be replaced when using ROSE?
+   */
   char initialization_header_[kBlockDataSectionOffset - 3*sizeof(BitmapT)];
 
-  // Bitmap of free slots.
+  /**
+   * Bitmap of free slots. Note: In contrast to the paper, we maintain a
+   * bitmap of free object slots instead of an object allocation bitmap.
+   */
   BitmapT free_bitmap;
 
-  // A copy of ~free_bitmap. Set before the beginning of an iteration. Does
-  // not contain dirty objects.
+  /*
+   * Object iteration bitmap: A copy of ~free_bitmap. Initialized before the
+   * beginning of an iteration.
+   */
   BitmapT iteration_bitmap;
 
-  // Padding to 8 bytes.
+  /**
+   * Type ID of this block. Must be volatile (alternative: only access with
+   * atomic operations) to ensure that we always read the most recent type of
+   * the block. TypeIndexT is an 8-bit integer, but the next field (data
+   * segment in subclass) starts at an 8-byte offset.
+   */
   volatile TypeIndexT type_id;
 
 #ifdef OPTION_DEFRAG_FORWARDING_POINTER
@@ -63,15 +109,22 @@ class AbstractBlock {
 };
 
 
-// A SOA block containing objects.
-// T: Base type of the block.
-// TypeId: Type ID of T.
-// N: Maximum number of objects in a block of type T.
+/**
+ * A DynaSOAr block containing up to \p N objects of type \p T in SOA data
+ * layout.
+ * @tparam T Type of objects in this block ("block type")
+ * @tparam TypeId Type ID of T
+ * @tparam N Maximum number of objects in this block (block capacity)
+ */
 template<class T, TypeIndexT TypeId, ObjectIndexT N>
 class SoaBlock : public AbstractBlock {
  public:
   static const int kN = N;
-  static_assert(N <= 64, "Assertion failed: N <= 64");
+
+  /**
+   * Maximum block capacity is 64.
+   */
+  static_assert((N <= 64), "Assertion failed: N <= 64");
 
 #ifdef OPTION_DEFRAG
   // This is the number of allocated objects.
@@ -79,11 +132,15 @@ class SoaBlock : public AbstractBlock {
       1.0f*kDefragFactor / (kDefragFactor + 1) * N;
 #endif  // OPTION_DEFRAG
 
-  // Bitmap initializer: N_T bits set to 1.
+  /**
+   * Initial free_bitmap state (if the entire block is empty).
+   */
   static const BitmapT kBitmapInitState =
       N == 64 ? (~0ULL) : ((1ULL << N) - 1);
 
-  // Initializes a new block.
+  /**
+   * Initializes a new block. See paper for explanation of threadfence.
+   */
   __device__ SoaBlock() : AbstractBlock() {
     type_id = TypeId;
     __threadfence();  // Initialize bitmap after type_id is visible.
@@ -91,7 +148,10 @@ class SoaBlock : public AbstractBlock {
     assert(__popcll(free_bitmap) == N);
   }
 
-  // Constructs an object identifier.
+  /**
+   * Constructs a fake pointer to the object at object slot \p index.
+   * @param index Object slot index
+   */
   __device__ __host__ T* make_pointer(ObjectIndexT index) const {
     uint8_t obj_idx = reinterpret_cast<uint8_t&>(index);
     assert(obj_idx < N);
@@ -112,15 +172,24 @@ class SoaBlock : public AbstractBlock {
     return reinterpret_cast<T*>(ptr_as_int);
   }
 
+  /**
+   * Returns a copy of the object allocation bitmap.
+   */
   __device__ __host__ BitmapT allocation_bitmap() const {
     return ~free_bitmap & kBitmapInitState;
   }
 
-  // Initializes object iteration bitmap.
+  /**
+   * Initializes the object iteration bitmap.
+   */
   __device__ void initialize_iteration() {
     iteration_bitmap = allocation_bitmap();
   }
 
+  /**
+   * Deallocates the object at a given position.
+   * @param position Object slot index
+   */
   __device__ DeallocationState deallocate(ObjectIndexT position) {
     BitmapT before;
     BitmapT mask = 1ULL << position;
@@ -145,23 +214,38 @@ class SoaBlock : public AbstractBlock {
     }
   }
 
+  /**
+   * Returns the capacity of this block.
+   */
   __device__ __host__ ObjectIndexT DBG_num_bits() const {
     return N;
   }
 
+  /**
+   * Returns the number of alloocated objects in this block.
+   */
   __device__ __host__ ObjectIndexT DBG_allocated_bits() const {
     return N - bit_popcll(free_bitmap);
   }
 
-  __device__ __host__ TypeIndexT get_static_type() const {
+  /**
+   * Returns the type of this block.
+   */
+  __device__ __host__ TypeIndexT get_type() const {
     return TypeId;
   }
 
-  // Size of data segment.
+  /**
+   * Size of data segment. The data segment must be large enough to hold all
+   * SOA arrays. SOA arrays may also have to be padded, which must be taken
+   * into account here.
+   */
   static const int kStorageBytes =
       SoaClassHelper<T>::template BlockConfig<N>::kDataSegmentSize;
 
-  // Data storage.
+  /**
+   * Data storage/data segment.
+   */
   char data_[kStorageBytes];
 };
 
