@@ -6,12 +6,27 @@
 
 #include "util/util.h"
 
-// For benchmarks: Measure time spent outside of parallel sections.
-// Measure time in microseconds because numbers are small.
+/**
+ * For benchmarks: Measures time spent in parallel_do, but outside of CUDA
+ * kernels. Measures time in microseconds because numbers are small.
+ */
 long unsigned int bench_prefix_sum_time = 0;
+
+/**
+ * Maximum representable 32-bit integer.
+ */
 static const int kMaxInt32 = std::numeric_limits<int>::max();
 
-// TODO: Is it safe to make these static?
+/**
+ * A CUDA kernel that runs a method in parallel for all objects of a type.
+ * Method and type are specified as part of \p WrapperT.
+ * @tparam WrapperT Must be a template instantiation of
+ *                  ParallelExecutor::FunctionArgTypesWrapper::FunctionWrapper.
+ * @tparam AllocatorT Allocator type
+ * @tparam Args Type of arguments passed to method
+ * @param allocator Device allocator handle
+ * @param args Arguments passed to method
+ */
 template<typename WrapperT, typename AllocatorT, typename... Args>
 __global__ static void kernel_parallel_do(AllocatorT* allocator, Args... args) {
   // TODO: Check overhead of allocator pointer dereference.
@@ -20,6 +35,17 @@ __global__ static void kernel_parallel_do(AllocatorT* allocator, Args... args) {
 }
 
 // Run member function on allocator, then perform do-all operation.
+/**
+ * Same as kernel_parallel_do(), but runs a member function of the allocator
+ * before running the actual parallel do-all.
+ * @tparam WrapperT Must be a template instantiation of
+ *                  ParallelExecutor::FunctionArgTypesWrapper::FunctionWrapper.
+ * @tparam AllocatorT Allocator type
+ * @tparam Args Type of arguments passed to method
+ * @tparam PreT A class that invoke the allocator member function
+ * @param allocator Device allocator handle
+ * @param args Arguments passed to method
+ */
 template<typename WrapperT, typename PreT,
          typename AllocatorT, typename... Args>
 __global__ static void kernel_parallel_do_with_pre(AllocatorT* allocator,
@@ -30,14 +56,28 @@ __global__ static void kernel_parallel_do_with_pre(AllocatorT* allocator,
   WrapperT::parallel_do_cuda(allocator, args...);
 }
 
-// Helper data structure for running parallel_do on all subtypes.
+/**
+ * A helper class for running a parallel do-all operation on all subtypes of a
+ * given base class. Internally, this helper class spawns a CUDA kernel for
+ * each subtype. This class is a functor to be used with TupleHelper.
+ * @tparam AllocatorT Allocator type
+ * @tparam BaseClass Base class
+ * @tparam func Member function to be run
+ * @tparam Scan Indicates if a scan operation should be run
+ */
 template<typename AllocatorT, class BaseClass, void(BaseClass::*func)(),
          bool Scan>
 struct ParallelDoTypeHelper {
-  // Iterating over all types T in the allocator.
+  /**
+   * Helper class for iterating over all types \p IterT that are under control
+   * of the allocator.
+   * @tparam IterT Iteration variable
+   */
   template<typename IterT>
   struct InnerHelper {
-    // IterT is a subclass of BaseClass. Check if same type.
+    /**
+     * \p IterT is a subclass of \p BaseClass. Run parallel do-all.
+     */
     template<bool Check, int Dummy>
     struct ClassSelector {
       static bool call(AllocatorT* allocator) {
@@ -46,7 +86,9 @@ struct ParallelDoTypeHelper {
       }
     };
 
-    // IterT is not a subclass of BaseClass. Skip.
+    /**
+     * \p IterT is not a subclass of BaseClass. Skip.
+     */
     template<int Dummy>
     struct ClassSelector<false, Dummy> {
       static bool call(AllocatorT* /*allocator*/) {
@@ -54,6 +96,10 @@ struct ParallelDoTypeHelper {
       }
     };
 
+    /**
+     * Entry point of ParallelDoTypeHelper (for TupleHelper).
+     * @param allocator Allocator handle
+     */
     bool operator()(AllocatorT* allocator) {
       return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
           ::call(allocator);
@@ -61,6 +107,9 @@ struct ParallelDoTypeHelper {
   };
 };
 
+/**
+ * Same as ParallelDoTypeHelper, but for functions that take one parameter.
+ */
 template<typename AllocatorT, class BaseClass, typename P1,
          void(BaseClass::*func)(P1), bool Scan>
 struct ParallelDoTypeHelperP1 {
