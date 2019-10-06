@@ -119,7 +119,7 @@ struct ParallelDoTypeHelperP1 {
     // IterT is a subclass of BaseClass. Check if same type.
     template<bool Check, int Dummy>
     struct ClassSelector {
-      static bool call(AllocatorT* allocator, P1&& p1) {
+      static bool call(AllocatorT* allocator, P1 p1) {
         allocator->template parallel_do_single_type<
             IterT, BaseClass, P1, func, Scan>(std::forward<P1>(p1));
         return true;  // true means "continue processing".
@@ -129,12 +129,12 @@ struct ParallelDoTypeHelperP1 {
     // IterT is not a subclass of BaseClass. Skip.
     template<int Dummy>
     struct ClassSelector<false, Dummy> {
-      static bool call(AllocatorT* /*allocator*/, P1&& /*p1*/) {
+      static bool call(AllocatorT* /*allocator*/, P1 /*p1*/) {
         return true;
       }
     };
 
-    bool operator()(AllocatorT* allocator, P1&& p1) {
+    bool operator()(AllocatorT* allocator, P1 p1) {
       return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
           ::call(allocator, std::forward<P1>(p1));
     }
@@ -151,12 +151,12 @@ struct ParallelExecutor {
   template<typename R, typename Base, typename... Args>
   struct FunctionArgTypesWrapper {
 
-    template<R (Base::*func)(Args&&...)>
+    template<R (Base::*func)(Args...)>
     struct FunctionWrapper {
       using ThisClass = FunctionWrapper<func>;
 
       static void parallel_do(AllocatorT* allocator, int shared_mem_size,
-                              Args&&... args) {
+                              Args... args) {
         auto time_start = std::chrono::system_clock::now();
         auto time_end = time_start;
 
@@ -196,12 +196,12 @@ struct ParallelExecutor {
         bench_prefix_sum_time += micros;
       }
 
-      template<void(AllocatorT::*pre_func)(Args&&...)>
+      template<void(AllocatorT::*pre_func)(Args...)>
       struct WithPre {
         using PreClass = WithPre<pre_func>;
 
         static void parallel_do(AllocatorT* allocator, int shared_mem_size,
-                                Args&&... args) {
+                                Args... args) {
           auto time_start = std::chrono::system_clock::now();
           auto time_end = time_start;
 
@@ -241,13 +241,13 @@ struct ParallelExecutor {
           bench_prefix_sum_time += micros;
         }
 
-        __device__ static void run_pre(AllocatorT* allocator, Args&&... args) {
+        __device__ static void run_pre(AllocatorT* allocator, Args... args) {
           (allocator->*pre_func)(std::forward<Args>(args)...);
         }
       };
 
       static __device__ void parallel_do_cuda(AllocatorT* allocator,
-                                              Args&&... args) {
+                                              Args... args) {
         const auto N_alloc =
             allocator->allocated_[kTypeIndex].scan_num_bits();
 
@@ -283,7 +283,7 @@ struct SequentialExecutor {
   // Defined in soa_allocator.h.
   __host__ __device__ static void device_do(BlockIndexT block_idx, F func,
                                             AllocatorT* allocator,
-                                            Args&&... args);
+                                            Args... args);
 };
 
 #endif  // ALLOCATOR_SOA_EXECUTOR_H

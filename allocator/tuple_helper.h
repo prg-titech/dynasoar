@@ -20,7 +20,7 @@ struct TupleHelper<T, Types...> {
   // Returns true if F returned false for one type. Returns true if iteration
   // terminated early, without processing all elements.
   template<template<class> typename F, typename... Args>
-  static bool for_all(Args&&... args) {
+  static bool for_all(Args... args) {
     F<T> func;
     if (func(std::forward<Args>(args)...)) {
       return TupleHelper<Types...>::template for_all<F>(
@@ -32,7 +32,7 @@ struct TupleHelper<T, Types...> {
   }
 
   template<template<class> typename F, typename... Args>
-  __device__ __host__ static bool dev_for_all(Args&&... args) {
+  __device__ __host__ static bool dev_for_all(Args... args) {
     F<T> func;
     if (func(std::forward<Args>(args)...)) {
       return TupleHelper<Types...>::template dev_for_all<F>(
@@ -109,10 +109,10 @@ struct TupleHelper<> {
   using NonAbstractType = void;
 
   template<template<class> typename F, typename... Args>
-  static bool for_all(Args&&... /*args*/) { return false; }
+  static bool for_all(Args... /*args*/) { return false; }
 
   template<template<class> typename F, typename... Args>
-  __device__ __host__ static bool dev_for_all(Args&&... /*args*/) {
+  __device__ __host__ static bool dev_for_all(Args... /*args*/) {
     return false;
   }
 

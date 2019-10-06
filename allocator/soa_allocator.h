@@ -499,7 +499,7 @@ class SoaAllocator {
    * with the "new" keyword.
    */
   template<typename T, typename... Args>
-  __DEV__ T* make_new(Args&&... args) {
+  __DEV__ T* make_new(Args... args) {
     return new(allocate_new<T>()) T(std::forward<Args>(args)...);
   }
 
@@ -565,7 +565,7 @@ class SoaAllocator {
    * @tparam Scan Perform bitmap scan?
    */
   template<class IterT, class T, typename P1, void(T::*func)(P1), bool Scan>
-  void parallel_do_single_type(P1&& p1) {
+  void parallel_do_single_type(P1 p1) {
     ParallelExecutor<Scan, ThisAllocator, IterT, T>
         ::template FunctionArgTypesWrapper<void, T, P1>
         ::template FunctionWrapper<func>
@@ -601,7 +601,7 @@ class SoaAllocator {
    * @tparam Scan Perform bitmap scan?
    */
   template<bool Scan, class T, typename P1, void(T::*func)(P1)>
-  void parallel_do(P1&& p1) {
+  void parallel_do(P1 p1) {
     TupleHelper<Types...>
         ::template for_all<ParallelDoTypeHelperP1<ThisAllocator, T, P1, func, Scan>
         ::template InnerHelper>(this, std::forward<P1>(p1));
@@ -617,7 +617,7 @@ class SoaAllocator {
    * @tparam Args Types of parameters of \p F.
    */
   template<class T, typename F, typename... Args>
-  __host_or_device__ void device_do(F func, Args&&... args) {
+  __host_or_device__ void device_do(F func, Args... args) {
     // device_do iterates over objects in a block.
     allocated_[BlockHelper<T>::kIndex].enumerate(
         &SequentialExecutor<T, F, ThisAllocator, Args...>::device_do,
@@ -1090,7 +1090,7 @@ struct DeviceDoFunctionInvoker {
   template<typename U = F>
   __host__ __device__ static typename
   std::enable_if<std::is_member_function_pointer<U>::value, void>::type
-  call(T* obj, F func, Args&&... args) {
+  call(T* obj, F func, Args... args) {
     (obj->*func)(std::forward<Args>(args)...);
   }
 
@@ -1098,7 +1098,7 @@ struct DeviceDoFunctionInvoker {
   template<typename U = F>
   __host__ __device__ static typename
   std::enable_if<!std::is_member_function_pointer<U>::value, void>::type
-  call(T* obj, F func, Args&&... args) {
+  call(T* obj, F func, Args... args) {
     func(obj, std::forward<Args>(args)...);
   }
 
@@ -1110,7 +1110,7 @@ struct DeviceDoFunctionInvoker {
 #pragma hd_warning_disable
 template<typename T, typename F, typename AllocatorT, typename... Args>
 __host__ __device__ void SequentialExecutor<T, F, AllocatorT, Args...>::device_do(
-    BlockIndexT block_idx, F func, AllocatorT* allocator, Args&&... args) {
+    BlockIndexT block_idx, F func, AllocatorT* allocator, Args... args) {
   auto* block = allocator->template get_block<T>(block_idx);
   auto bitmap = block->allocation_bitmap();
 

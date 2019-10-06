@@ -322,7 +322,7 @@ class Bitmap {
   /**
    * Deallocates (clears) a bit at a specific index, i.e., sets the bit to 0.
    * If \p Retry is true, then this function repeatedly attempts to flip the
-   * bit to 0 and only stops if this function invocation actually changed
+   * bit to 0 and only sbtops if this function invocation actually changed
    * the bit. In that case, the return value of the function is always true.
    * Otherwise, the return value of the function indicates whether the bit was
    * successfully flipped. (false return values indicate that the bit was
@@ -898,7 +898,7 @@ class Bitmap {
    * device_do and implemented in sequential_enumerate.h.
    */
   template<typename F, typename... Args>
-  __host_or_device__ void enumerate(F func, Args&&... args);
+  __host_or_device__ void enumerate(F func, Args... args);
 
   /**
    * The number of bits per container.

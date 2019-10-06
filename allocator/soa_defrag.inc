@@ -142,7 +142,7 @@ struct AllocatorWrapperDefrag {
           };
 
           template<typename... Args>
-          __DEV__ static void call(Args&&... args) {
+          __DEV__ static void call(Args... args) {
             // Rewrite base type is a super class (or exact class)
             // of DefragT.
             FieldSelector<kSelected, 0>::call(std::forward<Args>(args)...);
@@ -176,7 +176,7 @@ struct AllocatorWrapperDefrag {
         static const bool kSelected = kFieldSelected || kArraySelected;
 
         template<typename... Args>
-        __DEV__ bool operator()(Args&&... args) {
+        __DEV__ bool operator()(Args... args) {
           // Rewrite field if field type is a super class (or exact class)
           // of DefragT.
           FieldSelector<kFieldSelected, 0>::call(std::forward<Args>(args)...);

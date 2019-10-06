@@ -164,7 +164,7 @@ class AllocatorHandle {
    * @param p1 Argument value
    */
   template<class T, typename P1, void(T::*func)(P1)>
-  void parallel_do(P1&& p1) {
+  void parallel_do(P1 p1) {
     allocator_->parallel_do<true, T, P1, func>(std::forward<P1>(p1));
   }
 
@@ -205,7 +205,7 @@ class AllocatorHandle {
    * @tparam Args Types of arguments
    */
   template<class T, typename F, typename... Args>
-  void device_do(F func, Args&&... args) {
+  void device_do(F func, Args... args) {
     assert(unified_memory_);
     allocator_->template device_do<T, F, Args...>(
         func, std::forward<Args>(args)...);

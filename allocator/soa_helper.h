@@ -58,7 +58,7 @@ struct SoaFieldHelper {
   // Runs a functor for all fields in the tuple.
   // Returns true if F returned false for a field.
   template<template<class> typename F, bool IterateBase, typename... Args>
-  static bool for_all(Args&&... args) {
+  static bool for_all(Args... args) {
     F<ThisClass> func;
     if (func(std::forward<Args>(args)...)) {
       return PrevHelper::template for_all<F, IterateBase>(
@@ -70,7 +70,7 @@ struct SoaFieldHelper {
   }
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  __device__ static bool dev_for_all(Args&&... args) {
+  __device__ static bool dev_for_all(Args... args) {
     F<ThisClass> func;
     if (func(std::forward<Args>(args)...)) {
       return PrevHelper::template dev_for_all<F, IterateBase>(
@@ -96,7 +96,7 @@ struct SoaFieldHelper<C, -1> {
   static const int kSimpleSize = BaseLastFieldHelper::kSimpleSize;
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  static bool for_all(Args&&... args) {
+  static bool for_all(Args... args) {
     if (IterateBase) {
       return BaseLastFieldHelper::template for_all<F, IterateBase>(
           std::forward<Args>(args)...);
@@ -106,7 +106,7 @@ struct SoaFieldHelper<C, -1> {
   }
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  __device__ static bool dev_for_all(Args&&... args) {
+  __device__ static bool dev_for_all(Args... args) {
     if (IterateBase) {
       return BaseLastFieldHelper::template dev_for_all<F, IterateBase>(
           std::forward<Args>(args)...);
@@ -123,10 +123,10 @@ struct SoaFieldHelper<void, -1> {
   static const int kSimpleSize = 0;
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  static bool for_all(Args&&... args) { return false; }
+  static bool for_all(Args... args) { return false; }
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  __device__ static bool dev_for_all(Args&&... args) { return false; }
+  __device__ static bool dev_for_all(Args... args) { return false; }
 };
 
 // Helper for printing debug information about field.
@@ -192,13 +192,13 @@ struct SoaClassHelper {
   }
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  static bool for_all(Args&&... args) {
+  static bool for_all(Args... args) {
     return SoaFieldHelper<C, kNumFieldThisClass - 1>
         ::template for_all<F, IterateBase>(std::forward<Args>(args)...);
   }
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  __device__ static bool dev_for_all(Args&&... args) {
+  __device__ static bool dev_for_all(Args... args) {
     return SoaFieldHelper<C, kNumFieldThisClass - 1>
         ::template dev_for_all<F, IterateBase>(std::forward<Args>(args)...);
   }
@@ -212,10 +212,10 @@ struct SoaClassHelper<void> {
   static void DBG_print_stats() {}
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  static bool for_all(Args&&... args) { return false; }
+  static bool for_all(Args... args) { return false; }
 
   template<template<class> typename F, bool IterateBase, typename... Args>
-  __device__ static bool dev_for_all(Args&&... args) { return false; }
+  __device__ static bool dev_for_all(Args... args) { return false; }
 };
 
 #endif  // ALLOCATOR_SOA_HELPER_H
