@@ -59,85 +59,48 @@ __global__ static void kernel_parallel_do_with_pre(AllocatorT* allocator,
 /**
  * A helper class for running a parallel do-all operation on all subtypes of a
  * given base class. Internally, this helper class spawns a CUDA kernel for
- * each subtype. This class is a functor to be used with TupleHelper.
- * @tparam AllocatorT Allocator type
- * @tparam BaseClass Base class
- * @tparam func Member function to be run
- * @tparam Scan Indicates if a scan operation should be run
+ * each subtype. The nested class ParallelDoTypeHelperL3 is a functor to be
+ * used with TupleHelper.
+ * @tparam Args Member function parameter types
  */
-template<typename AllocatorT, class BaseClass, void(BaseClass::*func)(),
-         bool Scan>
-struct ParallelDoTypeHelper {
+template<typename... Args>
+struct ParallelDoTypeHelperL1 {
   /**
-   * Helper class for iterating over all types \p IterT that are under control
-   * of the allocator.
-   * @tparam IterT Iteration variable
+   * @tparam AllocatorT Allocator type
+   * @tparam BaseClass Base class
+   * @tparam func Member function to be run
+   * @tparam Scan Indicates if a scan operation should be run
    */
-  template<typename IterT>
-  struct InnerHelper {
-    /**
-     * \p IterT is a subclass of \p BaseClass. Run parallel do-all.
-     */
-    template<bool Check, int Dummy>
-    struct ClassSelector {
-      static bool call(AllocatorT* allocator) {
-        allocator->template parallel_do_single_type<IterT, BaseClass, func, Scan>();
-        return true;  // true means "continue processing".
+  template<typename AllocatorT, class BaseClass,
+           void(BaseClass::*func)(Args...), bool Scan>
+  struct ParallelDoTypeHelperL2 {
+    // Iterating over all types T in the allocator.
+    template<typename IterT>
+    struct ParallelDoTypeHelperL3{
+      // IterT is a subclass of BaseClass. Check if same type.
+      template<bool Check, int Dummy>
+      struct ClassSelector {
+        static bool call(AllocatorT* allocator, Args...args) {
+          allocator->template parallel_do_single_type<
+              IterT, BaseClass, Args..., func, Scan>(
+                  std::forward<Args>(args)...);
+          return true;  // true means "continue processing".
+        }
+      };
+
+      // IterT is not a subclass of BaseClass. Skip.
+      template<int Dummy>
+      struct ClassSelector<false, Dummy> {
+        static bool call(AllocatorT* /*allocator*/, Args... /*args*/) {
+          return true;
+        }
+      };
+
+      bool operator()(AllocatorT* allocator, Args... args) {
+        return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
+            ::call(allocator, std::forward<Args>(args)...);
       }
     };
-
-    /**
-     * \p IterT is not a subclass of BaseClass. Skip.
-     */
-    template<int Dummy>
-    struct ClassSelector<false, Dummy> {
-      static bool call(AllocatorT* /*allocator*/) {
-        return true;
-      }
-    };
-
-    /**
-     * Entry point of ParallelDoTypeHelper (for TupleHelper).
-     * @param allocator Allocator handle
-     */
-    bool operator()(AllocatorT* allocator) {
-      return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
-          ::call(allocator);
-    }
-  };
-};
-
-/**
- * Same as ParallelDoTypeHelper, but for functions that take one parameter.
- */
-template<typename AllocatorT, class BaseClass, typename P1,
-         void(BaseClass::*func)(P1), bool Scan>
-struct ParallelDoTypeHelperP1 {
-  // Iterating over all types T in the allocator.
-  template<typename IterT>
-  struct InnerHelper {
-    // IterT is a subclass of BaseClass. Check if same type.
-    template<bool Check, int Dummy>
-    struct ClassSelector {
-      static bool call(AllocatorT* allocator, P1 p1) {
-        allocator->template parallel_do_single_type<
-            IterT, BaseClass, P1, func, Scan>(std::forward<P1>(p1));
-        return true;  // true means "continue processing".
-      }
-    };
-
-    // IterT is not a subclass of BaseClass. Skip.
-    template<int Dummy>
-    struct ClassSelector<false, Dummy> {
-      static bool call(AllocatorT* /*allocator*/, P1 /*p1*/) {
-        return true;
-      }
-    };
-
-    bool operator()(AllocatorT* allocator, P1 p1) {
-      return ClassSelector<std::is_base_of<BaseClass, IterT>::value, 0>
-          ::call(allocator, std::forward<P1>(p1));
-    }
   };
 };
 

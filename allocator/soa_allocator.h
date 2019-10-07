@@ -584,8 +584,9 @@ class SoaAllocator {
   template<bool Scan, class T, void(T::*func)()>
   void parallel_do() {
     TupleHelper<Types...>
-        ::template for_all<ParallelDoTypeHelper<ThisAllocator, T, func, Scan>
-        ::template InnerHelper>(this);
+        ::template for_all<ParallelDoTypeHelperL1<>
+        ::template ParallelDoTypeHelperL2<ThisAllocator, T, func, Scan>
+        ::template ParallelDoTypeHelperL3>(this);
   }
 
   /**
@@ -603,8 +604,9 @@ class SoaAllocator {
   template<bool Scan, class T, typename P1, void(T::*func)(P1)>
   void parallel_do(P1 p1) {
     TupleHelper<Types...>
-        ::template for_all<ParallelDoTypeHelperP1<ThisAllocator, T, P1, func, Scan>
-        ::template InnerHelper>(this, std::forward<P1>(p1));
+        ::template for_all<ParallelDoTypeHelperL1<P1>
+        ::template ParallelDoTypeHelperL2<ThisAllocator, T, func, Scan>
+        ::template ParallelDoTypeHelperL3>(this, std::forward<P1>(p1));
   }
 
   /**
