@@ -1,6 +1,10 @@
 #ifndef ALLOCATOR_COMPILER_CHECK_H
 #define ALLOCATOR_COMPILER_CHECK_H
 
+// This header file checks if the chosen compiler can be used with DynaSOAr.
+// If the compiler is not supported, there should a compile error somewhere in
+// this file.
+
 #ifndef __NVCC__
 #error Must compile with nvcc
 #endif  // __NVCC__
