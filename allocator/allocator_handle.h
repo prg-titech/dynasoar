@@ -211,6 +211,18 @@ class AllocatorHandle {
         func, std::forward<Args>(args)...);
   }
 
+  /**
+   * Parallel new: Create \p num_objects new objects of type \p T in parallel.
+   * @param num_objects Number of new objects
+   * @param args Common constructor arguments passes to all new objects
+   * @tparam T Base class
+   * @tparam Args Constructor argument types
+   */
+  template<class T, typename... Args>
+  void parallel_new(int num_objects, Args... args) {
+    allocator_->parallel_new<T>(num_objects, args...);
+  }
+
 #ifdef OPTION_DEFRAG
   // Defrag/compact all objects of type T. Also updates all affected pointers
   // in the data buffer.

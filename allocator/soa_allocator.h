@@ -609,6 +609,11 @@ class SoaAllocator {
         ::template ParallelDoTypeHelperL3>(this, std::forward<P1>(p1));
   }
 
+  template<class T, typename... Args>
+  void parallel_new(int num_objects, Args... args) {
+    executor_parallel_new<ThisAllocator, T>(this, num_objects, args...);
+  }
+
   /**
    * Device do: Run a member function \p func on all objects of type \p in the
    * current GPU thread.

@@ -66,19 +66,15 @@ void Body::add_checksum() {
 }
 
 
-__global__ void kernel_initialize_bodies() {
-  int tid = threadIdx.x + blockDim.x * blockIdx.x;
+__DEV__ Body::Body(int idx) {
   curandState rand_state;
-  curand_init(kSeed, tid, 0, &rand_state);
+  curand_init(kSeed, idx, 0, &rand_state);
 
-  for (int i = tid; i < kNumBodies; i += blockDim.x * gridDim.x) {
-    new(device_allocator) Body(
-        /*pos_x=*/ 2 * curand_uniform(&rand_state) - 1,
-        /*pos_y=*/ 2 * curand_uniform(&rand_state) - 1,
-        /*vel_x=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
-        /*vel_y=*/ (curand_uniform(&rand_state) - 0.5) / 1000,
-        /*mass=*/ (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass);
-  }
+  pos_x_ = 2 * curand_uniform(&rand_state) - 1;
+  pos_y_ = 2 * curand_uniform(&rand_state) - 1;
+  vel_x_ = (curand_uniform(&rand_state) - 0.5) / 1000;
+  vel_y_ = (curand_uniform(&rand_state) - 0.5) / 1000;
+  mass_ = (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass;
 }
 
 
@@ -106,10 +102,9 @@ int main(int /*argc*/, char** /*argv*/) {
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
 
-  auto time_start = std::chrono::system_clock::now();
+  allocator_handle->parallel_new<Body>(kNumBodies);
 
-  kernel_initialize_bodies<<<128, 128>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
 #ifndef NDEBUG

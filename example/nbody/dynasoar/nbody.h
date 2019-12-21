@@ -37,6 +37,9 @@ class Body : public AllocatorT::Base {
   __device__ Body(float pos_x, float pos_y, float vel_x, float vel_y,
                   float mass);
 
+  // Construct the idx-th object.
+  __device__ Body(int idx);
+
   __device__ void compute_force();
 
   __device__ void apply_force(Body* other);

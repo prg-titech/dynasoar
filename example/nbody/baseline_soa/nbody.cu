@@ -163,14 +163,14 @@ int main(int /*argc*/, char** /*argv*/) {
   float Body_mass[kNumBodies];
 #endif  // OPTION_RENDER
 
-  auto time_start = std::chrono::system_clock::now();
-
   kernel_initialize_bodies<<<128, 128>>>(
       host_Body_pos_x, host_Body_pos_y,
       host_Body_vel_x, host_Body_vel_y,
       host_Body_mass, host_Body_force_x,
       host_Body_force_y);
   gpuErrchk(cudaDeviceSynchronize());
+
+  auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
     kernel_compute_force<<<

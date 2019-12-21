@@ -131,10 +131,10 @@ int main(int /*argc*/, char** /*argv*/) {
   // Allocate and create Body objects.
   cudaMalloc(&host_bodies, sizeof(Body)*kNumBodies);
 
-  auto time_start = std::chrono::system_clock::now();
-
   kernel_initialize_bodies<<<128, 128>>>(host_bodies);
   gpuErrchk(cudaDeviceSynchronize());
+
+  auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kNumIterations; ++i) {
     kernel_compute_force<<<

@@ -13,9 +13,16 @@
 long unsigned int bench_prefix_sum_time = 0;
 
 /**
+ * For benchmarks: Measures the time spent in parallel_new.
+ */
+long unsigned int bench_parallel_new_time = 0;
+
+/**
  * Maximum representable 32-bit integer.
  */
 static const int kMaxInt32 = std::numeric_limits<int>::max();
+
+static const int kCudaBlockSize = 256;
 
 /**
  * A CUDA kernel that runs a method in parallel for all objects of a type.
@@ -54,6 +61,38 @@ __global__ static void kernel_parallel_do_with_pre(AllocatorT* allocator,
   // There is definitely a 2% overhead or so.....
   PreT::run_pre(allocator, args...);
   WrapperT::parallel_do_cuda(allocator, args...);
+}
+
+// Construct objects in parallel.
+template<typename AllocatorT, typename T, typename... Args>
+__global__ static void kernel_parallel_new(
+    AllocatorT* allocator, int num_objects, Args... args) {
+  // TODO: Implement an optimized make_new that allocates multiple objects
+  // at once.
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+       i < num_objects; i += blockDim.x * gridDim.x) {
+    allocator->template make_new<T>(i, args...);
+  }
+}
+
+template<typename AllocatorT, typename T, typename... Args>
+void executor_parallel_new(AllocatorT* allocator, int num_objects,
+                           Args... args) {
+  if (num_objects > 0) {
+    auto time_start = std::chrono::system_clock::now();
+    auto time_end = time_start;
+
+    kernel_parallel_new<AllocatorT, T, Args...>
+        <<<(num_objects + kCudaBlockSize - 1)/kCudaBlockSize,
+           kCudaBlockSize>>>(allocator, num_objects, args...);
+    gpuErrchk(cudaDeviceSynchronize());
+
+    time_end = std::chrono::system_clock::now();
+    auto elapsed = time_end - time_start;
+    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed)
+        .count();
+    bench_parallel_new_time += millis;
+  }
 }
 
 /**
@@ -109,7 +148,6 @@ struct ParallelExecutor {
   using BlockHelperIterT = typename AllocatorT::template BlockHelper<IterT>;
   static const int kTypeIndex = BlockHelperIterT::kIndex;
   static const int kSize = BlockHelperIterT::kSize;
-  static const int kCudaBlockSize = 256;
 
   template<typename R, typename Base, typename... Args>
   struct FunctionArgTypesWrapper {
