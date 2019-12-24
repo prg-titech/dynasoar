@@ -41,11 +41,11 @@ class NodeBase : public AllocatorT::Base {
 
   __DEV__ void set_parent(TreeNode* parent) { parent_ = parent; }
 
-  __DEV__ double pos_x() const { return pos_x_; }
+  __device__ __host__ double pos_x() const { return pos_x_; }
 
-  __DEV__ double pos_y() const { return pos_y_; }
+  __device__ __host__ double pos_y() const { return pos_y_; }
 
-  __DEV__ double mass() const { return mass_; }
+  __device__ __host__ double mass() const { return mass_; }
 
   __DEV__ void apply_force(BodyNode* body);
 
@@ -90,11 +90,6 @@ class BodyNode : public NodeBase {
   __DEV__ void check_apply_force(BodyNode* body);
 
   __DEV__ void add_checksum();
-
-#ifdef OPTION_RENDER
-  // Only for rendering purposes.
-  __DEV__ void add_to_draw_array();
-#endif  // OPTION_RENDER
 };
 
 
@@ -160,8 +155,10 @@ class TreeNode : public NodeBase {
   __DEV__ void check_consistency();
 
 #ifdef OPTION_RENDER
-  // Only for rendering purposes.
-  __DEV__ void add_to_draw_array();
+  __device__ __host__ float p1_x() { return p1_x_; }
+  __device__ __host__ float p1_y() { return p1_y_; }
+  __device__ __host__ float p2_x() { return p2_x_; }
+  __device__ __host__ float p2_y() { return p2_y_; }
 #endif  // OPTION_RENDER
 };
 

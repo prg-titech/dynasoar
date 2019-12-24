@@ -5,10 +5,12 @@
 
 void init_renderer();
 void close_renderer();
-void draw(float* host_Body_pos_x, float* host_Body_pos_y,
-          float* host_Body_mass, int num_bodies,
-          float* host_Tree_p1_x, float* host_Tree_p1_y,
-          float* host_Tree_p2_x, float* host_Tree_p2_y, int Tree_num_nodes);
+
+void init_frame();
+void show_frame();
+
+void draw_tree_node(float x1, float y1, float x2, float y2);
+void draw_body(float x, float y, float mass, float max_mass);
 
 #endif  // EXAMPLE_BARNES_HUT_RENDERING_H
 

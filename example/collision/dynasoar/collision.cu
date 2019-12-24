@@ -256,6 +256,7 @@ int main(int /*argc*/, char** /*argv*/) {
 
 #ifdef OPTION_RENDER
   // Only for rendering: Calculate max_mass.
+  // TODO: Provide an API for parallel reduce.
   max_mass = 0.0f;
   allocator_handle->template device_do<Body>([&](Body* body) {
     max_mass += body->mass();

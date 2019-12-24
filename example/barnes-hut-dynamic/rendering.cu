@@ -18,14 +18,13 @@ static const int kWindowHeight = 500*kRenderScale;
 SDL_Window* window = nullptr;
 SDL_Renderer* renderer = nullptr;
 
-static void render_rect(SDL_Renderer* renderer, float x, float y, float mass,
-                        float max_mass) {
+void draw_body(float x, float y, float mass, float max_mass) {
   SDL_Rect rect;
   rect.w = rect.h = 5*kRenderScale;
   rect.x = (x/2 + 0.5) * kWindowWidth - rect.w/2;
   rect.y = (y/2 + 0.5) * kWindowHeight - rect.h/2;
 
-  int c = (mass/max_mass)*255 + 150;
+  int c = 3*(mass/max_mass)*255 + 150;
   c = c > 255 ? 255 : c;
   c = 255 - c;
 
@@ -34,8 +33,7 @@ static void render_rect(SDL_Renderer* renderer, float x, float y, float mass,
 }
 
 
-static void render_node(SDL_Renderer* renderer, float x1, float y1,
-                        float x2, float y2) {
+void draw_tree_node(float x1, float y1, float x2, float y2) {
   SDL_Rect rect;
   rect.w = (x2 - x1) * kWindowWidth;
   rect.h = (y2 - y1) * kWindowHeight;
@@ -47,39 +45,15 @@ static void render_node(SDL_Renderer* renderer, float x1, float y1,
 }
 
 
-// Render simulation. Return value indicates if similation should continue.
-void draw(float* host_Body_pos_x, float* host_Body_pos_y,
-          float* host_Body_mass, int num_bodies,
-          float* host_Tree_p1_x, float* host_Tree_p1_y,
-          float* host_Tree_p2_x, float* host_Tree_p2_y, int Tree_num_nodes) {
+void init_frame() {
   // Clear scene.
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
   SDL_RenderClear(renderer);
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+}
 
-  float max_mass = 0.0f;
-  for (int i = 0; i < num_bodies; ++i) {
-    max_mass += host_Body_mass[i];
-  }
-  max_mass /= 3;
 
-  // Draw all bodies.
-  for (int i = 0; i < num_bodies; ++i) {
-    render_rect(renderer,
-                host_Body_pos_x[i],
-                host_Body_pos_y[i],
-                host_Body_mass[i],
-                max_mass);
-  }
-
-  for (int i = 0; i < Tree_num_nodes; ++i) {
-    render_node(renderer,
-                host_Tree_p1_x[i],
-                host_Tree_p1_y[i],
-                host_Tree_p2_x[i],
-                host_Tree_p2_y[i]);
-  }
-
+void show_frame() {
   SDL_RenderPresent(renderer);
 
   // Continue until the user closes the window.
