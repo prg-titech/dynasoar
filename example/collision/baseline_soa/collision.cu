@@ -308,6 +308,16 @@ int main(int /*argc*/, char** /*argv*/) {
   kernel_initialize_bodies<<<128, 128>>>();
   gpuErrchk(cudaDeviceSynchronize());
 
+#ifdef OPTION_RENDER
+  // Compute max_mass.
+  float max_mass = 0.0f;
+  transfer_data();
+
+  for (int i = 0; i < host_draw_counter; ++i) {
+    max_mass += host_Body_mass[i];
+  }
+#endif  // OPTION_RENDER
+
   auto time_start = std::chrono::system_clock::now();
 
   for (int i = 0; i < kIterations; ++i) {
@@ -333,8 +343,19 @@ int main(int /*argc*/, char** /*argv*/) {
 #ifdef OPTION_RENDER
     // Transfer and render.
     transfer_data();
-    draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
-         host_draw_counter);
+    init_frame();
+
+    for (int i = 0; i < host_draw_counter; ++i) {
+      draw_body(host_Body_pos_x[i], host_Body_pos_y[i],
+                host_Body_mass[i], max_mass);
+
+      for (int j = 0; j < host_draw_counter; ++j) {
+        maybe_draw_line(host_Body_pos_x[i], host_Body_pos_x[j],
+                        host_Body_pos_y[i], host_Body_pos_y[j]);
+      }
+    }
+
+    show_frame();
 #endif  // OPTION_RENDER
   }
 

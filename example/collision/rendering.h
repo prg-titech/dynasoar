@@ -5,8 +5,11 @@
 
 void init_renderer();
 void close_renderer();
-void draw(float* host_Body_pos_x, float* host_Body_pos_y,
-          float* host_Body_mass, int num_bodies = kNumBodies);
+
+void init_frame();
+void show_frame();
+void draw_body(float pos_x, float pos_y, float mass, float max_mass);
+void maybe_draw_line(float pos_x, float pos_x2, float pos_y, float pos_y2);
 
 #endif  // EXAMPLE_COLLISION_SOA_RENDERING_H
 

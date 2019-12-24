@@ -62,8 +62,12 @@ class Body : public AllocatorT::Base {
 
   __device__ void delete_merged();
 
-  // Only for rendering purposes.
-  __device__ void add_to_draw_array();
+  // Only for rendering and checksum computation.
+  __device__ __host__ float pos_x() const { return pos_x_; }
+  __device__ __host__ float pos_y() const { return pos_y_; }
+  __device__ __host__ float vel_x() const { return vel_x_; }
+  __device__ __host__ float vel_y() const { return vel_y_; }
+  __device__ __host__ float mass() const { return mass_; }
 };
 
 
@@ -71,20 +75,6 @@ class Body : public AllocatorT::Base {
 AllocatorHandle<AllocatorT>* allocator_handle;
 __device__ AllocatorT* device_allocator;
 
-
-// Helper variables for rendering and checksum computation.
-__device__ int draw_counter = 0;
-__device__ float Body_pos_x[kNumBodies];
-__device__ float Body_pos_y[kNumBodies];
-__device__ float Body_vel_x[kNumBodies];
-__device__ float Body_vel_y[kNumBodies];
-__device__ float Body_mass[kNumBodies];
-int host_draw_counter;
-float host_Body_pos_x[kNumBodies];
-float host_Body_pos_y[kNumBodies];
-float host_Body_vel_x[kNumBodies];
-float host_Body_vel_y[kNumBodies];
-float host_Body_mass[kNumBodies];
 
 
 __device__ Body::Body(float pos_x, float pos_y,
@@ -200,16 +190,6 @@ __device__ void Body::delete_merged() {
 }
 
 
-__device__ void Body::add_to_draw_array() {
-  int idx = atomicAdd(&draw_counter, 1);
-  Body_pos_x[idx] = pos_x_;
-  Body_pos_y[idx] = pos_y_;
-  Body_vel_x[idx] = vel_x_;
-  Body_vel_y[idx] = vel_y_;
-  Body_mass[idx] = mass_;
-}
-
-
 __global__ void kernel_initialize_bodies() {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
   curandState rand_state;
@@ -226,46 +206,38 @@ __global__ void kernel_initialize_bodies() {
 }
 
 
-__global__ void kernel_reset_draw_counters() {
-  draw_counter = 0;
-}
-
-
-void transfer_data() {
-  // Extract data from SoaAlloc data structure.
-  kernel_reset_draw_counters<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
-  allocator_handle->parallel_do<Body, &Body::add_to_draw_array>();
-  gpuErrchk(cudaDeviceSynchronize());
-
-  // Copy data to host.
-  cudaMemcpyFromSymbol(host_Body_pos_x, Body_pos_x,
-                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
-  cudaMemcpyFromSymbol(host_Body_pos_y, Body_pos_y,
-                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
-  cudaMemcpyFromSymbol(host_Body_vel_x, Body_vel_x,
-                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
-  cudaMemcpyFromSymbol(host_Body_vel_y, Body_vel_y,
-                       sizeof(float)*kNumBodies, 0, cudaMemcpyDeviceToHost);
-  cudaMemcpyFromSymbol(host_Body_mass, Body_mass, sizeof(float)*kNumBodies, 0,
-                       cudaMemcpyDeviceToHost);
-  cudaMemcpyFromSymbol(&host_draw_counter, draw_counter, sizeof(int), 0,
-                       cudaMemcpyDeviceToHost);
-}
-
-
 int checksum() {
-  transfer_data();
   int result = 0;
 
-  for (int i = 0; i < kNumBodies; ++i) {
-    int Body_checksum = static_cast<int>((host_Body_pos_x[i]*1000 + host_Body_pos_y[i]*2000
-                        + host_Body_vel_x[i]*3000 + host_Body_vel_y[i]*4000)) % 123456;
+  allocator_handle->template device_do<Body>([&](Body* body) {
+    int Body_checksum = static_cast<int>((body->pos_x()*1000 + body->pos_y()*2000
+                        + body->vel_x()*3000 + body->vel_y()*4000)) % 123456;
     result += Body_checksum;
-  }
+  });
 
   return result;
 }
+
+
+#ifdef OPTION_RENDER
+// Only for rendering: the sum of all body masses.
+float max_mass = 0.0f;
+
+void render_frame() {
+  init_frame();
+
+  allocator_handle->template device_do<Body>([&](Body* body) {
+    draw_body(body->pos_x(), body->pos_y(), body->mass(), max_mass);
+
+    allocator_handle->template device_do<Body>([&](Body* body2) {
+      maybe_draw_line(body->pos_x(), body2->pos_x(),
+                      body->pos_y(), body2->pos_y());
+    });
+  });
+
+  show_frame();
+}
+#endif  // OPTION_RENDER
 
 
 int main(int /*argc*/, char** /*argv*/) {
@@ -274,13 +246,21 @@ int main(int /*argc*/, char** /*argv*/) {
 #endif  // OPTION_RENDER
 
   // Create new allocator.
-  allocator_handle = new AllocatorHandle<AllocatorT>();
+  allocator_handle = new AllocatorHandle<AllocatorT>(/*unified_memory=*/ true);
   AllocatorT* dev_ptr = allocator_handle->device_pointer();
   cudaMemcpyToSymbol(device_allocator, &dev_ptr, sizeof(AllocatorT*), 0,
                      cudaMemcpyHostToDevice);
 
   // Allocate and create Body objects.
   allocator_handle->parallel_new<Body>(kNumBodies);
+
+#ifdef OPTION_RENDER
+  // Only for rendering: Calculate max_mass.
+  max_mass = 0.0f;
+  allocator_handle->template device_do<Body>([&](Body* body) {
+    max_mass += body->mass();
+  });
+#endif  // OPTION_RENDER
 
   auto time_start = std::chrono::system_clock::now();
 
@@ -298,10 +278,7 @@ int main(int /*argc*/, char** /*argv*/) {
     allocator_handle->parallel_do<Body, &Body::delete_merged>();
 
 #ifdef OPTION_RENDER
-    // Transfer and render.
-    transfer_data();
-    draw(host_Body_pos_x, host_Body_pos_y, host_Body_mass,
-         host_draw_counter);
+    render_frame();
 #endif  // OPTION_RENDER
   }
 
@@ -312,7 +289,14 @@ int main(int /*argc*/, char** /*argv*/) {
 
 #ifndef NDEBUG
   printf("Checksum: %i\n", checksum());
-  printf("#bodies: %i\n", host_draw_counter);
+
+  // TODO: Provide an API for counting objects.
+  int num_remaining_bodies = 0;
+  allocator_handle->template device_do<Body>([&](Body* body) {
+    ++num_remaining_bodies;
+  });
+
+  printf("#bodies: %i\n", num_remaining_bodies);
 #endif  // NDEBUG
 
   printf("%lu, %lu\n", micros, allocator_handle->DBG_get_enumeration_time());
