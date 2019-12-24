@@ -42,26 +42,28 @@ class Body : public AllocatorT::Base {
   Field<Body, 9> successful_merge_;
 
  public:
-  __DEV__ Body(float pos_x, float pos_y, float vel_x, float vel_y, float mass);
+  __device__ Body(float pos_x, float pos_y, float vel_x, float vel_y, float mass);
 
-  __DEV__ void compute_force();
+  __device__ Body(int index);
 
-  __DEV__ void apply_force(Body* other);
+  __device__ void compute_force();
 
-  __DEV__ void update();
+  __device__ void apply_force(Body* other);
 
-  __DEV__ void check_merge_into_this(Body* other);
+  __device__ void update();
 
-  __DEV__ void initialize_merge();
+  __device__ void check_merge_into_this(Body* other);
 
-  __DEV__ void prepare_merge();
+  __device__ void initialize_merge();
 
-  __DEV__ void update_merge();
+  __device__ void prepare_merge();
 
-  __DEV__ void delete_merged();
+  __device__ void update_merge();
+
+  __device__ void delete_merged();
 
   // Only for rendering purposes.
-  __DEV__ void add_to_draw_array();
+  __device__ void add_to_draw_array();
 };
 
 
@@ -85,20 +87,32 @@ float host_Body_vel_y[kNumBodies];
 float host_Body_mass[kNumBodies];
 
 
-__DEV__ Body::Body(float pos_x, float pos_y,
-                   float vel_x, float vel_y, float mass)
+__device__ Body::Body(float pos_x, float pos_y,
+                      float vel_x, float vel_y, float mass)
     : pos_x_(pos_x), pos_y_(pos_y),
       vel_x_(vel_x), vel_y_(vel_y), mass_(mass) {}
 
 
-__DEV__ void Body::compute_force() {
+__device__ void Body::compute_force() {
   force_x_ = 0.0f;
   force_y_ = 0.0f;
   device_allocator->device_do<Body>(&Body::apply_force, this);
 }
 
 
-__DEV__ void Body::apply_force(Body* other) {
+__device__ Body::Body(int idx) {
+  curandState rand_state;
+  curand_init(kSeed, idx, 0, &rand_state);
+
+  pos_x_ = 2 * curand_uniform(&rand_state) - 1;
+  pos_y_ = 2 * curand_uniform(&rand_state) - 1;
+  vel_x_ = (curand_uniform(&rand_state) - 0.5) / 1000;
+  vel_y_ = (curand_uniform(&rand_state) - 0.5) / 1000;
+  mass_ = (curand_uniform(&rand_state)/2 + 0.5) * kMaxMass;
+}
+
+
+__device__ void Body::apply_force(Body* other) {
   // Update `other`.
   if (other != this) {
     float dx = pos_x_ - other->pos_x_;
@@ -112,7 +126,7 @@ __DEV__ void Body::apply_force(Body* other) {
 }
 
 
-__DEV__ void Body::update() {
+__device__ void Body::update() {
   vel_x_ += force_x_*kTimeInterval / mass_;
   vel_y_ += force_y_*kTimeInterval / mass_;
   pos_x_ += vel_x_*kTimeInterval;
@@ -128,7 +142,7 @@ __DEV__ void Body::update() {
 }
 
 
-__DEV__ void Body::check_merge_into_this(Body* other) {
+__device__ void Body::check_merge_into_this(Body* other) {
   // Only merge into larger body.
   if (!other->has_incoming_merge_ && mass_ > other->mass_) {
     float dx = pos_x_ - other->pos_x_;
@@ -146,20 +160,20 @@ __DEV__ void Body::check_merge_into_this(Body* other) {
 }
 
 
-__DEV__ void Body::initialize_merge() {
+__device__ void Body::initialize_merge() {
   merge_target_ = nullptr;
   has_incoming_merge_ = false;
   successful_merge_ = false;
 }
 
 
-__DEV__ void Body::prepare_merge() {
+__device__ void Body::prepare_merge() {
   device_allocator->template device_do<Body>(&Body::check_merge_into_this,
                                              this);
 }
 
 
-__DEV__ void Body::update_merge() {
+__device__ void Body::update_merge() {
   Body* m = merge_target_;
   if (m != nullptr) {
     if (m->merge_target_ == nullptr) {
@@ -179,14 +193,14 @@ __DEV__ void Body::update_merge() {
 }
 
 
-__DEV__ void Body::delete_merged() {
+__device__ void Body::delete_merged() {
   if (successful_merge_) {
     destroy(device_allocator, this);
   }
 }
 
 
-__DEV__ void Body::add_to_draw_array() {
+__device__ void Body::add_to_draw_array() {
   int idx = atomicAdd(&draw_counter, 1);
   Body_pos_x[idx] = pos_x_;
   Body_pos_y[idx] = pos_y_;
@@ -266,8 +280,7 @@ int main(int /*argc*/, char** /*argv*/) {
                      cudaMemcpyHostToDevice);
 
   // Allocate and create Body objects.
-  kernel_initialize_bodies<<<1, 1>>>();
-  gpuErrchk(cudaDeviceSynchronize());
+  allocator_handle->parallel_new<Body>(kNumBodies);
 
   auto time_start = std::chrono::system_clock::now();
 

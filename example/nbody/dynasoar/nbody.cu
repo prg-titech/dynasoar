@@ -66,7 +66,7 @@ void Body::add_checksum() {
 }
 
 
-__DEV__ Body::Body(int idx) {
+__device__ Body::Body(int idx) {
   curandState rand_state;
   curand_init(kSeed, idx, 0, &rand_state);
 
