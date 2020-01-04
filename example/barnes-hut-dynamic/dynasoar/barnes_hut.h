@@ -35,11 +35,12 @@ class NodeBase : public AllocatorT::Base {
   Field<NodeBase, 4> child_index_;
 
 // public:
-  __DEV__ NodeBase(TreeNode* parent, double pos_x, double pos_y, double mass);
+  __device__ NodeBase(TreeNode* parent, double pos_x, double pos_y,
+                      double mass);
 
-  __DEV__ TreeNode* parent() const { return parent_; }
+  __device__ TreeNode* parent() const { return parent_; }
 
-  __DEV__ void set_parent(TreeNode* parent) { parent_ = parent; }
+  __device__ void set_parent(TreeNode* parent) { parent_ = parent; }
 
   __device__ __host__ double pos_x() const { return pos_x_; }
 
@@ -47,11 +48,11 @@ class NodeBase : public AllocatorT::Base {
 
   __device__ __host__ double mass() const { return mass_; }
 
-  __DEV__ void apply_force(BodyNode* body);
+  __device__ void apply_force(BodyNode* body);
 
-  __DEV__ void check_apply_force(BodyNode* body);
+  __device__ void check_apply_force(BodyNode* body);
 
-  __DEV__ double distance_to(NodeBase* other);
+  __device__ double distance_to(NodeBase* other);
 };
 
 
@@ -74,22 +75,25 @@ class BodyNode : public NodeBase {
   Field<BodyNode, 3> force_y_;
 
  public:
-  __DEV__ BodyNode(double pos_x, double pos_y, double vel_x, double vel_y,
-                   double mass);
+  __device__ BodyNode(double pos_x, double pos_y, double vel_x, double vel_y,
+                      double mass);
 
-  __DEV__ void add_force(double x, double y) { force_x_ += x; force_y_ += y; }
+  __device__ void add_force(double x, double y) {
+    force_x_ += x;
+    force_y_ += y;
+  }
 
-  __DEV__ void add_to_tree();
+  __device__ void add_to_tree();
 
-  __DEV__ void clear_node();
+  __device__ void clear_node();
 
-  __DEV__ void compute_force();
+  __device__ void compute_force();
 
-  __DEV__ void update();
+  __device__ void update();
 
-  __DEV__ void check_apply_force(BodyNode* body);
+  __device__ void check_apply_force(BodyNode* body);
 
-  __DEV__ void add_checksum();
+  __device__ void add_checksum();
 };
 
 
@@ -118,41 +122,41 @@ class TreeNode : public NodeBase {
   Field<TreeNode, 6> bfs_done_;
 
  public:
-  __DEV__ TreeNode(TreeNode* parent, double p1_x, double p1_y, double p2_x,
-                   double p2_y);
+  __device__ TreeNode(TreeNode* parent, double p1_x, double p1_y, double p2_x,
+                      double p2_y);
 
-  __DEV__ void check_apply_force(BodyNode* body);
+  __device__ void check_apply_force(BodyNode* body);
 
-  __DEV__ int child_index(BodyNode* body);
+  __device__ int child_index(BodyNode* body);
 
-  __DEV__ void collapse_tree();
+  __device__ void collapse_tree();
 
-  __DEV__ bool contains(NodeBase* node);
+  __device__ bool contains(NodeBase* node);
 
-  __DEV__ bool contains(BodyNode* body);
+  __device__ bool contains(BodyNode* body);
 
-  __DEV__ bool contains(TreeNode* node);
+  __device__ bool contains(TreeNode* node);
 
-  __DEV__ TreeNode* make_child_tree_node(int c_idx);
+  __device__ TreeNode* make_child_tree_node(int c_idx);
 
-  __DEV__ void remove(NodeBase* body);
+  __device__ void remove(NodeBase* body);
 
-  __DEV__ bool is_leaf();
+  __device__ bool is_leaf();
 
-  __DEV__ int num_direct_children();
+  __device__ int num_direct_children();
 
-  __DEV__ void initialize_frontier();
+  __device__ void initialize_frontier();
 
-  __DEV__ void bfs_step();
+  __device__ void bfs_step();
 
-  __DEV__ void update_frontier();
+  __device__ void update_frontier();
 
-  __DEV__ void update_frontier_delete();
+  __device__ void update_frontier_delete();
 
-  __DEV__ void bfs_delete();
+  __device__ void bfs_delete();
 
   // Only for debugging.
-  __DEV__ void check_consistency();
+  __device__ void check_consistency();
 
 #ifdef OPTION_RENDER
   __device__ __host__ float p1_x() { return p1_x_; }
