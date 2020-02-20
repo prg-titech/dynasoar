@@ -34,9 +34,9 @@ class Foo : public SoaBase<AllocatorT> {
   declare_field_types(Foo, int, int, int)
   
   // Declare fields.
-  SoaField<Foo, 0> field0_;  // int
-  SoaField<Foo, 1> field1_;  // int
-  SoaField<Foo, 2> field2_;  // int
+  Field<Foo, 0> field0_;  // int
+  Field<Foo, 1> field1_;  // int
+  Field<Foo, 2> field2_;  // int
   
   __device__ Foo(int f0, int f1, int f2)
       : field0_(f0), field1_(f1), field2_(f2) {}

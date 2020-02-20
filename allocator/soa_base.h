@@ -96,6 +96,13 @@ __device__ __forceinline__ static void destroy(
  */
 template<class AllocatorT>
 class SoaBase {
+ protected:
+  /**
+   * Shortcut to SoaField.
+   */
+  template<typename C, int FieldIndex>
+  using Field = SoaField<C, FieldIndex>;
+
  private:
   /**
    * Dummy field. Ensures that the C++ size of this class is 1.

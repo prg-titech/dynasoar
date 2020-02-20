@@ -109,7 +109,7 @@ class SoaField {
   /**
    * Calculates the physical memory location of this field.
    */
-  __host__ __device__ T* data_ptr() const {
+  __host__ __device__ T* data_ptr() const & {
     // All SoaField<> have size 0. Offset of all fields is 1.
     auto ptr_base = reinterpret_cast<uintptr_t>(this) - 1;
     return data_ptr_from_obj_ptr(reinterpret_cast<C*>(ptr_base));
@@ -118,7 +118,7 @@ class SoaField {
   /**
    * Calculates the physical memory location of this field.
    */
-  __host__ __device__ volatile T* volatile_data_ptr() const {
+  __host__ __device__ volatile T* volatile_data_ptr() const & {
     return data_ptr();
   }
 
@@ -186,6 +186,7 @@ class SoaField {
    * Field initialization.
    * TODO: Force zero initialization of field? Seems like CUDA does not do this
    * by default.
+   * TODO: Should only be accessible from within subclasses of SoaBase.
    */
   __host__ __device__ SoaField() {}
 
@@ -201,31 +202,31 @@ class SoaField {
    * Implicit conversion operator for automatic conversion to base type.
    * I.e., unwrapping the proxy.
    */
-  __host__ __device__ operator T&() { return *data_ptr(); }
+  __host__ __device__ operator T&() & { return *data_ptr(); }
 
   /**
    * Implicit conversion operator for automatic conversion to base type.
    * I.e., unwrapping the proxy.
    */
-  __host__ __device__ operator const T&() const { return *data_ptr(); }
+  __host__ __device__ operator const T&() const & { return *data_ptr(); }
 
   /**
    * Explicitly get value. Can be used internally. Just for better code
    * readability.
    */
-  __host__ __device__ T& get() { return *data_ptr(); }
+  __host__ __device__ T& get() & { return *data_ptr(); }
 
   /**
    * Explicitly get value. Can be used internally. Just for better code
    * readability.
    */
-  __host__ __device__ const T& get() const { return *data_ptr(); }
+  __host__ __device__ const T& get() const & { return *data_ptr(); }
 
   /**
    * Explicitly get value. Can be used internally. Just for better code
    * readability.
    */
-  __host__ __device__ volatile T& volatile_get() {
+  __host__ __device__ volatile T& volatile_get() & {
     return *volatile_data_ptr();
   }
 
@@ -233,36 +234,36 @@ class SoaField {
    * Explicitly get value. Can be used internally. Just for better code
    * readability.
    */
-  __host__ __device__ const volatile T& volatile_get() const {
+  __host__ __device__ const volatile T& volatile_get() const & {
     return *volatile_data_ptr();
   }
 
   /**
    * Returns the address of the physical memory location of this field.
    */
-  __host__ __device__ T* operator&() { return data_ptr(); }
+  __host__ __device__ T* operator&() & { return data_ptr(); }
 
   /**
    * Returns the address of the physical memory location of this field.
    */
-  __host__ __device__ const T* operator&() const { return data_ptr(); }
+  __host__ __device__ const T* operator&() const & { return data_ptr(); }
 
   /**
    * This operator must be overloaded to support method calls if \p T is a
    * class/struct type. Similar to std::unique_ptr.
    */
-  __host__ __device__ T& operator->() { return *data_ptr(); }
+  __host__ __device__ T& operator->() & { return *data_ptr(); }
 
   /**
    * This operator must be overloaded to support method calls if \p T is a
    * class/struct type. Similar to std::unique_ptr.
    */
-  __host__ __device__ const T& operator->() const { return *data_ptr(); }
+  __host__ __device__ const T& operator->() const & { return *data_ptr(); }
 
   /**
    * Dereferences the value of this field if \p T is a pointer type.
    */
-  __host__ __device__ typename std::remove_pointer<T>::type& operator*() {
+  __host__ __device__ typename std::remove_pointer<T>::type& operator*() & {
     return **data_ptr();
   }
 
@@ -270,7 +271,7 @@ class SoaField {
    * Dereferences the value of this field if \p T is a pointer type.
    */
   __host__ __device__ typename std::remove_pointer<T>::type& operator*()
-      const {
+      const & {
     return **data_ptr();
   }
 
@@ -281,7 +282,7 @@ class SoaField {
   template<typename U = T>
   __host__ __device__ typename std::enable_if<is_device_array<U>::value,
                                               typename U::BaseType>::type&
-  operator[](size_t pos) {
+  operator[](size_t pos) & {
     return (*data_ptr())[pos];
   }
 
@@ -293,7 +294,7 @@ class SoaField {
   template<typename U = T>
   __host__ __device__ const typename std::enable_if<is_device_array<U>::value,
                                                     typename U::BaseType>
-      ::type& operator[](size_t pos) const {
+      ::type& operator[](size_t pos) const & {
     return (*data_ptr())[pos];
   }
 
@@ -301,7 +302,7 @@ class SoaField {
    * Assignment operator of assigning values of type \p T.
    * @param value Value to be assigned
    */
-  __host__ __device__ T& operator=(const T& value) {
+  __host__ __device__ T& operator=(const T& value) & {
     *data_ptr() = value;
     return *data_ptr();
   }
@@ -311,17 +312,10 @@ class SoaField {
    * TODO: Assignment operator for other field types is missing.
    * @param field Field to be assigned
    */
-  __host__ __device__ T& operator=(const SoaField<C, FieldIndex>& field) {
+  __host__ __device__ T& operator=(const SoaField<C, FieldIndex>& field) & {
     *data_ptr() = field.get();
     return *data_ptr();
   }
 };
-
-
-/**
- * Shortcut to SoaField.
- */
-template<typename C, int FieldIndex>
-using Field = SoaField<C, FieldIndex>;
 
 #endif  // ALLOCATOR_SOA_FIELD_H
