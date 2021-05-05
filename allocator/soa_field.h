@@ -2,6 +2,9 @@
 #define ALLOCATOR_SOA_FIELD_H
 
 #include "allocator/configuration.h"
+#include "allocator/soa_base.h"
+
+class SoaBaseMarker;
 
 /**
  * Contains various helper functions for extracting components from a fake
@@ -250,15 +253,55 @@ class SoaField {
 
   /**
    * This operator must be overloaded to support method calls if \p T is a
-   * class/struct type. Similar to std::unique_ptr.
+   * class/struct type. Similar to std::unique_ptr. This overloading is for
+   * pointer types whose base type is a template instantiation of SoaBase.
+   * Such values must be dereferenced once to make sure that functions can be
+   * called on it.
    */
-  __host__ __device__ T& operator->() & { return *data_ptr(); }
+  template<typename U = typename std::remove_pointer<T>::type,
+           typename V = typename std::enable_if<
+               std::is_base_of<SoaBaseMarker, U>::value, T&>::type>
+  __host__ __device__
+  V operator->() & {
+    return *data_ptr();
+  }
 
   /**
    * This operator must be overloaded to support method calls if \p T is a
    * class/struct type. Similar to std::unique_ptr.
    */
-  __host__ __device__ const T& operator->() const & { return *data_ptr(); }
+  template<typename U = T>
+  __host__ __device__
+  typename std::enable_if<!std::is_pointer<U>::value, T*>::type
+  operator->() & {
+    return data_ptr();
+  }
+
+  /**
+   * This operator must be overloaded to support method calls if \p T is a
+   * class/struct type. Similar to std::unique_ptr. This overloading is for
+   * pointer types whose base type is a template instantiation of SoaBase.
+   * Such values must be dereferenced once to make sure that functions can be
+   * called on it.
+   */
+  template<typename U = typename std::remove_pointer<T>::type,
+           typename V = typename std::enable_if<
+               std::is_base_of<SoaBaseMarker, U>::value, const T&>::type>
+  __host__ __device__
+  V operator->() const & {
+    return *data_ptr();
+  }
+
+  /**
+   * This operator must be overloaded to support method calls if \p T is a
+   * class/struct type. Similar to std::unique_ptr.
+   */
+  template<typename U = T>
+  __host__ __device__
+  typename std::enable_if<!std::is_pointer<U>::value, const T*>::type
+  operator->() const & {
+    return data_ptr();
+  }
 
   /**
    * Dereferences the value of this field if \p T is a pointer type.

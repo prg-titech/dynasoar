@@ -86,6 +86,9 @@ __device__ __forceinline__ static void destroy(
 }
 
 
+class SoaBaseMarker {};
+
+
 /**
  * All user-defined classes that are under control of the allocator should
  * inherit from this class; either directly, or by inheriting from a class that
@@ -95,7 +98,7 @@ __device__ __forceinline__ static void destroy(
  * @tparam AllocatorT Allocator type
  */
 template<class AllocatorT>
-class SoaBase {
+class SoaBase : public SoaBaseMarker {
  protected:
   /**
    * Shortcut to SoaField.
