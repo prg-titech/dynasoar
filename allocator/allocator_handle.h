@@ -152,7 +152,7 @@ class AllocatorHandle {
    */
   template<class T, void(T::*func)()>
   void parallel_do() {
-    allocator_->parallel_do<true, T, func>();
+    allocator_->template parallel_do<true, T, func>();
   }
 
   /**
@@ -165,7 +165,7 @@ class AllocatorHandle {
    */
   template<class T, typename P1, void(T::*func)(P1)>
   void parallel_do(P1 p1) {
-    allocator_->parallel_do<true, T, P1, func>(std::forward<P1>(p1));
+    allocator_->template parallel_do<true, T, P1, func>(std::forward<P1>(p1));
   }
 
   /**
@@ -178,7 +178,7 @@ class AllocatorHandle {
    */
   template<class T, void(T::*func)()>
   void fast_parallel_do() {
-    allocator_->parallel_do<false, T, func>();
+    allocator_->template parallel_do<false, T, func>();
   }
 
   /**
@@ -191,7 +191,7 @@ class AllocatorHandle {
    */
   template<class T, typename P1, void(T::*func)(P1)>
   void fast_parallel_do(P1 p1) {
-    allocator_->parallel_do<false, T, P1, func>(p1);
+    allocator_->template parallel_do<false, T, P1, func>(p1);
   }
 
   /**
@@ -220,7 +220,7 @@ class AllocatorHandle {
    */
   template<class T, typename... Args>
   void parallel_new(int num_objects, Args... args) {
-    allocator_->parallel_new<T>(num_objects, args...);
+    allocator_->template parallel_new<T>(num_objects, args...);
   }
 
 #ifdef OPTION_DEFRAG
