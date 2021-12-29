@@ -10,10 +10,11 @@ static const int kHeapSize = 64*64*64;
 // Pre-declare all classes.
 class Foo;
 class Bar;
+class BarSub;
 
 
 // Declare allocator type. First argument is max. number of objects that can be created.
-using AllocatorT = SoaAllocator<kHeapSize, Bar, Foo>;
+using AllocatorT = SoaAllocator<kHeapSize, Bar, Foo, BarSub>;
 
 
 // Allocator handles.
@@ -43,6 +44,20 @@ class Bar : public SoaBase<AllocatorT> {
       asm("trap;");  // Force kernel to quit.
     }
   }
+};
+
+
+class BarSub : public Bar {
+ public:
+  static const bool kIsAbstract = false;
+  using BaseClass = Bar;
+
+  __device__ BarSub(int index) : Bar(nullptr, 2), field2_(index) {}
+
+  // Pre-declare types of all fields.
+  declare_field_types(Bar, int)
+
+  Field<BarSub, 0> field2_;
 };
 
 
@@ -99,6 +114,13 @@ int main(int /*argc*/, char** /*argv*/) {
 
   // Check correctness.
   allocator_handle->parallel_do<Bar, &Bar::assert_result>();
+
+  // Not checking anything in particular. Just make sure that there's no crash.
+  allocator_handle->parallel_do_single_type<BarSub, Bar, &Bar::assert_result>();
+  // Now create some BarSub objects. But don't run assert_result of them, as the
+  // computation would fail.
+  allocator_handle->parallel_new<BarSub>(32);
+  allocator_handle->parallel_do_single_type<Bar, Bar, &Bar::assert_result>();
 
   printf("Check passed!\n");
   return 0;

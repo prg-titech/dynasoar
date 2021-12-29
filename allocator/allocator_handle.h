@@ -169,6 +169,31 @@ class AllocatorHandle {
   }
 
   /**
+   * Like parallel_do, but enumerates only objects of type \p IterT.
+   * @tparam IterT Class who's objects are enumerated
+   * @tparam T Base class
+   * @tparam func Member function to be run in parallel
+   */
+  template<class IterT, class T, void(T::*func)()>
+  void parallel_do_single_type() {
+    allocator_->template parallel_do_single_type<IterT, T, func, true>();
+  }
+
+  /**
+   * Like parallel_do, but enumerates only objects of type \p IterT.
+   * @tparam IterT Class who's objects are enumerated
+   * @tparam T Base class
+   * @tparam P1 Type of first parameter
+   * @tparam func Member function to be run in parallel
+   * @param p1 Argument value
+   */
+  template<class IterT, class T, typename P1, void(T::*func)(P1)>
+  void parallel_do_single_type(P1 p1) {
+    allocator_->template parallel_do_single_type<IterT, T, P1, func, true>(
+        std::forward<P1>(p1));
+  }
+
+  /**
    * Fast parallel do-all: Same as parallel_do(), but does omits the scan
    * operation. Assumes that the set of objects of type \p T has not changed
    * since the last parallel do-all operation. (The state of the objects
